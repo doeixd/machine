@@ -206,3 +206,33 @@ Choose `@doeixd/machine` if you:
 -   Prefer an imperative, method-calling style (`machine.action()`) over a message-passing one (`send('ACTION')`).
 -   Want a minimal, dependency-free tool that doesn't require learning a complex DSL.
 
+
+
+
+import { createAsyncMachine, runMachine, Event } from "@doeixd/machine";
+
+const createFetcher = (id: number) => {
+  return createAsyncMachine(
+    { status: "idle", user: null as { name: string } | null },
+    {
+      async fetch() {
+        // The effect is just an async function.
+        // You can interpret its result to produce the next state.
+        try {
+          const res = await fetchUserApi(id);
+          return createAsyncMachine({ status: "success", user: res }, this);
+        } catch (error) {
+          return createAsyncMachine({ status: "error", user: null }, this);
+        }
+      },
+    }
+  );
+};
+
+// The runner manages the current state
+const runner = runMachine(createFetcher(123), (machine) => {
+  console.log("State changed to:", machine.context);
+});
+
+// Dispatch is type-safe. It knows 'fetch' takes no arguments.
+runner.dispatch({ type: "fetch", args: [] });
