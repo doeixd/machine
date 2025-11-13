@@ -283,3 +283,56 @@ export function runMachine<C extends object>(
     dispatch,
   }
 }
+
+
+// // Define the two distinct machine shapes (our "states")
+// type LoggedOutMachine = Machine<{ status: "loggedOut" }> & {
+//   login: (username: string) => LoggedInMachine;
+// };
+
+// type LoggedInMachine = Machine<{ status: "loggedIn"; username: string }> & {
+//   logout: () => LoggedOutMachine;
+//   viewProfile: () => LoggedInMachine;
+// };
+
+// // State 1: Logged Out
+// const createLoggedOutMachine = (): LoggedOutMachine => {
+//   return createMachine(
+//     { status: "loggedOut" },
+//     {
+//       login: function (username: string): LoggedInMachine {
+//         // We transition by returning a completely different machine type
+//         return createLoggedInMachine(username);
+//       },
+//     }
+//   );
+// };
+
+// // State 2: Logged In
+// const createLoggedInMachine = (username: string): LoggedInMachine => {
+//   return createMachine(
+//     { status: "loggedIn", username },
+//     {
+//       logout: function (): LoggedOutMachine {
+//         return createLoggedOutMachine();
+//       },
+//       viewProfile: function (): LoggedInMachine {
+//         console.log(`Viewing profile for ${this.username}`);
+//         return this; // Or create a new instance
+//       },
+//     }
+//   );
+// };
+
+// // --- Usage ---
+// const machine = createLoggedOutMachine();
+
+// // machine.logout(); // -> TypeScript Error! Property 'logout' does not exist on type 'LoggedOutMachine'.
+
+// const loggedInState = machine.login("Alice");
+// console.log(loggedInState.context); // { status: "loggedIn", username: "Alice" }
+
+// // loggedInState.login("Bob"); // -> TypeScript Error! Property 'login' does not exist on type 'LoggedInMachine'.
+
+// const loggedOutState = loggedInState.logout();
+// console.log(loggedOutState.context); // { status: "loggedOut" }
