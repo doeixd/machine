@@ -706,8 +706,8 @@ const factories = {
   })
 };
 
-// 3. Create the Ensemble
-const ensemble = createEnsemble(store, factories, 'status');
+// 3. Create the Ensemble with an accessor function for refactoring safety
+const ensemble = createEnsemble(store, factories, (ctx) => ctx.status);
 
 // 4. Use it with type-safe dispatch
 ensemble.actions.fetch();      // Transitions to loading
@@ -737,7 +737,7 @@ function MyComponent() {
   };
   
   const ensemble = useMemo(() => 
-    createEnsemble(store, factories, 'status'),
+    createEnsemble(store, factories, (ctx) => ctx.status),
     [context]
   );
   
@@ -816,7 +816,7 @@ const authFactories = {
 const auth = createMutableMachine(
   { status: 'loggedOut' } as AuthContext,
   authFactories,
-  'status'
+  (ctx) => ctx.status  // Accessor function - refactor-safe
 );
 
 // Stable reference - keep this, the object will mutate
@@ -861,7 +861,7 @@ const player = createMutableMachine(
       finishAttack: () => ({ ...ctx, state: 'idle' }),
     }),
   },
-  'state'
+  (ctx) => ctx.state  // Accessor function - refactor-safe
 );
 
 // Game loop
@@ -954,12 +954,12 @@ const factories = {
 // Your framework's state (React example)
 const [context, setContext] = useState(initialContext);
 
-// The Ensemble bridges them
+// The Ensemble bridges them - use an accessor function for refactoring safety
 const ensemble = useMemo(() => 
   createEnsemble(
     { getContext: () => context, setContext },
     factories,
-    'status'
+    (ctx) => ctx.status  // Accessor function - fully refactor-safe!
   ),
   [context]
 );
@@ -995,7 +995,7 @@ ensemble.actions.fetch();
 const player = createMutableMachine(
   { state: 'idle', hp: 100 },
   factories,
-  'state'
+  (ctx) => ctx.state  // Accessor function - refactor-safe
 );
 
 // Keep the reference - it will always reflect current state
@@ -1025,6 +1025,71 @@ console.log(playerRef === player); // true
 - Systems where multiple parts read stale references
 
 **Analogy**: A go-kart. Stripped down for performance in a specific environment (the backend). No safety features like immutability, not built for daily-driver complexity, but incredibly direct and efficient on the race track.
+
+#### Class-Based Approach: MultiMachine (createMultiMachine)
+
+For developers who prefer object-oriented patterns, `createMultiMachine` provides a class-based wrapper around the Ensemble pattern.
+
+```typescript
+import { createMultiMachine, MultiMachineBase } from "@doeixd/machine/multi";
+
+type CounterContext = { count: number };
+
+class CounterMachine extends MultiMachineBase<CounterContext> {
+  increment() {
+    this.setContext({ count: this.context.count + 1 });
+  }
+
+  add(n: number) {
+    this.setContext({ count: this.context.count + n });
+  }
+
+  reset() {
+    this.setContext({ count: 0 });
+  }
+}
+
+const store = {
+  getContext: () => ({ count: 0 }),
+  setContext: (ctx) => { /* update your framework's state */ }
+};
+
+const machine = createMultiMachine(CounterMachine, store);
+
+// Direct method calls - feels like traditional OOP
+machine.increment();
+console.log(machine.count); // 1
+
+machine.add(5);
+console.log(machine.count); // 6
+
+machine.reset();
+console.log(machine.count); // 0
+```
+
+**How it Works:**
+- Extend `MultiMachineBase<C>` to define your machine class
+- Methods in the class are your transitions
+- `this.context` gives read-only access to current state
+- `this.setContext()` updates the external store
+- `createMultiMachine()` returns a Proxy that merges context properties with class methods
+
+**When to Use:**
+- You prefer class-based/OOP patterns
+- You want familiar `this` binding and method calls
+- Complex machines with lots of state logic (easier to organize in a class)
+- Integrating with existing OOP codebases
+
+**Benefits vs. Ensemble:**
+- More familiar syntax for OOP developers
+- Methods are co-located with state they manage
+- Can use class constructors for initialization
+- Easier to extend or subclass if needed
+
+**Benefits vs. Runner:**
+- For global/shared state (like Ensemble)
+- Better code organization for complex machines
+- Not limited to immutable snapshots
 
 ### Generator-Based Composition
 
@@ -1513,13 +1578,12 @@ createRunner<M extends Machine<any>>(
 
 // Create an ensemble for framework-agnostic global state orchestration
 createEnsemble<
-  C extends object & { [key in K]: keyof F & string },
-  F extends Record<string, (context: C) => Machine<C>>,
-  K extends keyof C & string
+  C extends object,
+  F extends Record<string, (context: C) => Machine<C>>
 >(
   store: StateStore<C>,
   factories: F,
-  discriminantKey: K
+  getDiscriminant: (context: C) => keyof F  // Accessor function - refactor-safe
 ): Ensemble<ReturnType<F[keyof F]>, C>
 
 // Execute a generator workflow with a Runner
@@ -1536,13 +1600,12 @@ runWithEnsemble<AllMachines extends Machine<any>, C extends object, T>(
 
 // Create a mutable machine (EXPERIMENTAL - use with caution)
 createMutableMachine<
-  C extends object & { [key in K]: keyof F & string },
-  F extends Record<string, (context: C) => Machine<C>>,
-  K extends keyof C & string
+  C extends object,
+  F extends Record<string, (context: C) => Machine<C>>
 >(
   sharedContext: C,
   factories: F,
-  discriminantKey: K
+  getDiscriminant: (context: C) => keyof F  // Accessor function - refactor-safe
 ): MutableMachine<C, ReturnType<F[keyof F]>>
 ```
 
@@ -1552,6 +1615,24 @@ createMutableMachine<
 // Mutable machine combining context and transitions (EXPERIMENTAL)
 type MutableMachine<C extends object, AllMachines extends Machine<any>> = C &
   AllTransitions<AllMachines>;
+
+// Base class for MultiMachine OOP approach
+abstract class MultiMachineBase<C extends object> {
+  protected store: StateStore<C>;
+  protected get context(): C;
+  protected setContext(newContext: C): void;
+}
+```
+
+#### Additional Functions (Multi Module)
+
+```typescript
+// Create a class-based MultiMachine instance
+createMultiMachine<C extends object, T extends MultiMachineBase<C>>(
+  MachineClass: new (store: StateStore<C>) => T,
+  store: StateStore<C>,
+  getDiscriminant?: (context: C) => string  // Optional accessor function - refactor-safe
+): C & T
 ```
 
 ## License

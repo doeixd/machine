@@ -7,7 +7,7 @@
 
  * interact with state, solving the need for constant variable reassignment.
  *
- * It introduces two primary concepts:
+ * It introduces three primary concepts:
  *
  * 1.  **Runner**: A stateful controller that wraps a single, self-contained,
  *     immutable machine. It provides a stable `actions` object, so you can call
@@ -19,6 +19,11 @@
  *     state managers (like Solid Stores, React's `useState`, or Zustand) via a
  *     simple `StateStore` interface. This is the recommended solution for machines
  *     that need to interact with or drive global application state.
+ *
+ * 3.  **MultiMachine**: A class-based, OOP approach to building state machines
+ *     that directly manage a shared context via a StateStore. Ideal for developers
+ *     who prefer class-based architectures and want direct method calls on the
+ *     machine instance.
  */
 
 import {
@@ -205,12 +210,13 @@ export type Ensemble<AllMachines extends Machine<any>, C extends object> = {
  * logic (defined in `factories`) from your application's state management solution
  * (defined in `store`), making your business logic portable and easy to test.
  *
- * @template C - The shared context type, which MUST include a discriminant property.
- * @template Factories - An object of functions that create machine instances for each state.
+ * @template C - The shared context type.
+ * @template F - An object of functions that create machine instances for each state.
  * @param store - The user-provided `StateStore` that reads/writes the context.
  * @param factories - An object mapping state names to functions that create machine instances.
- * @param discriminantKey - The key in the context object (e.g., "status") that the
- *   Ensemble uses to determine the current state and select the correct factory.
+ * @param getDiscriminant - An accessor function that takes the context and returns the key
+ *   of the current state in the `factories` object. This provides full refactoring safety—
+ *   if you rename a property in your context, TypeScript will catch it at the accessor.
  * @returns An `Ensemble` instance providing a stable API.
  *
  * @example
@@ -227,29 +233,29 @@ export type Ensemble<AllMachines extends Machine<any>, C extends object> = {
  *   // ...
  * };
  *
- * const ensemble = createEnsemble(store, factories, 'status');
+ * // Use an accessor function for full refactoring safety
+ * const ensemble = createEnsemble(store, factories, (ctx) => ctx.status);
  * ensemble.actions.fetch();
  * console.log(ensemble.context.status); // 'loading'
  */
 export function createEnsemble<
-  C extends object & { [key in K]: keyof F & string },
-  F extends Record<string, (context: C) => Machine<C>>,
-  K extends keyof C & string
+  C extends object,
+  F extends Record<string, (context: C) => Machine<C>>
 >(
   store: StateStore<C>,
   factories: F,
-  discriminantKey: K
+  getDiscriminant: (context: C) => keyof F
 ): Ensemble<ReturnType<F[keyof F]>, C> {
   type AllMachines = ReturnType<F[keyof F]>;
 
   const getCurrentMachine = (): AllMachines => {
     const context = store.getContext();
-    const currentStateName = context[discriminantKey];
+    const currentStateName = getDiscriminant(context);
     const factory = factories[currentStateName];
 
     if (!factory) {
       throw new Error(
-        `[Ensemble] Invalid state: No factory found for state "${currentStateName}" based on discriminant key "${discriminantKey}".`
+        `[Ensemble] Invalid state: No factory found for state "${String(currentStateName)}".`
       );
     }
     return factory(context) as AllMachines;
@@ -262,9 +268,7 @@ export function createEnsemble<
 
       if (typeof action !== 'function') {
         throw new Error(
-          `[Ensemble] Transition "${prop}" is not valid in the current state "${String(
-            currentMachine.context[discriminantKey]
-          )}".`
+          `[Ensemble] Transition "${prop}" is not valid in the current state.`
         );
       }
 
@@ -350,7 +354,177 @@ export function runWithEnsemble<
 }
 
 // =============================================================================
-// SECTION 4: THE SHARED CONTEXT MACHINE (EXPERIMENTAL)
+// SECTION 4: CLASS-BASED MULTI-MACHINE (OOP APPROACH)
+// =============================================================================
+
+/**
+ * The base class for creating a class-based state machine (MultiMachine).
+ * Extend this class to define your state machine's logic using instance methods
+ * as transitions.
+ *
+ * This approach is ideal for developers who prefer class-based architectures
+ * and want to manage a shared context directly through an external StateStore.
+ *
+ * @template C - The shared context type, which must contain a discriminant property.
+ *
+ * @example
+ * type AppContext = { status: 'idle' | 'loading'; data?: any };
+ *
+ * class AppMachine extends MultiMachineBase<AppContext> {
+ *   fetch() {
+ *     this.setContext({ ...this.context, status: 'loading' });
+ *     // Load data, then:
+ *     this.setContext({ ...this.context, status: 'idle', data });
+ *   }
+ * }
+ */
+export abstract class MultiMachineBase<C extends object> {
+  /**
+   * The external state store that manages the machine's context.
+   * @protected
+   */
+  protected store: StateStore<C>;
+
+  /**
+   * @param store - The StateStore that will manage this machine's context.
+   */
+  constructor(store: StateStore<C>) {
+    this.store = store;
+  }
+
+  /**
+   * Read-only access to the current context from the external store.
+   * @protected
+   */
+  protected get context(): C {
+    return this.store.getContext();
+  }
+
+  /**
+   * Update the shared context in the external store.
+   * @protected
+   * @param newContext - The new context object.
+   */
+  protected setContext(newContext: C): void {
+    this.store.setContext(newContext);
+  }
+}
+
+/**
+ * Creates a live, type-safe instance of a class-based state machine (MultiMachine).
+ *
+ * This function takes your MultiMachine class blueprint and an external state store,
+ * and wires them together. The returned object is a Proxy that dynamically exposes
+ * both context properties and the available transition methods from your class.
+ *
+ * @template C - The shared context type.
+ * @template T - The MultiMachine class type.
+ * @template K - The key in the context used to identify the current state.
+ *
+ * @param MachineClass - The class you defined that extends `MultiMachineBase<C>`.
+ * @param store - The `StateStore` that will manage the machine's context.
+ * @param discriminantKey - The key in the context used to identify the current state.
+ * @returns A Proxy that merges context properties with class methods.
+ *
+ * @example
+ * ```typescript
+ * type CounterContext = { count: number };
+ *
+ * class CounterMachine extends MultiMachineBase<CounterContext> {
+ *   increment() {
+ *     this.setContext({ count: this.context.count + 1 });
+ *   }
+ *   add(n: number) {
+ *     this.setContext({ count: this.context.count + n });
+ *   }
+ * }
+ *
+ * const store = {
+ *   getContext: () => ({ count: 0 }),
+ *   setContext: (ctx) => { sharedContext = ctx; }
+ * };
+ *
+ * const machine = createMultiMachine(CounterMachine, store);
+ *
+ * machine.increment();
+ * console.log(machine.count); // 1
+ * machine.add(5);
+ * console.log(machine.count); // 6
+ * ```
+ */
+export function createMultiMachine<
+  C extends object,
+  T extends MultiMachineBase<C>
+>(
+  MachineClass: new (store: StateStore<C>) => T,
+  store: StateStore<C>
+): C & T {
+  const instance = new MachineClass(store);
+
+  return new Proxy({} as C & T, {
+    get(_target, prop: string | symbol) {
+      // 1. Prioritize properties from the context
+      const context = store.getContext();
+      if (prop in context) {
+        return (context as any)[prop];
+      }
+
+      // 2. Then check for methods on the instance
+      const method = (instance as any)[prop];
+      if (typeof method === 'function') {
+        return (...args: any[]) => {
+          return method.apply(instance, args);
+        };
+      }
+
+      return undefined;
+    },
+
+    set(_target, prop: string | symbol, value: any) {
+      // Allow direct mutation of context properties
+      const context = store.getContext();
+      if (prop in context) {
+        const newContext = { ...context, [prop]: value } as C;
+        store.setContext(newContext);
+        return true;
+      }
+      return false;
+    },
+
+    has(_target, prop: string | symbol) {
+      // Support `in` operator checks
+      const context = store.getContext();
+      return prop in context || typeof (instance as any)[prop] === 'function';
+    },
+
+    ownKeys(_target) {
+      // Support reflection APIs
+      const context = store.getContext();
+      const contextKeys = Object.keys(context);
+      const methodKeys = Object.getOwnPropertyNames(
+        Object.getPrototypeOf(instance)
+      ).filter((key) => key !== 'constructor' && typeof (instance as any)[key] === 'function');
+      return Array.from(new Set([...contextKeys, ...methodKeys]));
+    },
+
+    getOwnPropertyDescriptor(_target, prop) {
+      // Support property descriptors
+      const context = store.getContext();
+      if (prop in context || typeof (instance as any)[prop] === 'function') {
+        return {
+          value: undefined,
+          writable: true,
+          enumerable: true,
+          configurable: true,
+        };
+      }
+      return undefined;
+    },
+  });
+}
+
+// =============================================================================
+// SECTION 5: THE MUTABLE MACHINE (EXPERIMENTAL)
 // =============================================================================
 
 /**
@@ -391,13 +565,14 @@ type MutableMachine<C extends object, AllMachines extends Machine<any>> = C &
  *   pipelines, command-line tools, or any script where state needs to be managed
  *   imperatively without passing it through a function chain.
  *
- * @template C - The shared context type, which MUST include a discriminant property.
+ * @template C - The shared context type.
  * @template F - An object of functions that create machine instances for each state.
  *   **Crucially, transitions inside these machines must be pure functions that
  *   return the *next context object*, not a new machine instance.**
  * @param sharedContext - The initial context object. This object will be mutated.
  * @param factories - An object mapping state names to functions that create machine instances.
- * @param discriminantKey - The key in the context object used to determine the current state.
+ * @param getDiscriminant - An accessor function that takes the context and returns the key
+ *   of the current state in the `factories` object. Provides refactoring safety.
  * @returns A Proxy that acts as a stable, mutable machine instance.
  *
  * @example
@@ -476,7 +651,7 @@ type MutableMachine<C extends object, AllMachines extends Machine<any>> = C &
  * const player = createMutableMachine(
  *   { state: 'idle', hp: 100, position: { x: 0, y: 0 } },
  *   playerFactories,
- *   'state'
+ *   (ctx) => ctx.state
  * );
  *
  * // Simulate a game loop
@@ -493,20 +668,19 @@ type MutableMachine<C extends object, AllMachines extends Machine<any>> = C &
  * processInput('attack'); // State: attacking, Position: (1, 0)
  */
 export function createMutableMachine<
-  C extends object & { [key in K]: keyof F & string },
-  F extends Record<string, (context: C) => Machine<C>>,
-  K extends keyof C & string
+  C extends object,
+  F extends Record<string, (context: C) => Machine<C>>
 >(
   sharedContext: C,
   factories: F,
-  discriminantKey: K
+  getDiscriminant: (context: C) => keyof F
 ): MutableMachine<C, ReturnType<F[keyof F]>> {
   const getCurrentMachine = (): ReturnType<F[keyof F]> => {
-    const currentStateName = sharedContext[discriminantKey];
+    const currentStateName = getDiscriminant(sharedContext);
     const factory = factories[currentStateName];
     if (!factory) {
       throw new Error(
-        `[MutableMachine] Invalid state: No factory for state "${currentStateName}".`
+        `[MutableMachine] Invalid state: No factory for state "${String(currentStateName)}".`
       );
     }
     return factory(sharedContext) as ReturnType<F[keyof F]>;
