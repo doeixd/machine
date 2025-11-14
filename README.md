@@ -1,4 +1,4 @@
-# @doeixd/machine
+# Machine
 
 A minimal, type-safe state machine library for TypeScript built on mathematical foundations.
 
