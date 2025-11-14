@@ -741,3 +741,93 @@ Both libraries are excellent for their intended use cases:
 - Value runtime introspection and visualization
 
 Neither is "better"—they have different philosophies and excel in different scenarios. Understanding these differences helps you choose the right tool for your specific needs.
+
+
+
+# `@doeixd/machine` vs. `@xstate/store`: A Practical Comparison
+
+This guide provides a direct comparison between `@doeixd/machine` and `@xstate/store`. Although both are state management libraries from the same ecosystem lineage, they are designed to solve fundamentally different problems. Choosing the right one depends entirely on what you are trying to model.
+
+
+### The Single Most Important Question: What Are You Modeling?
+
+To choose between these libraries, ask yourself one question:
+
+**"Am I modeling *data* that changes over time, or am I modeling a *process* that moves through distinct stages?"**
+
+*   If you are modeling **data** (like a user's profile, a list of todos, or application settings), choose **`@xstate/store`**. It is a centralized data store, similar to Redux or Zustand.
+
+*   If you are modeling a **process** (like a user's authentication flow, a multi-step form, or a data-fetching lifecycle), choose **`@doeixd/machine`**. It is a true Finite State Machine (FSM) library designed for behavioral logic.
+
+
+### Comparison by Key Questions
+
+Here are the questions a developer would likely ask when evaluating these two libraries.
+
+#### 1. What is the core job of each library?
+
+*   **`@xstate/store`:** To be a central, predictable store for your application's data. It provides one big `context` object and a set of "reducers" (transitions) to update that data in response to events. **Its job is to manage *what the data is*.**
+
+*   **`@doeixd/machine`:** To define and enforce the valid states and transitions of a process. It ensures that only certain actions are possible at certain times. **Its job is to manage *what can happen next*.**
+
+#### 2. What does the "state" look like?
+
+*   **`@xstate/store`:** There is only **one implicit state**. The `store` is always "active." What changes is the *data within the `context`*. It does not have a concept of finite, named states like "loading" or "success."
+
+    ```typescript
+    // A single, unified context object
+    const store = createStore({ context: { status: 'loading', data: null, error: null } });
+    ```
+
+*   **`@doeixd/machine`:** There are **multiple, explicit, and finite states**, represented as distinct TypeScript types. An `IdleMachine` is a fundamentally different *type* from a `LoadingMachine`.
+
+    ```typescript
+    // A union of distinct, incompatible types
+    type FetchMachine = IdleMachine | LoadingMachine | SuccessMachine;
+    ```
+
+#### 3. How does each library guarantee safety?
+
+*   **`@xstate/store`:** Provides **runtime safety** and excellent type support. It ensures that your data updates are predictable because they must go through a defined transition. TypeScript helps ensure your update functions are written correctly.
+
+*   **`@doeixd/machine`:** Provides **compile-time safety**. This is its defining feature. It makes invalid logical sequences impossible to write because they will cause a TypeScript error.
+
+    ```typescript
+    // @xstate/store: This is a runtime no-op if 'fetch' isn't defined, but it compiles.
+    store.send({ type: 'fetch' });
+
+    // @doeixd/machine: This is a COMPILE-TIME ERROR if the machine is already loading.
+    loadingMachine.fetch(); // ❌ Error: Property 'fetch' does not exist on type 'LoadingMachine'.
+    ```
+
+#### 4. What is the developer experience like?
+
+| | `@doeixd/machine` | `@xstate/store` |
+| :--- | :--- | :--- |
+| **API Style** | **Imperative** (`machine.action()`) | **Declarative** (`store.send('ACTION')`) |
+| **IDE Support** | **Excellent.** Autocomplete shows only valid actions for the current state. Refactoring is seamless. | **Good.** Relies on string literals, but has a `trigger` API for better DX. |
+| **Async** | **First-class.** `async/await` is used directly in transition methods. | **Formalized.** Uses an `enqueue.effect()` system where async operations must send new events back to the store. |
+
+#### 5. What are the unique "superpowers" of each?
+
+*   **`@xstate/store`:**
+    *   **Atoms:** A powerful primitive for creating fine-grained, independent, and composable pieces of reactive state.
+    *   **Undo/Redo:** Best-in-class, event-sourced undo/redo functionality built-in.
+    *   **Selectors:** A robust, built-in system for efficiently subscribing to slices of the state.
+
+*   **`@doeixd/machine`:**
+    *   **Statechart Extraction:** Its standout feature. It can generate formal, visual diagrams of your logic flows directly from your type-safe code, with zero runtime cost.
+    *   **Type-State Programming:** Guarantees logical correctness at compile time, eliminating an entire class of bugs.
+    *   **Advanced Patterns:** Ships with built-in, advanced orchestration tools like `Runner` (for ergonomics) and `Ensemble` (for framework-agnostic composition).
+
+
+### Can They Be Used Together? Yes, and They Should Be.
+
+They solve different problems and are highly complementary. A common and effective pattern is to use each for what it does best:
+
+*   Use **`@xstate/store`** for your **global, shared application data.**
+    *   Example: A `userStore` that holds the current user's profile, a `cartStore` for e-commerce items.
+*   Use **`@doeixd/machine`** for **local, behavioral, or component-level state.**
+    *   Example: A machine to manage the state of a complex file upload component (`uploading`, `processing`, `complete`). When the upload is `complete`, its final action is to call `userStore.trigger.updateAvatar({ url: ... })`.
+
+In this model, `@xstate/store` is the central source of truth for data, and `@doeixd/machine` is the engine that manages the complex, temporary workflows that interact with that data.
