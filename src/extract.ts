@@ -21,21 +21,56 @@ import { Project, Type, Node } from 'ts-morph';
 // =============================================================================
 
 /**
+ * Configuration for a parallel region
+ */
+export interface ParallelRegionConfig {
+  /** A unique name for this region (e.g., 'fontStyle') */
+  name: string;
+  /** The initial state class for this region */
+  initialState: string;
+  /** All reachable state classes within this region */
+  classes: string[];
+}
+
+/**
+ * Configuration for child states in a hierarchical machine
+ */
+export interface ChildStatesConfig {
+  /** The property in the parent's context that holds the child machine */
+  contextProperty: string;
+  /** An array of all possible child state class names */
+  classes: string[];
+  /** The initial child state */
+  initialState: string;
+}
+
+/**
  * Configuration for a single machine to extract
  */
 export interface MachineConfig {
   /** Path to the source file containing the machine */
   input: string;
-  /** Array of class names that represent states */
-  classes: string[];
   /** Output file path (optional, defaults to stdout) */
   output?: string;
   /** Top-level ID for the statechart */
   id: string;
-  /** Name of the class that represents the initial state */
-  initialState: string;
   /** Optional description of the machine */
   description?: string;
+
+  // EITHER `initialState` and `classes` for an FSM...
+  /** Array of class names that represent states (for simple FSM) */
+  classes?: string[];
+  /** Name of the class that represents the initial state (for simple FSM) */
+  initialState?: string;
+
+  // OR `parallel` for a parallel machine.
+  /** Configuration for parallel regions (mutually exclusive with initialState/classes) */
+  parallel?: {
+    regions: ParallelRegionConfig[];
+  };
+
+  /** Configuration for hierarchical/nested states */
+  children?: ChildStatesConfig;
 }
 
 /**
@@ -63,11 +98,16 @@ export interface ExtractionConfig {
  * plain JSON-compatible value. It's smart enough to resolve class constructor
  * types into their string names.
  *
+ * Note: This function is kept for future extensibility but is not currently used
+ * as the AST-based extraction approach (via extractFromCallExpression) is preferred.
+ *
  * @param type - The `ts-morph` Type object to serialize.
  * @param verbose - Enable debug logging
  * @returns A JSON-compatible value (string, number, object, array).
+ * @internal
  */
-function typeToJson(type: Type, verbose = false): any {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function _typeToJson(type: Type, verbose = false): any {
   // --- Terminal Types ---
   const symbol = type.getSymbol();
   if (symbol && symbol.getDeclarations().some(Node.isClassDeclaration)) {
@@ -83,7 +123,7 @@ function typeToJson(type: Type, verbose = false): any {
   // --- Recursive Types ---
   if (type.isArray()) {
     const elementType = type.getArrayElementTypeOrThrow();
-    return [typeToJson(elementType, verbose)];
+    return [_typeToJson(elementType, verbose)];
   }
 
   // --- Object Types ---
@@ -102,7 +142,7 @@ function typeToJson(type: Type, verbose = false): any {
       if (!declaration) continue;
 
       try {
-        obj[propName] = typeToJson(declaration.getType(), verbose);
+        obj[propName] = _typeToJson(declaration.getType(), verbose);
       } catch (e) {
         if (verbose) console.error(`      Warning: Failed to serialize property ${propName}:`, e);
         obj[propName] = 'unknown';
@@ -439,6 +479,41 @@ function analyzeStateNode(classSymbol: any, verbose = false): object {
 // =============================================================================
 
 /**
+ * Helper function to analyze a state node with optional nesting support
+ */
+function analyzeStateNodeWithNesting(
+  className: string,
+  classSymbol: any,
+  sourceFile: any,
+  childConfig: ChildStatesConfig | undefined,
+  verbose = false
+): any {
+  const stateNode = analyzeStateNode(classSymbol, verbose) as any;
+
+  // If this state has children, analyze them recursively
+  if (childConfig) {
+    if (verbose) {
+      console.error(`  👪 Analyzing children for state: ${className}`);
+    }
+    stateNode.initial = childConfig.initialState;
+    stateNode.states = {};
+
+    // Recursively analyze each child state
+    for (const childClassName of childConfig.classes) {
+      const childClassDeclaration = sourceFile.getClass(childClassName);
+      if (childClassDeclaration) {
+        const childSymbol = childClassDeclaration.getSymbolOrThrow();
+        stateNode.states[childClassName] = analyzeStateNode(childSymbol, verbose);
+      } else {
+        console.warn(`⚠️ Warning: Child class '${childClassName}' not found.`);
+      }
+    }
+  }
+
+  return stateNode;
+}
+
+/**
  * Extracts a single machine configuration to a statechart
  *
  * @param config - Machine configuration
@@ -461,6 +536,56 @@ export function extractMachine(
     throw new Error(`Source file not found: ${config.input}`);
   }
 
+  // Handle parallel machine configuration
+  if (config.parallel) {
+    if (verbose) {
+      console.error(`  ⏹️ Parallel machine detected. Analyzing regions.`);
+    }
+
+    const parallelChart: any = {
+      id: config.id,
+      type: 'parallel',
+      states: {},
+    };
+
+    if (config.description) {
+      parallelChart.description = config.description;
+    }
+
+    for (const region of config.parallel.regions) {
+      if (verbose) {
+        console.error(`    📍 Analyzing region: ${region.name}`);
+      }
+
+      const regionStates: any = {};
+      for (const className of region.classes) {
+        const classDeclaration = sourceFile.getClass(className);
+        if (classDeclaration) {
+          const classSymbol = classDeclaration.getSymbolOrThrow();
+          regionStates[className] = analyzeStateNode(classSymbol, verbose);
+        } else {
+          console.warn(`⚠️ Warning: Class '${className}' not found for region '${region.name}'.`);
+        }
+      }
+
+      parallelChart.states[region.name] = {
+        initial: region.initialState,
+        states: regionStates,
+      };
+    }
+
+    if (verbose) {
+      console.error(`  ✅ Extracted ${config.parallel.regions.length} parallel regions`);
+    }
+
+    return parallelChart;
+  }
+
+  // Handle standard FSM configuration
+  if (!config.initialState || !config.classes) {
+    throw new Error(`Machine config for '${config.id}' must have either 'parallel' or 'initialState'/'classes'.`);
+  }
+
   const fullChart: any = {
     id: config.id,
     initial: config.initialState,
@@ -478,7 +603,17 @@ export function extractMachine(
       continue;
     }
     const classSymbol = classDeclaration.getSymbolOrThrow();
-    const stateNode = analyzeStateNode(classSymbol, verbose);
+
+    // Check if this is the initial state and has children configuration
+    const hasChildren = className === config.initialState && config.children;
+    const stateNode = analyzeStateNodeWithNesting(
+      className,
+      classSymbol,
+      sourceFile,
+      hasChildren ? config.children : undefined,
+      verbose
+    );
+
     fullChart.states[className] = stateNode;
   }
 
@@ -568,6 +703,43 @@ export function generateChart() {
     process.exit(1);
   }
 }
+
+/**
+ * Example configuration demonstrating hierarchical and parallel machines.
+ * This is not used by default but serves as documentation.
+ */
+export const ADVANCED_CONFIG_EXAMPLES = {
+  hierarchical: {
+    input: 'examples/dashboardMachine.ts',
+    id: 'dashboard',
+    classes: ['DashboardMachine', 'LoggedOutMachine'],
+    initialState: 'DashboardMachine',
+    children: {
+      contextProperty: 'child',
+      initialState: 'ViewingChildMachine',
+      classes: ['ViewingChildMachine', 'EditingChildMachine'],
+    },
+  } as MachineConfig,
+
+  parallel: {
+    input: 'examples/editorMachine.ts',
+    id: 'editor',
+    parallel: {
+      regions: [
+        {
+          name: 'fontWeight',
+          initialState: 'NormalWeight',
+          classes: ['NormalWeight', 'BoldWeight'],
+        },
+        {
+          name: 'textDecoration',
+          initialState: 'NoDecoration',
+          classes: ['NoDecoration', 'UnderlineState'],
+        },
+      ],
+    },
+  } as MachineConfig,
+};
 
 // This allows the script to be executed directly from the command line.
 if (require.main === module) {

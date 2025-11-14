@@ -77,6 +77,47 @@ const config: ExtractionConfig = {
       initialState: 'RedLightMachine',
       description: 'Simple traffic light state machine with cyclic transitions',
     },
+
+    // Hierarchical (Nested States) Machine - Example Configuration
+    // Uncomment to enable extraction of hierarchical machines
+    // Note: This requires a machine with parent-child state relationships
+    // {
+    //   input: 'examples/dashboardMachine.ts',
+    //   classes: ['DashboardMachine', 'LoggedOutMachine'],
+    //   output: 'statecharts/dashboard.json',
+    //   id: 'dashboard',
+    //   initialState: 'DashboardMachine',
+    //   description: 'Dashboard with nested child states',
+    //   children: {
+    //     contextProperty: 'child',
+    //     initialState: 'ViewingChildMachine',
+    //     classes: ['ViewingChildMachine', 'EditingChildMachine'],
+    //   },
+    // },
+
+    // Parallel (Orthogonal) States Machine - Example Configuration
+    // Uncomment to enable extraction of parallel machines
+    // Note: This machine has independent regions that evolve simultaneously
+    // {
+    //   input: 'examples/editorMachine.ts',
+    //   id: 'editor',
+    //   output: 'statecharts/editor.json',
+    //   description: 'Text editor with parallel formatting regions',
+    //   parallel: {
+    //     regions: [
+    //       {
+    //         name: 'fontWeight',
+    //         initialState: 'NormalWeight',
+    //         classes: ['NormalWeight', 'BoldWeight'],
+    //       },
+    //       {
+    //         name: 'textDecoration',
+    //         initialState: 'NoDecoration',
+    //         classes: ['NoDecoration', 'UnderlineState'],
+    //       },
+    //     ],
+    //   },
+    // },
   ],
 
   // Global options

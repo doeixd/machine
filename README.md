@@ -1673,6 +1673,98 @@ const charts = extractMachines({
 });
 ```
 
+### Advanced Patterns: Hierarchical and Parallel Machines
+
+**NEW**: The extractor now supports advanced state machine patterns for complex systems.
+
+#### Hierarchical (Nested States)
+
+Model parent states containing child states:
+
+```typescript
+const config: MachineConfig = {
+  input: 'src/dashboard.ts',
+  classes: ['Dashboard', 'ErrorState'],
+  id: 'dashboard',
+  initialState: 'Dashboard',
+  children: {
+    contextProperty: 'child',
+    initialState: 'ViewingMachine',
+    classes: ['ViewingMachine', 'EditingMachine']
+  }
+};
+```
+
+Generates:
+
+```json
+{
+  "id": "dashboard",
+  "initial": "Dashboard",
+  "states": {
+    "Dashboard": {
+      "initial": "ViewingMachine",
+      "states": {
+        "ViewingMachine": { "on": { /* ... */ } },
+        "EditingMachine": { "on": { /* ... */ } }
+      }
+    }
+  }
+}
+```
+
+#### Parallel (Orthogonal Regions)
+
+Model independent regions that evolve simultaneously:
+
+```typescript
+const config: MachineConfig = {
+  input: 'src/editor.ts',
+  id: 'editor',
+  parallel: {
+    regions: [
+      {
+        name: 'fontWeight',
+        initialState: 'Normal',
+        classes: ['Normal', 'Bold']
+      },
+      {
+        name: 'textDecoration',
+        initialState: 'None',
+        classes: ['None', 'Underline']
+      }
+    ]
+  }
+};
+```
+
+Generates:
+
+```json
+{
+  "id": "editor",
+  "type": "parallel",
+  "states": {
+    "fontWeight": {
+      "initial": "Normal",
+      "states": {
+        "Normal": { "on": { /* ... */ } },
+        "Bold": { "on": { /* ... */ } }
+      }
+    },
+    "textDecoration": {
+      "initial": "None",
+      "states": {
+        "None": { "on": { /* ... */ } },
+        "Underline": { "on": { /* ... */ } }
+      }
+    }
+  }
+}
+```
+
+**See [docs/ADVANCED_EXTRACTION.md](./docs/ADVANCED_EXTRACTION.md) for complete guide.**
+
 ### Runtime Extraction API
 
 Extract statecharts from **running machine instances** without requiring source code access:
