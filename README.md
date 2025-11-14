@@ -499,6 +499,68 @@ import { next } from "@doeixd/machine";
 const updated = next(counter, (ctx) => ({ count: ctx.count + 1 }));
 ```
 
+### Transition Binding Helpers
+
+These utilities eliminate the need for `.call(m.context, ...)` boilerplate when invoking transitions.
+
+#### `call<C, F>(fn, context, ...args)`
+
+Explicitly binds a transition function to a context and invokes it. Useful when you need to call a transition with proper `this` binding.
+
+```typescript
+import { call } from "@doeixd/machine";
+
+type MyContext = { count: number };
+const increment = function(this: MyContext) { 
+  return { count: this.count + 1 }; 
+};
+
+const result = call(increment, { count: 5 }); // Returns { count: 6 }
+
+// Particularly useful with generator-based flows:
+const result = run(function* (m) {
+  m = yield* step(call(m.increment, m.context));
+  m = yield* step(call(m.add, m.context, 5));
+  return m;
+}, counter);
+```
+
+#### `bindTransitions<M>(machine)`
+
+Returns a Proxy that automatically binds all transition methods to the machine's context. Eliminates `.call(m.context, ...)` boilerplate entirely.
+
+```typescript
+import { bindTransitions } from "@doeixd/machine";
+
+const counter = bindTransitions(createMachine(
+  { count: 0 },
+  {
+    increment(this: { count: number }) {
+      return createMachine({ count: this.count + 1 }, this);
+    },
+    add(this: { count: number }, n: number) {
+      return createMachine({ count: this.count + n }, this);
+    }
+  }
+));
+
+// All methods are automatically bound - no need for .call()!
+const next = counter.increment(); // Works!
+const result = counter.add(5);    // Works!
+
+// Great for generator-based flows:
+const result = run(function* (m) {
+  m = yield* step(m.increment());     // Clean syntax!
+  m = yield* step(m.add(5));          // No .call() needed
+  return m;
+}, counter);
+```
+
+**How it works:**
+The Proxy intercepts all property access on the machine. When a property is a function (transition method), it wraps it to automatically call `.apply(machine.context, args)` before invoking. Non-callable properties are returned as-is.
+
+**Note:** The Proxy preserves type safety while providing ergonomic syntax. Use this when writing generator-based flows or any code that frequently calls transitions.
+
 #### `matchMachine<M, K, R>(machine, key, handlers)`
 
 Type-safe pattern matching on discriminated unions in context.
@@ -1975,6 +2037,10 @@ next<C>(machine: Machine<C>, update: (ctx: C) => C): Machine<C>
 overrideTransitions<M, T>(machine: M, overrides: T): M & T
 extendTransitions<M, T>(machine: M, newTransitions: T): M & T
 createMachineBuilder<M>(template: M): (context) => M
+
+// Transition Binding
+call<C, F>(fn: F, context: C, ...args): ReturnType<F>
+bindTransitions<M extends Machine<any>>(machine: M): M
 
 // Pattern Matching
 matchMachine<M, K, R>(machine: M, key: K, handlers): R

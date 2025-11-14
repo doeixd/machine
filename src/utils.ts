@@ -158,10 +158,176 @@ export async function pipeTransitions<M extends AsyncMachine<any>>(
  * );
  */
 export function logState<M extends Machine<any>>(machine: M, label?: string): M {
-  if (label) {
-    console.log(label, machine.context);
-  } else {
-    console.log(machine.context);
+   if (label) {
+     console.log(label, machine.context);
+   } else {
+     console.log(machine.context);
+   }
+   return machine;
+}
+
+// =============================================================================
+// SECTION: TRANSITION BINDING HELPERS
+// =============================================================================
+
+/**
+ * Calls a transition function with an explicit `this` context.
+ * Useful for invoking transition methods with proper context binding.
+ *
+ * @template C - The context type that the function expects as `this`.
+ * @template F - The function type with a `this` parameter.
+ * @template A - The argument types for the function.
+ * @param fn - The transition function to call.
+ * @param context - The context object to bind as `this`.
+ * @param args - Arguments to pass to the function.
+ * @returns The result of calling the function with the given context and arguments.
+ *
+ * @example
+ * type MyContext = { count: number };
+ * const increment = function(this: MyContext) { return this.count + 1; };
+ * const result = call(increment, { count: 5 }); // Returns 6
+ *
+ * // Particularly useful with machine transitions:
+ * import { call } from '@doeixd/machine/utils';
+ * const nextMachine = yield* step(call(m.increment, m.context));
+ */
+export function call<C, F extends (this: C, ...args: any[]) => any>(
+  fn: F,
+  context: C,
+  ...args: Parameters<F> extends [any, ...infer Rest] ? Rest : never
+): ReturnType<F> {
+  return fn.apply(context, args);
+}
+
+/**
+ * Binds all transition methods of a machine to its context automatically.
+ * Returns a Proxy that intercepts method calls and binds them to `machine.context`.
+ * This eliminates the need to use `.call(m.context, ...)` for every transition.
+ *
+ * Automatically recursively wraps returned machines, enabling seamless chaining
+ * in generator-based flows.
+ *
+ * @template M - The machine type with a `context` property and transition methods.
+ * @param machine - The machine instance to wrap.
+ * @returns A Proxy of the machine where all callable properties (transitions) are automatically bound to the machine's context.
+ *
+ * @example
+ * type CounterContext = { count: number };
+ * const counter = bindTransitions(createMachine({ count: 0 }, {
+ *   increment(this: CounterContext) { return createCounter(this.count + 1); }
+ * }));
+ *
+ * // Now you can call transitions directly without .call():
+ * const next = counter.increment(); // Works! This is automatically bound.
+ *
+ * // Particularly useful with generators:
+ * const result = run(function* (m) {
+ *   m = yield* step(m.increment());     // Clean syntax
+ *   m = yield* step(m.add(5));          // No .call() needed
+ *   return m;
+ * }, bindTransitions(counter));
+ *
+ * @remarks
+ * The Proxy preserves all original properties and methods. Non-callable properties
+ * are accessed directly from the machine. Callable properties are wrapped to bind
+ * them to `machine.context` before invocation. Returned machines are automatically
+ * re-wrapped to maintain binding across transition chains.
+ */
+export function bindTransitions<M extends { context: any }>(machine: M): M {
+  return new Proxy(machine, {
+    get(target, prop) {
+      const value = target[prop as keyof M];
+      
+      // If it's a callable property (transition method), bind it to context
+      if (typeof value === 'function') {
+        return function(...args: any[]) {
+          const result = value.apply(target.context, args);
+          // Recursively wrap returned machines to maintain binding
+          if (result && typeof result === 'object' && 'context' in result) {
+            return bindTransitions(result);
+          }
+          return result;
+        };
+      }
+      
+      // Otherwise, return the value as-is
+      return value;
+    },
+  }) as M;
+}
+
+/**
+ * A strongly-typed wrapper class for binding transitions to machine context.
+ * Unlike the Proxy-based `bindTransitions`, this class preserves full type safety
+ * and provides better IDE support through explicit property forwarding.
+ *
+ * @template M - The machine type with a `context` property and transition methods.
+ *
+ * @example
+ * type CounterContext = { count: number };
+ * const counter = createMachine({ count: 0 }, {
+ *   increment(this: CounterContext) { return createCounter(this.count + 1); }
+ * });
+ *
+ * const bound = new BoundMachine(counter);
+ *
+ * // All transitions are automatically bound to context
+ * const result = run(function* (m) {
+ *   m = yield* step(m.increment());
+ *   m = yield* step(m.add(5));
+ *   return m.context.count;
+ * }, bound);
+ *
+ * @remarks
+ * Advantages over Proxy-based `bindTransitions`:
+ * - Full type safety with TypeScript's type system
+ * - Returned machines are automatically re-wrapped
+ * - Better IDE autocompletion and hover information
+ * - No type casting needed
+ *
+ * Disadvantages:
+ * - Requires explicit instance creation: `new BoundMachine(m)` vs `bindTransitions(m)`
+ * - Not a transparent drop-in replacement for the original machine
+ */
+export class BoundMachine<M extends { context: any }> {
+  private readonly wrappedMachine: M;
+  [key: string | symbol]: any;
+
+  constructor(machine: M) {
+    this.wrappedMachine = machine;
+
+    // Create a proxy to intercept property access
+    return new Proxy(this, {
+      get: (target, prop) => {
+        // Handle direct property access to wrapped machine
+        if (prop === 'wrappedMachine' || prop === 'context') {
+          return Reflect.get(target, prop);
+        }
+
+        const value = this.wrappedMachine[prop as keyof M];
+
+        // Bind transition methods to context
+        if (typeof value === 'function') {
+          return (...args: any[]) => {
+            const result = value.apply(this.wrappedMachine.context, args);
+            // Recursively wrap returned machines
+            if (result && typeof result === 'object' && 'context' in result) {
+              return new BoundMachine(result);
+            }
+            return result;
+          };
+        }
+
+        // Return non-function properties directly
+        return value;
+      },
+    }) as any;
   }
-  return machine;
+
+  /**
+   * Access the underlying machine's context directly.
+   */
+  get context(): M extends { context: infer C } ? C : never {
+    return this.wrappedMachine.context;
+  }
 }

@@ -576,5 +576,19 @@ export { RUNTIME_META, type RuntimeTransitionMeta } from './primitives';
 
 export * from './multi'
 
-
 export * from './higher-order'
+
+// =============================================================================
+// SECTION: UTILITIES & HELPERS
+// =============================================================================
+
+export {
+  isState,
+  createEvent,
+  mergeContext,
+  pipeTransitions,
+  logState,
+  call,
+  bindTransitions,
+  BoundMachine
+} from './utils';

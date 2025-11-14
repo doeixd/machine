@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createMachine } from '../src/index';
+import { createMachine, bindTransitions, BoundMachine } from '../src/index';
 import {
   run,
   step,
@@ -11,23 +11,33 @@ import {
   stepAsync,
 } from '../src/generators';
 
+type CounterContext = { count: number };
+
 // Helper function to create a test counter machine
 function createCounter(count: number = 0) {
-  const transitions = {
-    increment() {
-      return createMachine({ count: this.count + 1 }, transitions);
+  type CounterTransitions = {
+    increment: (this: CounterContext) => ReturnType<typeof createCounter>;
+    decrement: (this: CounterContext) => ReturnType<typeof createCounter>;
+    add: (this: CounterContext, n: number) => ReturnType<typeof createCounter>;
+    multiply: (this: CounterContext, n: number) => ReturnType<typeof createCounter>;
+    reset: (this: CounterContext) => ReturnType<typeof createCounter>;
+  };
+
+  const transitions: CounterTransitions = {
+    increment(this: CounterContext) {
+      return createCounter(this.count + 1);
     },
-    decrement() {
-      return createMachine({ count: this.count - 1 }, transitions);
+    decrement(this: CounterContext) {
+      return createCounter(this.count - 1);
     },
-    add(n: number) {
-      return createMachine({ count: this.count + n }, transitions);
+    add(this: CounterContext, n: number) {
+      return createCounter(this.count + n);
     },
-    multiply(n: number) {
-      return createMachine({ count: this.count * n }, transitions);
+    multiply(this: CounterContext, n: number) {
+      return createCounter(this.count * n);
     },
-    reset() {
-      return createMachine({ count: 0 }, transitions);
+    reset(this: CounterContext) {
+      return createCounter(0);
     },
   };
 
@@ -36,7 +46,7 @@ function createCounter(count: number = 0) {
 
 describe('run', () => {
   it('should execute a generator flow and return the final value', () => {
-    const counter = createCounter(0);
+    const counter = bindTransitions(createCounter(0));
 
     const result = run(function* (m) {
       m = yield* step(m.increment.call(m.context));
@@ -49,15 +59,15 @@ describe('run', () => {
   });
 
   it('should handle conditional logic in generators', () => {
-    const counter = createCounter(0);
+    const counter = new BoundMachine(createCounter(0));
 
     const result = run(function* (m) {
-      m = yield* step(m.increment.call(m.context));
+      m = yield* step(m.increment());
 
       if (m.context.count > 5) {
-        m = yield* step(m.reset.call(m.context));
+        m = yield* step(m.reset());
       } else {
-        m = yield* step(m.add.call(m.context, 10));
+        m = yield* step(m.add(10));
       }
 
       return m.context.count;
@@ -67,11 +77,11 @@ describe('run', () => {
   });
 
   it('should handle loops in generators', () => {
-    const counter = createCounter(0);
+    const counter = new BoundMachine(createCounter(0));
 
     const result = run(function* (m) {
       for (let i = 0; i < 5; i++) {
-        m = yield* step(m.increment.call(m.context));
+        m = yield* step(m.increment());
       }
       return m.context.count;
     }, counter);
@@ -80,13 +90,13 @@ describe('run', () => {
   });
 
   it('should support accumulation across iterations', () => {
-    const counter = createCounter(0);
+    const counter = new BoundMachine(createCounter(0));
 
     const result = run(function* (m) {
       let total = 0;
 
       for (let i = 0; i < 3; i++) {
-        m = yield* step(m.add.call(m.context, i + 1));
+        m = yield* step(m.add(i + 1));
         total += m.context.count;
       }
 
@@ -392,6 +402,49 @@ describe('stepAsync', () => {
 
     // (0 + 1) * 5 + 3 = 8
     expect(result).toBe(8);
+  });
+});
+
+describe('BoundMachine (typed alternative to bindTransitions)', () => {
+  it('should support clean syntax with full type safety', () => {
+    const counter = new BoundMachine(createCounter(0));
+
+    const result = run(function* (m) {
+      m = yield* step(m.increment());
+      m = yield* step(m.increment());
+      m = yield* step(m.add(5));
+      return m.context.count;
+    }, counter);
+
+    expect(result).toBe(7);
+  });
+
+  it('should maintain automatic re-wrapping across transitions', () => {
+    const counter = new BoundMachine(createCounter(1));
+
+    const result = run(function* (m) {
+      m = yield* step(m.multiply(3));
+      m = yield* step(m.add(2));
+      m = yield* step(m.multiply(2));
+      return m.context.count;
+    }, counter);
+
+    // (1 * 3 + 2) * 2 = 10
+    expect(result).toBe(10);
+  });
+
+  it('should handle complex generator flows cleanly', () => {
+    const counter = new BoundMachine(createCounter(0));
+
+    const result = run(function* (m) {
+      for (let i = 0; i < 3; i++) {
+        m = yield* step(m.add(i + 1));
+      }
+      return m.context.count;
+    }, counter);
+
+    // 0 + 1 + 2 + 3 = 6
+    expect(result).toBe(6);
   });
 });
 

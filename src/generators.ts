@@ -26,7 +26,7 @@
  * ```
  */
 
-import { Machine } from './index';
+
 
 /**
  * Runs a generator-based state machine flow to completion.
@@ -117,9 +117,9 @@ import { Machine } from './index';
  * }, machine);
  * ```
  */
-export function run<C extends object, T>(
-  flow: (m: Machine<C>) => Generator<Machine<C>, T, Machine<C>>,
-  initial: Machine<C>
+export function run<C extends any = any, M extends { context: C } & Record<string, any> = { context: C }, T = any>(
+  flow: (m: M) => Generator<M, T, M>,
+  initial: M
 ): T {
   // Create the generator by calling the flow function with the initial machine
   const generator = flow(initial);
@@ -197,9 +197,9 @@ export function run<C extends object, T>(
  * }, machine);
  * ```
  */
-export function step<C extends object>(
-  m: Machine<C>
-): Generator<Machine<C>, Machine<C>, Machine<C>> {
+export function step<C extends any = any, M extends { context: C } & Record<string, any> = { context: C }>(
+  m: M
+): Generator<M, M, M> {
   // Create an immediately-invoked generator that:
   // 1. Yields the provided machine
   // 2. Receives a value back (the next state)
@@ -229,7 +229,7 @@ export function step<C extends object>(
  * }, counter);
  * ```
  */
-export function yieldMachine<C extends object>(m: Machine<C>): Machine<C> {
+export function yieldMachine<C extends any = any, M extends { context: C } & Record<string, any> = { context: C }>(m: M): M {
   return m;
 }
 
@@ -259,10 +259,10 @@ export function yieldMachine<C extends object>(m: Machine<C>): Machine<C> {
  * console.log(result.context.count); // 6
  * ```
  */
-export function runSequence<C extends object>(
-  initial: Machine<C>,
-  flows: Array<(m: Machine<C>) => Generator<Machine<C>, Machine<C>, Machine<C>>>
-): Machine<C> {
+export function runSequence<C extends any = any, M extends { context: C } & Record<string, any> = { context: C }>(
+  initial: M,
+  flows: Array<(m: M) => Generator<M, M, M>>
+): M {
   return flows.reduce((machine, flow) => {
     return run(flow, machine);
   }, initial);
@@ -295,9 +295,9 @@ export function runSequence<C extends object>(
  * }, counter);
  * ```
  */
-export function createFlow<C extends object>(
-  flow: (m: Machine<C>) => Generator<Machine<C>, Machine<C>, Machine<C>>
-): (m: Machine<C>) => Generator<Machine<C>, Machine<C>, Machine<C>> {
+export function createFlow<C extends any = any, M extends { context: C } & Record<string, any> = { context: C }>(
+  flow: (m: M) => Generator<M, M, M>
+): (m: M) => Generator<M, M, M> {
   return flow;
 }
 
@@ -328,10 +328,10 @@ export function createFlow<C extends object>(
  * // Final: 6
  * ```
  */
-export function runWithDebug<C extends object, T>(
-  flow: (m: Machine<C>) => Generator<Machine<C>, T, Machine<C>>,
-  initial: Machine<C>,
-  logger: (step: number, machine: Machine<C>) => void = (step, m) => {
+export function runWithDebug<C extends any = any, M extends { context: C } & Record<string, any> = { context: C }, T = any>(
+  flow: (m: M) => Generator<M, T, M>,
+  initial: M,
+  logger: (step: number, machine: M) => void = (step, m) => {
     console.log(`Step ${step}:`, m.context);
   }
 ): T {
@@ -380,9 +380,9 @@ export function runWithDebug<C extends object, T>(
  * }, asyncMachine);
  * ```
  */
-export async function runAsync<C extends object, T>(
-  flow: (m: Machine<C>) => AsyncGenerator<Machine<C>, T, Machine<C>>,
-  initial: Machine<C>
+export async function runAsync<C extends any = any, M extends { context: C } & Record<string, any> = { context: C }, T = any>(
+  flow: (m: M) => AsyncGenerator<M, T, M>,
+  initial: M
 ): Promise<T> {
   const generator = flow(initial);
   let current = initial;
@@ -413,9 +413,9 @@ export async function runAsync<C extends object, T>(
  * }, machine);
  * ```
  */
-export async function* stepAsync<C extends object>(
-  m: Machine<C>
-): AsyncGenerator<Machine<C>, Machine<C>, Machine<C>> {
+export async function* stepAsync<C extends any = any, M extends { context: C } & Record<string, any> = { context: C }>(
+  m: M
+): AsyncGenerator<M, M, M> {
   const received = yield m;
   return received;
 }
