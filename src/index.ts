@@ -526,3 +526,6 @@ export {
   runAsync,
   stepAsync
 } from './generators';
+
+
+export * from './multi'

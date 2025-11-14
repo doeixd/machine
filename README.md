@@ -643,6 +643,389 @@ function enterState(): MachineResult<{ timer: number }> {
 
 ## Advanced Features
 
+### Managed State with Runner & Ensemble
+
+For stateful applications, `@doeixd/machine/multi` provides two advanced patterns that eliminate constant variable reassignment while maintaining immutability:
+
+#### Runner: Stateful Controller for Local State
+
+The `Runner` wraps an immutable machine in a stateful controller, providing stable `actions` object so you can call transitions imperatively without reassigning the machine variable.
+
+```typescript
+import { createRunner } from "@doeixd/machine/multi";
+
+const counterMachine = createCounterMachine({ count: 0 });
+const runner = createRunner(counterMachine, (newState) => {
+  console.log('Count is now:', newState.context.count);
+});
+
+// Call transitions without reassignment - runner updates internally
+runner.actions.increment(); // Logs: "Count is now: 1"
+runner.actions.add(5);      // Logs: "Count is now: 6"
+
+// Access current state
+console.log(runner.context.count); // 6
+console.log(runner.state.context.count); // 6 (full machine)
+
+// Type narrowing works
+if (runner.state.context.status === 'loggedIn') {
+  runner.actions.logout(); // TypeScript knows logout exists
+}
+```
+
+**Benefits:**
+- No more `machine = machine.transition()` reassignment chains
+- Stable `actions` object for clean event handling
+- Perfect for React hooks, component state, or form handling
+- Type-safe state narrowing still works
+
+#### Ensemble: Framework-Agnostic Global State Orchestration
+
+The `Ensemble` decouples state logic (the machine) from state storage, plugging into any state management solution (React hooks, Solid stores, Zustand, Redux, etc.) via a simple `StateStore` interface.
+
+```typescript
+import { createEnsemble } from "@doeixd/machine/multi";
+
+// 1. Define your state store interface
+const store = {
+  getContext: () => sharedContext,
+  setContext: (newCtx) => { sharedContext = newCtx; }
+};
+
+// 2. Define machine factories for each state
+const factories = {
+  idle: (ctx) => createMachine(ctx, {
+    fetch: () => store.setContext({ ...ctx, status: 'loading' })
+  }),
+  loading: (ctx) => createMachine(ctx, {
+    succeed: (data) => store.setContext({ ...ctx, status: 'success', data }),
+    fail: (error) => store.setContext({ ...ctx, status: 'error', error })
+  }),
+  success: (ctx) => createMachine(ctx, {
+    refetch: () => store.setContext({ ...ctx, status: 'loading' })
+  })
+};
+
+// 3. Create the Ensemble
+const ensemble = createEnsemble(store, factories, 'status');
+
+// 4. Use it with type-safe dispatch
+ensemble.actions.fetch();      // Transitions to loading
+console.log(ensemble.context.status); // 'loading'
+
+// Type narrowing
+if (ensemble.state.context.status === 'success') {
+  console.log(ensemble.state.context.data); // TypeScript knows data exists
+}
+```
+
+**Perfect for:**
+- Global application state orchestration
+- Decoupling business logic from framework-specific state management
+- Testing (swap the store for a test stub)
+- Multiple framework support (same machine logic for React, Solid, Vue, etc.)
+
+**Workflow Pattern:**
+```typescript
+// React example
+function MyComponent() {
+  const [context, setContext] = useState(initialContext);
+  
+  const store = { 
+    getContext: () => context,
+    setContext: setContext
+  };
+  
+  const ensemble = useMemo(() => 
+    createEnsemble(store, factories, 'status'),
+    [context]
+  );
+  
+  return (
+    <div>
+      <p>Status: {ensemble.context.status}</p>
+      <button onClick={() => ensemble.actions.fetch()}>Load Data</button>
+    </div>
+  );
+}
+```
+
+#### Generator-Based Workflows with Runner & Ensemble
+
+Run complex, multi-step workflows imperatively using generators:
+
+```typescript
+import { runWithRunner, runWithEnsemble } from "@doeixd/machine/multi";
+
+// With Runner (local state)
+const result = runWithRunner(function* (runner) {
+  yield runner.actions.increment();
+  yield runner.actions.add(10);
+  if (runner.context.count > 5) {
+    yield runner.actions.reset();
+  }
+  return runner.context;
+}, createCounterMachine());
+
+// With Ensemble (global state)
+const result = runWithEnsemble(function* (ensemble) {
+  yield ensemble.actions.fetch();
+  yield ensemble.actions.process();
+  if (ensemble.context.status === 'success') {
+    yield ensemble.actions.commit();
+  }
+  return ensemble.context.data;
+}, ensemble);
+```
+
+#### Mutable Machine (Experimental)
+
+For non-UI environments where a stable object reference is critical, `createMutableMachine` provides a highly imperative API with direct in-place mutations.
+
+**Key Characteristics:**
+- **Stable Object Reference**: The machine is a single object whose properties mutate in place
+- **Direct Imperative API**: Call transitions like methods (`machine.login('user')`) with immediate updates
+- **No State History**: Previous states are not preserved (no time-travel debugging)
+- **Not for Reactive UIs**: Won't trigger component re-renders in React, Solid, Vue, etc.
+
+**Best for:**
+- Backend services and game loops
+- Complex synchronous scripts and data pipelines
+- Non-UI environments where a stable state object is essential
+
+**Example: Authentication State**
+
+```typescript
+import { createMutableMachine } from "@doeixd/machine/multi";
+
+type AuthContext =
+  | { status: 'loggedOut'; error?: string }
+  | { status: 'loggedIn'; username: string };
+
+const authFactories = {
+  loggedOut: (ctx: AuthContext) => ({
+    context: ctx,
+    login: (username: string) => ({ status: 'loggedIn', username }),
+  }),
+  loggedIn: (ctx: AuthContext) => ({
+    context: ctx,
+    logout: () => ({ status: 'loggedOut' }),
+  }),
+};
+
+const auth = createMutableMachine(
+  { status: 'loggedOut' } as AuthContext,
+  authFactories,
+  'status'
+);
+
+// Stable reference - keep this, the object will mutate
+const userRef = auth;
+
+console.log(auth.status); // 'loggedOut'
+
+auth.login('alice'); // Mutates in place
+
+console.log(auth.status); // 'loggedIn'
+console.log(auth.username); // 'alice'
+console.log(userRef === auth); // true - same object reference
+```
+
+**Example: Game State Loop**
+
+```typescript
+type PlayerContext = {
+  state: 'idle' | 'walking' | 'attacking';
+  hp: number;
+  position: { x: number; y: number };
+};
+
+const player = createMutableMachine(
+  { state: 'idle', hp: 100, position: { x: 0, y: 0 } },
+  {
+    idle: (ctx) => ({
+      context: ctx,
+      walk: (dx: number, dy: number) => ({
+        ...ctx,
+        state: 'walking',
+        position: { x: ctx.position.x + dx, y: ctx.position.y + dy }
+      }),
+      attack: () => ({ ...ctx, state: 'attacking' }),
+    }),
+    walking: (ctx) => ({
+      context: ctx,
+      stop: () => ({ ...ctx, state: 'idle' }),
+    }),
+    attacking: (ctx) => ({
+      context: ctx,
+      finishAttack: () => ({ ...ctx, state: 'idle' }),
+    }),
+  },
+  'state'
+);
+
+// Game loop
+player.walk(1, 0);
+console.log(player.position); // { x: 1, y: 0 }
+console.log(player.state); // 'walking'
+
+player.stop();
+console.log(player.state); // 'idle'
+```
+
+⚠️ **Trade-offs**: Breaks immutability principle. Only use when:
+- Working in non-UI environments (backend, CLI, game logic)
+- Stable object reference is critical
+- You accept no reactive UI updates or state history
+
+**Not suitable for**: React, Solid, Vue, or any reactive framework.
+
+#### Comparison: Runner vs Ensemble vs Mutable Machine
+
+| Feature | Runner | Ensemble | Mutable Machine |
+|---------|--------|----------|-----------------|
+| **State Philosophy** | Immutable core with ergonomic wrapper | External immutable state store integration | Mutable in-place context |
+| **Primary Use Case** | Complex local/component state | Global state with framework integration | Backend, game loops, non-UI |
+| **API Style** | `runner.actions.increment()` | `ensemble.actions.increment()` | `machine.increment()` |
+| **UI Frameworks** | ✅ Excellent (React, Solid, Vue) | ✅ Designed for frameworks | ❌ Won't trigger re-renders |
+| **State History** | ✅ Preserved (immutable snapshots) | ✅ Preserved (by external store) | ❌ Lost (mutated in place) |
+| **Object Stability** | Runner reference stable, internal machine changes | Ensemble reference stable, reconstructed per access | ✅ Single object reference |
+| **Time-Travel Debugging** | ✅ Possible | ✅ Possible | ❌ Not possible |
+| **Performance** | Standard | Standard | ✅ Optimal (no allocations) |
+
+**Quick Decision Tree:**
+
+1. **Do you need a UI framework** (React, Solid, Vue)?
+   - **Yes** → Use **Ensemble** if global/shared state, or **Runner** if local/component state
+   - **No** (Backend, game, CLI) → Use **Mutable Machine**
+
+2. **Is state global/shared across your app?**
+   - **Yes** → Use **Ensemble** (hooks into your framework's state manager)
+   - **No** → Use **Runner** (simpler, still immutable)
+
+3. **Do you need immutability for debugging/testing?**
+   - **Yes** → Use **Runner** or **Ensemble**
+   - **No** (performance critical) → Use **Mutable Machine**
+
+##### Deep Dive: Runner (createRunner)
+
+**The Pattern**: A stateful wrapper that handles internal reassignments for you.
+
+```typescript
+// Without Runner (verbose reassignment chain)
+let machine = createCounterMachine();
+machine = machine.increment();
+machine = machine.add(5);
+machine = machine.reset();
+
+// With Runner (stable reference, less boilerplate)
+const runner = createRunner(createCounterMachine());
+runner.actions.increment();
+runner.actions.add(5);
+runner.actions.reset();
+console.log(runner.context); // Access state directly
+```
+
+**How it Works:**
+- Holds a private `currentMachine` variable
+- Wraps each transition method to update `currentMachine` before returning
+- Provides stable `runner.actions` and `runner.context` references
+- The underlying immutable machine is still pure; the Runner just manages the reassignments
+
+**When to Use:**
+- Complex local state (forms, multi-step wizards, component logic)
+- Generator-based workflows (cleaner syntax with `yield runner.actions.xxx()`)
+- You want immutability's safety without constant `machine = machine.xxx()` chains
+- Perfect for React component state or Solid signals
+
+**Analogy**: An automatic transmission. The immutable engine is still doing powerful, pure work. The Runner just handles the "gear shifting" automatically.
+
+##### Deep Dive: Ensemble (createEnsemble)
+
+**The Pattern**: Decouples machine logic from framework-specific state management.
+
+```typescript
+// Your pure machine logic
+const factories = {
+  idle: (ctx) => createMachine(ctx, { fetch: () => { /* ... */ } }),
+  loading: (ctx) => createMachine(ctx, { succeed: (data) => { /* ... */ } }),
+};
+
+// Your framework's state (React example)
+const [context, setContext] = useState(initialContext);
+
+// The Ensemble bridges them
+const ensemble = useMemo(() => 
+  createEnsemble(
+    { getContext: () => context, setContext },
+    factories,
+    'status'
+  ),
+  [context]
+);
+
+// Type-safe dispatch from any part of your app
+ensemble.actions.fetch();
+```
+
+**How it Works:**
+- Takes a `StateStore` (get/set functions) that communicate with your state manager
+- Takes a set of factory functions that create machines for each state
+- When you call `ensemble.actions.fetch()`:
+  1. Gets current context from the store
+  2. Determines the active machine based on discriminant key
+  3. Executes the transition (which calls `store.setContext()` internally)
+  4. Reconstructs the machine with updated context on next access
+
+**When to Use:**
+- Global/application state that multiple components need
+- You want machine logic completely decoupled from your UI framework
+- Testing (swap the store for a test stub)
+- Portable state logic (same machine works with React, Solid, Vue, etc.)
+- Complex state that's read/updated from multiple places in your app
+
+**Analogy**: A custom car build. The machine provides expert logic on "how a car behaves," but you provide the engine (your framework's state manager). Perfect integration, total flexibility.
+
+##### Deep Dive: Mutable Machine (createMutableMachine)
+
+**The Pattern**: A single stable object whose properties mutate in place.
+
+```typescript
+// Single object reference that mutates
+const player = createMutableMachine(
+  { state: 'idle', hp: 100 },
+  factories,
+  'state'
+);
+
+// Keep the reference - it will always reflect current state
+const playerRef = player;
+
+player.takeDamage(10);
+console.log(playerRef.hp); // 90 - same object!
+console.log(playerRef === player); // true
+```
+
+**How it Works:**
+- Uses a JavaScript Proxy to merge context properties with machine methods
+- Transitions are pure functions that return the next context (not a new machine)
+- When a transition is called, the proxy overwrites the context object's properties in place
+- The object reference never changes; properties mutate
+
+**When to Use:**
+- Backend services (session management, long-running processes)
+- Game development (high-performance loops where allocation matters)
+- CLI tools and scripts (orchestrating steps)
+- Non-UI environments where a stable reference is critical
+- Performance-critical code where garbage collection matters
+
+**Never Use For:**
+- React, Solid, Vue, or any reactive UI framework
+- Anything where you need state history or time-travel debugging
+- Systems where multiple parts read stale references
+
+**Analogy**: A go-kart. Stripped down for performance in a specific environment (the backend). No safety features like immutability, not built for daily-driver complexity, but incredibly direct and efficient on the race track.
+
 ### Generator-Based Composition
 
 For complex multi-step workflows, use generator-based composition. This provides an imperative, procedural style while maintaining immutability and type safety.
@@ -1083,6 +1466,92 @@ createFlow<C>(flow: (m: Machine<C>) => Generator<...>): (m: Machine<C>) => Gener
 runWithDebug<C, T>(flow: ..., initial: Machine<C>, logger?: ...): T
 runAsync<C, T>(flow: (m: Machine<C>) => AsyncGenerator<...>, initial: Machine<C>): Promise<T>
 stepAsync<C>(machine: Machine<C>): AsyncGenerator<...>
+```
+
+### Multi Module (Stateful Controllers & Framework Integration)
+
+**Import:** `import { ... } from "@doeixd/machine/multi"`
+
+#### Types
+
+```typescript
+// Stateful controller for a single machine
+type Runner<M extends Machine<any>> = {
+  readonly state: M;
+  readonly context: Context<M>;
+  readonly actions: BoundTransitions<M>;
+  setState(newState: M): void;
+};
+
+// Mapped type: all transition methods pre-bound to update a Runner
+type BoundTransitions<M extends Machine<any>> = {
+  [K in TransitionNames<M>]: (...args: TransitionArgs<M, K>) => ReturnType<M[K]>;
+};
+
+// External state storage interface for Ensemble
+interface StateStore<C extends object> {
+  getContext: () => C;
+  setContext: (newContext: C) => void;
+}
+
+// Orchestration engine for global state
+type Ensemble<AllMachines extends Machine<any>, C extends object> = {
+  readonly context: C;
+  readonly state: AllMachines;
+  readonly actions: AllTransitions<AllMachines>;
+};
+```
+
+#### Functions
+
+```typescript
+// Create a stateful wrapper for local state management
+createRunner<M extends Machine<any>>(
+  initialMachine: M,
+  onChange?: (newState: M) => void
+): Runner<M>
+
+// Create an ensemble for framework-agnostic global state orchestration
+createEnsemble<
+  C extends object & { [key in K]: keyof F & string },
+  F extends Record<string, (context: C) => Machine<C>>,
+  K extends keyof C & string
+>(
+  store: StateStore<C>,
+  factories: F,
+  discriminantKey: K
+): Ensemble<ReturnType<F[keyof F]>, C>
+
+// Execute a generator workflow with a Runner
+runWithRunner<M extends Machine<any>, T>(
+  flow: (runner: Runner<M>) => Generator<any, T, any>,
+  initialMachine: M
+): T
+
+// Execute a generator workflow with an Ensemble
+runWithEnsemble<AllMachines extends Machine<any>, C extends object, T>(
+  flow: (ensemble: Ensemble<AllMachines, C>) => Generator<any, T, any>,
+  ensemble: Ensemble<AllMachines, C>
+): T
+
+// Create a mutable machine (EXPERIMENTAL - use with caution)
+createMutableMachine<
+  C extends object & { [key in K]: keyof F & string },
+  F extends Record<string, (context: C) => Machine<C>>,
+  K extends keyof C & string
+>(
+  sharedContext: C,
+  factories: F,
+  discriminantKey: K
+): MutableMachine<C, ReturnType<F[keyof F]>>
+```
+
+#### Additional Types (Multi Module)
+
+```typescript
+// Mutable machine combining context and transitions (EXPERIMENTAL)
+type MutableMachine<C extends object, AllMachines extends Machine<any>> = C &
+  AllTransitions<AllMachines>;
 ```
 
 ## License
