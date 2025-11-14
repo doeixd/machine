@@ -1165,22 +1165,122 @@ const result = run(function* (m) {
 
 ### React Integration
 
+`@doeixd/machine` offers a full suite of React hooks for everything from simple component state to complex, performance-optimized applications.
+
+Get started by importing the hooks:
 ```typescript
+import { useMachine, useMachineSelector } from '@doeixd/machine/react';
+```
+
+#### `useMachine` - For Local Component State
+
+This is the primary hook for managing self-contained state within a component. It returns the reactive `machine` instance and a stable `actions` object for triggering transitions, providing an ergonomic and type-safe API.
+
+```tsx
 import { useMachine } from "@doeixd/machine/react";
+import { createCounterMachine } from "./counterMachine";
 
 function Counter() {
-  const [machine, dispatch] = useMachine(() => createCounterMachine());
+  const [machine, actions] = useMachine(() => createCounterMachine({ count: 0 }));
 
   return (
     <div>
       <p>Count: {machine.context.count}</p>
-      <button onClick={() => dispatch({ type: "increment", args: [] })}>
-        Increment
-      </button>
+      {/* Call transitions directly from the stable actions object */}
+      <button onClick={() => actions.increment()}>Increment</button>
+      <button onClick={() => actions.add(5)}>Add 5</button>
     </div>
   );
 }
 ```
+
+#### `useMachineSelector` - For Performance
+
+To prevent unnecessary re-renders in components that only care about a small part of a large machine's state, use `useMachineSelector`. It subscribes a component to a specific slice of the state, and only triggers a re-render when that slice changes.
+
+```tsx
+function UserNameDisplay({ machine }) {
+  // This component will NOT re-render if other parts of the machine's
+  // context (e.g., user settings) change.
+  const userName = useMachineSelector(machine, (m) => m.context.user.name);
+
+  return <p>User: {userName}</p>;
+}
+```
+
+#### `createMachineContext` - For Sharing State
+
+To avoid passing your machine and actions through many layers of props ("prop-drilling"), `createMachineContext` provides a typed Context `Provider` and consumer hooks to share state across your component tree.
+
+```tsx
+import { createMachineContext, useMachine } from "@doeixd/machine/react";
+
+// 1. Create the context
+const { Provider, useSelector, useMachineActions } = createMachineContext<AuthMachine>();
+
+// 2. Provide the machine in your root component
+function App() {
+  const [machine, actions] = useMachine(() => createAuthMachine());
+  return (
+    <Provider machine={machine} actions={actions}>
+      <Header />
+    </Provider>
+  );
+}
+
+// 3. Consume it in any child component
+function Header() {
+  const status = useSelector(m => m.context.status);
+  const actions = useMachineActions();
+
+  return (
+    <header>
+      {status === 'loggedIn' ? (
+        <button onClick={() => actions.logout()}>Logout</button>
+      ) : (
+        <button onClick={() => actions.login('user', 'pass')}>Login</button>
+      )}
+    </header>
+  );
+}
+```
+
+#### `useEnsemble` - For Advanced Integration
+
+For maximum testability and portability, `useEnsemble` decouples your pure, framework-agnostic state logic from React's state management. Your machine logic becomes fully portable, and React's `useState` simply acts as the "state store" for the ensemble.
+
+```tsx
+import { useEnsemble } from "@doeixd/machine/react";
+import { fetchFactories } from "./fetchFactories"; // Pure, framework-agnostic logic
+
+function DataFetcher() {
+  const ensemble = useEnsemble(
+    { status: 'idle', data: null }, // Initial context
+    fetchFactories, // Your pure machine factories
+    (ctx) => ctx.status // Discriminant function
+  );
+
+  return (
+    <div>
+      <p>Status: {ensemble.context.status}</p>
+      {ensemble.context.status === 'idle' && (
+        <button onClick={() => ensemble.actions.fetch('/api/data')}>
+          Fetch
+        </button>
+      )}
+    </div>
+  );
+}
+```
+
+#### Which Hook Should I Use?
+
+| Hook | Best For | Key Feature |
+| :--- | :--- | :--- |
+| **`useMachine`** | **Local component state** | The simplest way to get started. Ergonomic `[machine, actions]` API. |
+| **`useMachineSelector`** | **Performance optimization** | Prevents re-renders by subscribing to slices of state. |
+| **`createMachineContext`** | **Sharing state / DI** | Avoids prop-drilling a machine through the component tree. |
+| **`useEnsemble`** | **Complex or shared state** | Decouples business logic from React for maximum portability and testability. |
 
 ### Solid.js Integration
 

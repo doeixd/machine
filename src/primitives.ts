@@ -318,7 +318,7 @@ export function action<
  *   () => createMachine({ count: 0 }, { ... })
  * );
  */
-export function metadata<T>(meta: Partial<TransitionMeta>, value: T): T {
+export function metadata<T>(_meta: Partial<TransitionMeta>, value: T): T {
   // At runtime, this is a no-op identity function
   // At compile-time/static-analysis, the metadata can be extracted from the type signature
   return value;

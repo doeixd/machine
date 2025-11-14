@@ -14,8 +14,7 @@
  * 3. Run the script from your project root: `npx ts-node ./scripts/extract-statechart.ts`
  */
 
-import { Project, ts, Type, Symbol as TSSymbol, Node } from 'ts-morph';
-import { META_KEY } from './primitives';
+import { Project, Type, Node } from 'ts-morph';
 
 // =============================================================================
 // SECTION: CONFIGURATION TYPES
@@ -162,7 +161,7 @@ function parseObjectLiteral(obj: Node): any {
           result[name] = init.getLiteralValue();
         } else if (Node.isNumericLiteral(init)) {
           result[name] = init.getLiteralValue();
-        } else if (Node.isTrueKeyword(init) || Node.isFalseKeyword(init)) {
+        } else if (init.getText() === 'true' || init.getText() === 'false') {
           result[name] = init.getText() === 'true';
         } else if (Node.isIdentifier(init)) {
           result[name] = init.getText();
@@ -347,60 +346,6 @@ function extractMetaFromMember(member: Node, verbose = false): any | null {
 }
 
 /**
- * OLD IMPLEMENTATION: Type-based extraction (kept for reference/validation)
- * @deprecated Use extractMetaFromMember instead
- *
- * Given a type, this function looks for our special `META_KEY` brand and,
- * if found, extracts and serializes the metadata type into a plain object.
- *
- * @param type - The type of a class member (e.g., a transition method).
- * @param verbose - Enable debug logging
- * @returns The extracted metadata object, or `null` if no metadata is found.
- */
-function extractMetaFromType(type: Type, verbose = false): any | null {
-  // Try to find a property that contains our META_KEY symbol
-  // The property name will be something like "__@META_KEY@61" where 61 is a unique ID
-  const properties = type.getProperties();
-
-  if (verbose) {
-    console.error(`      Type properties: ${properties.map(p => p.getName()).join(', ')}`);
-  }
-
-  // Look for a property whose name starts with "__@" and contains our symbol description
-  // This handles the escaped form that TypeScript uses for symbol properties
-  const metaProperty = properties.find(prop => {
-    const name = prop.getName();
-    // The pattern is: __@<symbolDescription>@<uniqueId>
-    return name.startsWith('__@') && name.includes('META_KEY');
-  });
-
-  if (!metaProperty) {
-    if (verbose) console.error(`      ⚠️ No meta property found`);
-    return null;
-  }
-
-  if (verbose) {
-    console.error(`      Found meta property: ${metaProperty.getName()}`);
-  }
-
-  // Get the type of the property directly (not from the declaration)
-  // This helps resolve generic type parameters
-  const metaType = metaProperty.getTypeAtLocation(type.getSymbol()?.getDeclarations()[0] as any);
-
-  if (!metaType) {
-    if (verbose) console.error(`      ⚠️ Could not get type`);
-    return null;
-  }
-
-  const metadata = typeToJson(metaType, verbose);
-  if (verbose) {
-    console.error(`      ✅ Found metadata:`, JSON.stringify(metadata, null, 2));
-  }
-
-  return metadata;
-}
-
-/**
  * Analyzes a single class symbol to find all annotated transitions and effects,
  * building a state node definition for the final statechart.
  *
@@ -408,7 +353,7 @@ function extractMetaFromType(type: Type, verbose = false): any | null {
  * @param verbose - Enable verbose logging
  * @returns A state node object (e.g., `{ on: {...}, invoke: [...] }`).
  */
-function analyzeStateNode(classSymbol: TSSymbol, verbose = false): object {
+function analyzeStateNode(classSymbol: any, verbose = false): object {
   const chartNode: any = { on: {} };
   const classDeclaration = classSymbol.getDeclarations()[0];
   if (!classDeclaration || !Node.isClassDeclaration(classDeclaration)) {
