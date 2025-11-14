@@ -643,6 +643,14 @@ function enterState(): MachineResult<{ timer: number }> {
 
 ## Advanced Features
 
+### Ergonomic & Integration Patterns
+
+For advanced use cases, the library provides optional patterns that offer better ergonomics and deep framework integration. These are available in @doeixd/machine/multi.
+
+**Runner (createRunner):** A stateful controller that wraps a single machine. It provides a stable actions object (runner.actions.increment()) to eliminate the need for manual state reassignment, which is ideal for complex local state.
+
+**Ensemble (createEnsemble / createMultiMachine):** An orchestration engine that decouples state logic from state storage. It plugs into external stores (like React or Solid state) to create framework-agnostic, global state machines.
+
 ### Managed State with Runner & Ensemble
 
 For stateful applications, `@doeixd/machine/multi` provides two advanced patterns that eliminate constant variable reassignment while maintaining immutability:
@@ -1371,13 +1379,7 @@ This isn't just a feature—it's the fundamental way you should think about stat
 
 ### 2. Minimal Primitives
 
-The core library provides only the essential building blocks:
-- `Machine<C>` and `AsyncMachine<C>` types
-- `createMachine()` and `createAsyncMachine()` functions
-- `runMachine()` for async runtime
-- Basic composition utilities
-
-Everything else is built on top of these primitives. We give you the foundation; you build what you need.
+The core library provides one true primitive: the pure, immutable Machine. Everything else is built on this foundation. To handle real-world complexity, we provide optional factories (createRunner, createEnsemble) that compose this primitive into different operational patterns. This keeps the core minimal while providing powerful, opt-in capabilities for ergonomics and framework integration.
 
 ### 3. TypeScript as the Compiler
 
