@@ -10,16 +10,55 @@
   },
   "license": "MIT",
   "keywords": [
-    "pridepack"
+    "state-machine",
+    "finite-state-machine",
+    "fsm",
+    "statechart",
+    "type-state",
+    "typescript",
+    "type-safe",
+    "immutable",
+    "functional",
+    "reactive",
+    "state-management",
+    "react",
+    "solid-js",
+    "async",
+    "transitions",
+    "minimal",
+    "lightweight",
+    "xstate-alternative",
+    "state-pattern",
+    "type-driven",
+    "compile-time-safety",
+    "zero-runtime",
+    "discriminated-unions"
   ],
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0",
+    "solid-js": "^1.8.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "solid-js": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@types/node": "^22.10.2",
+    "@types/react": "^19.2.4",
     "pridepack": "2.6.4",
+    "react": "^19.2.0",
+    "solid-js": "^1.8.22",
+    "standard-version": "^9.5.0",
     "tslib": "^2.8.1",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   },
   "scripts": {
+    "release": "standard-version && git push --follow-tags origin main",
     "prepublishOnly": "pridepack clean && pridepack build",
     "build": "pridepack build",
     "type-check": "pridepack check",
@@ -30,17 +69,37 @@
     "test": "vitest"
   },
   "private": false,
-  "description": "A minimal state machine library",
+  "description": "A minimal, type-safe state machine library for TypeScript centered on Type-State Programming. Uses the TypeScript compiler to catch invalid state transitions at compile-time, making illegal states unrepresentable. Features immutable updates, discriminated unions, async support, and integrations for React and Solid.js. Includes static analysis tools for generating formal statecharts compatible with Stately Viz and XState tooling.",
   "repository": {
-    "url": "",
+    "url": "https://github.com/doeixd/machine.git",
     "type": "git"
   },
-  "homepage": "",
+  "homepage": "https://github.com/doeixd/machine#readme",
   "bugs": {
-    "url": ""
+    "url": "https://github.com/doeixd/machine/issues"
   },
   "author": "Patrick Glenn",
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "ts-morph": "^27.0.2"
+  },
+  "types": "./dist/types/index.d.ts",
+  "main": "./dist/cjs/production/index.js",
+  "module": "./dist/esm/production/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "development": {
+        "require": "./dist/cjs/development/index.js",
+        "import": "./dist/esm/development/index.js"
+      },
+      "require": "./dist/cjs/production/index.js",
+      "import": "./dist/esm/production/index.js"
+    }
+  },
+  "typesVersions": {
+    "*": {}
   }
 }

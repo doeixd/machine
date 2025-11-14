@@ -1,231 +1,190 @@
-import { Project, ts, Type, Symbol as TSSymbol, Node } from "ts-morph";
+/**
+ * @file Static Statechart Extractor for @doeixd/machine
+ * @description
+ * This build-time script uses the TypeScript Compiler API via `ts-morph` to analyze
+ * your machine source code. It reads the "type-level metadata" encoded by the
+ * primitives (`transitionTo`, `guarded`, etc.) and generates a formal, JSON-serializable
+ * statechart definition compatible with tools like Stately Viz.
+ *
+ * This script does NOT execute your code. It performs a purely static analysis of the types.
+ *
+ * @usage
+ * 1. Ensure you have `ts-node` and `ts-morph` installed: `npm install -D ts-node ts-morph`
+ * 2. Configure the settings in the `generateChart` function below.
+ * 3. Run the script from your project root: `npx ts-node ./scripts/extract.ts > chart.json`
+ */
 
-// ... (project setup is the same) ...
+import { Project, ts, Type, Symbol as TSSymbol, Node } from 'ts-morph';
+import { META_KEY } from './primitives';
 
-function typeToJson(t: Type): any {
-  if (t.isStringLiteral()) return t.getLiteralValue();
+// =============================================================================
+// SECTION: CORE ANALYSIS LOGIC
+// =============================================================================
 
-  // The KEY CHANGE is here. If we find a class constructor type...
-  const symbol = t.getSymbol();
-  if (symbol && symbol.getDeclarations().some(d => d.isClassDeclaration())) {
-    // ...we return its name as a string!
-    return symbol.getName();
+/**
+ * Recursively traverses a `ts-morph` Type object and serializes it into a
+ * plain JSON-compatible value. It's smart enough to resolve class constructor
+ * types into their string names.
+ *
+ * @param type - The `ts-morph` Type object to serialize.
+ * @returns A JSON-compatible value (string, number, object, array).
+ */
+function typeToJson(type: Type): any {
+  // --- Terminal Types ---
+  const symbol = type.getSymbol();
+  if (symbol && symbol.getDeclarations().some(Node.isClassDeclaration)) {
+    return symbol.getName(); // Resolve class types to their string name
   }
+  if (type.isStringLiteral()) return type.getLiteralValue();
+  if (type.isNumberLiteral()) return type.getLiteralValue();
+  if (type.isBooleanLiteral()) return type.getLiteralValue();
 
-  if (t.isObject()) {
+  // --- Recursive Types ---
+  if (type.isArray()) {
+    const elementType = type.getArrayElementTypeOrThrow();
+    return [typeToJson(elementType)]; // Note: Assumes homogenous array for simplicity
+  }
+  if (type.isObject()) {
     const obj: { [key: string]: any } = {};
-    for (const prop of t.getProperties()) {
+    for (const prop of type.getProperties()) {
       const declaration = prop.getValueDeclaration();
       if (!declaration) continue;
       obj[prop.getName()] = typeToJson(declaration.getType());
     }
     return obj;
   }
-  return "unknown";
+
+  return 'unknown'; // Fallback for unhandled types
 }
 
-function extractMetaFromType(type: Type): any {
-  const metaProperty = type.getProperty(ts.escapeLeadingUnderscores("META_KEY"));
+/**
+ * Given a type, this function looks for our special `META_KEY` brand and,
+ * if found, extracts and serializes the metadata type into a plain object.
+ *
+ * @param type - The type of a class member (e.g., a transition method).
+ * @returns The extracted metadata object, or `null` if no metadata is found.
+ */
+function extractMetaFromType(type: Type): any | null {
+  // The META_KEY is escaped because it's a unique symbol, not a plain string property.
+  const escapedKey = String(ts.escapeLeadingUnderscores(META_KEY.description!));
+  const metaProperty = type.getProperty(escapedKey);
   if (!metaProperty) return null;
+
   const declaration = metaProperty.getValueDeclaration();
   if (!declaration) return null;
 
   return typeToJson(declaration.getType());
 }
 
-// ... (analyzeClass and the main script logic remain the same) ...
+/**
+ * Analyzes a single class symbol to find all annotated transitions and effects,
+ * building a state node definition for the final statechart.
+ *
+ * @param classSymbol - The `ts-morph` Symbol for the class to analyze.
+ * @returns A state node object (e.g., `{ on: {...}, invoke: [...] }`).
+ */
+function analyzeStateNode(classSymbol: TSSymbol): object {
+  const chartNode: any = { on: {} };
+  const classDeclaration = classSymbol.getDeclarations()[0];
+  if (!classDeclaration || !Node.isClassDeclaration(classDeclaration)) {
+    return chartNode;
+  }
 
-// --- Main Script Logic ---
-const sourceFile = project.getSourceFileOrThrow("src/authMachine.ts");
-let fullChart = { id: "auth", initial: "LoggedOutMachine", states: {} };
+  for (const member of classDeclaration.getInstanceMembers()) {
+    const meta = extractMetaFromType(member.getType());
+    if (!meta) continue;
 
-const classesToAnalyze = ["LoggedInMachine", "LoggedOutMachine", "AccountDeletedMachine"];
-for (const className of classesToAnalyze) {
-    const classSymbol = sourceFile.getClassOrThrow(className).getSymbolOrThrow();
-    // Assuming analyzeClass is defined as before
-    const stateChart = analyzeClass(classSymbol);
+    // Separate `invoke` metadata from standard `on` transitions, as it's a
+    // special property of a state node in XState/Stately syntax.
+    const { invoke, ...onEntry } = meta;
 
-    // A helper to recursively serialize a type object to JSON,
-    // now with the ability to resolve class names.
-    function analyzeClass(classSymbol: TSSymbol) {
-      const chart: any = { on: {} };
-      const classDeclaration = classSymbol.getDeclarations()[0];
-      if (!classDeclaration || !Node.isClassDeclaration(classDeclaration)) return {};
-      
-      for (const member of classDeclaration.getInstanceMembers()) {
-        const memberType = member.getType();
-        const meta = extractMetaFromType(memberType);
-        if (meta) {
-            const onEntry: any = { ...meta };
-            chart.on[member.getName()] = onEntry;
-        }
-      }
-      return { [classSymbol.getName()]: chart };
+    if (invoke) {
+      if (!chartNode.invoke) chartNode.invoke = [];
+      chartNode.invoke.push({
+        src: invoke.src,
+        onDone: { target: invoke.onDone },
+        onError: { target: invoke.onError },
+        description: invoke.description,
+      });
     }
 
-    fullChart.states = { ...fullChart.states, ...stateChart };
-}
-
-console.log(JSON.stringify(fullChart, null, 2));
-
-
-
-// A unique symbol to hold our metadata in the type system.
-export const META_KEY = Symbol("MachineMeta");
-
-// The shape of our type-level metadata.
-export interface TransitionMeta {
-  target?: string;
-  guards?: { name: string; description?: string }[];
-  invoke?: { src: string; onDone: string; onError: string };
-}
-
-// A branded type. It's a function F with hidden metadata M.
-export type WithMeta<
-  F extends (...args: any[]) => any,
-  M extends TransitionMeta
-> = F & { [META_KEY]: M };
-
-// --- Primitives ---
-
-/**
- * Defines a simple transition to a target state.
- */
-export function transitionTo<T extends string, F extends (...args: any[]) => any>(
-  target: T,
-  implementation: F
-): WithMeta<F, { target: T }> {
-  // At runtime, this is an identity function. Its only job is to add a type.
-  return implementation as any;
-}
-
-/**
- * Adds a guard condition to a transition.
- */
-export function guarded<F extends (...args: any[]) => any, M extends TransitionMeta>(
-  guard: { name: string; description?: string },
-  transition: WithMeta<F, M>
-): WithMeta<F, M & { guards: [typeof guard] }> {
-  // Again, an identity function at runtime.
-  // The actual guard logic still lives inside the implementation.
-  return transition as any;
-}
-
-/**
- * Defines an invoked service.
- */
-export function invoke<D extends string, E extends string, F extends (...args: any[]) => any>(
-  service: { src: string; onDone: D; onError: E },
-  implementation: F
-): WithMeta<F, { invoke: typeof service }> {
-  return implementation as any;
-}
-
-
-export function analyzeMachine(machineClass: new (...args: any[]) => any): object {
-  const chart: any = {
-    id: machineClass.name,
-    initial: undefined,
-    states: {},
-  };
-
-  const stateName = machineClass.name;
-  chart.states[stateName] = { on: {} };
-
-  for (const key of Object.getOwnPropertyNames(machineClass.prototype)) {
-    if (key === "constructor") continue;
-
-    const member = machineClass.prototype[key] as any;
-    if (typeof member === "function" && member.meta) {
-      const meta: TransitionMeta = member.meta;
-      const onEntry: any = {};
-
-      if (meta.target) {
-        onEntry.target = meta.target;
+    // If there's a target, it's a standard event transition.
+    if (onEntry.target) {
+      if (onEntry.guards) {
+        // Stately/XState syntax for guards is the `cond` property.
+        onEntry.cond = onEntry.guards.map((g: any) => g.name).join(' && ');
       }
-      if (meta.description) {
-        onEntry.description = meta.description;
-      }
-      if (meta.guards) {
-        // Stately/XState syntax for guards is 'cond'
-        onEntry.cond = meta.guards.map(g => g.name).join(' && ');
-      }
-      
-      // Handle invoked services separately, as they are a state property
-      if (meta.invoke) {
-        if (!chart.states[stateName].invoke) {
-          chart.states[stateName].invoke = [];
-        }
-        chart.states[stateName].invoke.push({
-          src: meta.invoke.src,
-          onDone: { target: meta.invoke.onDone },
-          onError: { target: meta.invoke.onError },
-        });
-      }
-
-      // Only add to 'on' if it's a direct transition event
-      if (meta.target) {
-          chart.states[stateName].on[key] = onEntry;
-      }
+      chartNode.on[member.getName()] = onEntry;
     }
   }
 
-  return chart;
+  return chartNode;
 }
 
-
-export interface GuardMeta {
-  /** The name of the guard function (for visualization). */
-  name: string;
-  /** A description of the condition. */
-  description?: string;
-}
-
-export interface InvokeMeta {
-  /** A descriptive name for the invoked service. */
-  src: string;
-  /** The target state on successful completion. */
-  onDone: string;
-  /** The target state on error. */
-  onError: string;
-  /** A description of the service. */
-  description?: string;
-}
+// =============================================================================
+// SECTION: MAIN ORCHESTRATOR
+// =============================================================================
 
 /**
- * Metadata to describe a transition for static analysis.
+ * The main analysis function.
+ * Configures the project, specifies which files and classes to analyze,
+ * and orchestrates the generation of the final JSON chart to standard output.
  */
-export interface TransitionMeta {
-  /** The name of the state this transition targets (for simple transitions). */
-  target?: string;
-  /** A description of what this transition does. */
-  description?: string;
-  /** An array of guards that must pass for this transition to occur. */
-  guards?: GuardMeta[];
-  /** A description of a service this transition invokes. */
-  invoke?: InvokeMeta;
+export function generateChart() {
+  // --- 🎨 CONFIGURATION 🎨 ---
+  // Adjust these settings to match your project structure.
+
+  /** The relative path to the file containing your machine class definitions. */
+  const sourceFilePath = "src/authMachine.ts";
+
+  /** An array of the string names of all classes that represent a state. */
+  const classesToAnalyze = [
+    "LoggedOutMachine",
+    "LoggedInMachine",
+  ];
+
+  /** The top-level ID for your statechart. */
+  const chartId = "auth";
+
+  /** The string name of the class that represents the initial state. */
+  const initialState = "LoggedOutMachine";
+
+  // --- End Configuration ---
+
+  console.error("🔍 Analyzing state machine from:", sourceFilePath);
+
+  const project = new Project();
+  project.addSourceFilesAtPaths("src/**/*.ts");
+
+  const sourceFile = project.getSourceFile(sourceFilePath);
+  if (!sourceFile) {
+    console.error(`❌ Error: Source file not found at '${sourceFilePath}'.`);
+    process.exit(1);
+  }
+
+  const fullChart: any = {
+    id: chartId,
+    initial: initialState,
+    states: {},
+  };
+
+  for (const className of classesToAnalyze) {
+    const classDeclaration = sourceFile.getClass(className);
+    if (!classDeclaration) {
+      console.warn(`⚠️ Warning: Class '${className}' not found in '${sourceFilePath}'. Skipping.`);
+      continue;
+    }
+    const classSymbol = classDeclaration.getSymbolOrThrow();
+    const stateNode = analyzeStateNode(classSymbol);
+    fullChart.states[className] = stateNode;
+  }
+
+  console.error("✅ Analysis complete. Generating JSON chart...");
+  // Print the final JSON to stdout so it can be piped to a file.
+  console.log(JSON.stringify(fullChart, null, 2));
 }
 
-
-/**
- * A transition function that has been annotated with metadata.
- */
-type AnnotatedFunction = ((...args: any[]) => any) & { meta: TransitionMeta };
-
-/**
- * Wraps a transition function with metadata for static analysis.
- * This function is the key to making a code-defined machine formalizable.
- * It attaches the metadata to the function object itself without changing its behavior.
- *
- * @param fn The transition function implementation.
- * @param meta An object describing the transition (e.g., its target state).
- * @returns The original function, now with metadata attached.
- */
-export function defineTransition<F extends (...args: any[]) => any>(
-  fn: F,
-  meta: TransitionMeta
-): F {
-  // Attach the metadata to a 'meta' property on the function object.
-  Object.assign(fn, { meta });
-  return fn;
+// This allows the script to be executed directly from the command line.
+if (require.main === module) {
+  generateChart();
 }

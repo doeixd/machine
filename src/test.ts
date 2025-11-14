@@ -184,18 +184,24 @@ export function runMachine<C extends object>(
 type Functions<C extends object> =
   Record<string, (this: C, ...args: any[]) => Machine<any>>
 
+// Simple counter example using the functional API
+// Note: In the real library, transition functions receive context as `this`
+const counterFns = {
+  increment: function() {
+    // `this` is bound to the context by the library
+    return createMachine({ count: (this as any).count + 1 }, counterFns);
+  },
+  decrement: function() {
+    // `this` is bound to the context by the library
+    return createMachine({ count: (this as any).count - 1 }, counterFns);
+  }
+};
+
 const counter = createMachine(
   { count: 0 },
-  {
-    increment(this: { count: number }) {
-      return createMachine({ count: this.count + 1 }, this)
-    },
-    decrement(this: { count: number }) {
-      return createMachine({ count: this.count - 1 }, this)
-    }
-  } as any
-)
+  counterFns
+);
 
-const result = counter.increment()
-// Hover over result to see inferred type
-const nextResult = result.increment()
+// Test by calling with proper context binding
+const result = counterFns.increment.call(counter.context);
+console.log('Result:', result.context.count);

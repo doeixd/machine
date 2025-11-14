@@ -1,160 +1,191 @@
+/**
+ * @file Type-level primitives for formal state machine verification.
+ * @description
+ * This file provides a Domain Specific Language (DSL) of wrapper functions.
+ * These functions serve two purposes:
+ * 1. At Runtime: They are identity functions (no-ops). They return your code exactly as is.
+ * 2. At Design/Build Time: They "brand" your transition functions with rich type metadata.
+ *
+ * This allows a static analysis tool (like `ts-morph`) to read your source code
+ * and generate a formal Statechart (JSON) that perfectly matches your implementation,
+ * including resolving Class Constructors to their names.
+ */
 
-// A unique symbol to hold our metadata in the type system.
+// =============================================================================
+// SECTION: CORE METADATA TYPES
+// =============================================================================
+
+/**
+ * A unique symbol used to "brand" a type with metadata.
+ * This key allows the static analyzer to find the metadata within a complex type signature.
+ */
 export const META_KEY = Symbol("MachineMeta");
 
-// The shape of our type-level metadata.
-export interface TransitionMeta {
-  target?: string;
-  guards?: { name: string; description?: string }[];
-  invoke?: { src: string; onDone: string; onError: string };
+/**
+ * Helper type representing a Class Constructor.
+ * Used to reference target states by their class definition rather than magic strings.
+ */
+export type ClassConstructor = new (...args: any[]) => any;
+
+/**
+ * Metadata describing a Guard condition.
+ */
+export interface GuardMeta {
+  /** The name of the guard (e.g., "isAdmin"). */
+  name: string;
+  /** Optional documentation explaining the logic. */
+  description?: string;
 }
 
-// A branded type. It's a function F with hidden metadata M.
+/**
+ * Metadata describing an Invoked Service (async operation).
+ */
+export interface InvokeMeta {
+  /** The name of the service source (e.g., "fetchUserData"). */
+  src: string;
+  /** The state class to transition to on success. */
+  onDone: ClassConstructor;
+  /** The state class to transition to on error. */
+  onError: ClassConstructor;
+  /** Optional description. */
+  description?: string;
+}
+
+/**
+ * Metadata describing a generic Action (side effect).
+ */
+export interface ActionMeta {
+  /** The name of the action (e.g., "logAnalytics"). */
+  name: string;
+  /** Optional description. */
+  description?: string;
+}
+
+/**
+ * The comprehensive shape of metadata that can be encoded into a transition's type.
+ */
+export interface TransitionMeta {
+  /** The target state class this transition leads to. */
+  target?: ClassConstructor;
+  /** A human-readable description of the transition. */
+  description?: string;
+  /** An array of guards that must be true for this transition to be enabled. */
+  guards?: GuardMeta[];
+  /** A service to invoke upon taking this transition (or entering the state). */
+  invoke?: InvokeMeta;
+  /** Fire-and-forget side effects associated with this transition. */
+  actions?: ActionMeta[];
+}
+
+/**
+ * The Branded Type.
+ * It takes a function type `F` and intersects it with a hidden metadata object `M`.
+ * This is the mechanism that carries information from your code to the compiler API.
+ */
 export type WithMeta<
   F extends (...args: any[]) => any,
   M extends TransitionMeta
 > = F & { [META_KEY]: M };
 
-// --- Primitives ---
+
+// =============================================================================
+// SECTION: ANNOTATION PRIMITIVES (THE DSL)
+// =============================================================================
 
 /**
- * Defines a simple transition to a target state.
+ * Defines a transition to a target state class.
+ *
+ * @param target - The Class Constructor of the state being transitioned to.
+ * @param implementation - The implementation function returning the new state instance.
+ * @returns The implementation function, branded with target metadata.
+ *
+ * @example
+ * login = transitionTo(LoggedInMachine, (user) => new LoggedInMachine({ user }));
  */
-export function transitionTo<T extends string, F extends (...args: any[]) => any>(
-  target: T,
+export function transitionTo<
+  T extends ClassConstructor,
+  F extends (...args: any[]) => any
+>(
+  _target: T,
   implementation: F
 ): WithMeta<F, { target: T }> {
-  // At runtime, this is an identity function. Its only job is to add a type.
   return implementation as any;
 }
 
 /**
- * Adds a guard condition to a transition.
+ * Annotates a transition with a description for documentation generation.
+ *
+ * @param text - The description text.
+ * @param transition - The transition function (or wrapper) to annotate.
+ * @example
+ * logout = describe("Logs the user out", transitionTo(LoggedOut, ...));
  */
-export function guarded<F extends (...args: any[]) => any, M extends TransitionMeta>(
-  guard: { name: string; description?: string },
+export function describe<
+  F extends (...args: any[]) => any,
+  M extends TransitionMeta
+>(
+  _text: string,
   transition: WithMeta<F, M>
-): WithMeta<F, M & { guards: [typeof guard] }> {
-  // Again, an identity function at runtime.
-  // The actual guard logic still lives inside the implementation.
+): WithMeta<F, M & { description: string }> {
   return transition as any;
 }
 
 /**
- * Defines an invoked service.
+ * Annotates a transition with a Guard condition.
+ * Note: This only adds metadata. You must still implement the `if` check inside your function.
+ *
+ * @param guard - Object containing the name and optional description of the guard.
+ * @param transition - The transition function to guard.
+ * @example
+ * delete = guarded({ name: "isAdmin" }, transitionTo(Deleted, ...));
  */
-export function invoke<D extends string, E extends string, F extends (...args: any[]) => any>(
-  service: { src: string; onDone: D; onError: E },
+export function guarded<
+  F extends (...args: any[]) => any,
+  M extends TransitionMeta
+>(
+  guard: GuardMeta,
+  transition: WithMeta<F, M>
+): WithMeta<F, M & { guards: [typeof guard] }> {
+  return transition as any;
+}
+
+/**
+ * Annotates a transition with an Invoked Service (asynchronous effect).
+ *
+ * @param service - configuration for the service (source, onDone target, onError target).
+ * @param implementation - The async function implementation.
+ * @example
+ * load = invoke(
+ *   { src: "fetchData", onDone: LoadedMachine, onError: ErrorMachine },
+ *   async () => { ... }
+ * );
+ */
+export function invoke<
+  D extends ClassConstructor,
+  E extends ClassConstructor,
+  F extends (...args: any[]) => any
+>(
+  service: { src: string; onDone: D; onError: E; description?: string },
   implementation: F
 ): WithMeta<F, { invoke: typeof service }> {
   return implementation as any;
 }
 
-
-export function analyzeMachine(machineClass: new (...args: any[]) => any): object {
-  const chart: any = {
-    id: machineClass.name,
-    initial: undefined,
-    states: {},
-  };
-
-  const stateName = machineClass.name;
-  chart.states[stateName] = { on: {} };
-
-  for (const key of Object.getOwnPropertyNames(machineClass.prototype)) {
-    if (key === "constructor") continue;
-
-    const member = machineClass.prototype[key] as any;
-    if (typeof member === "function" && member.meta) {
-      const meta: TransitionMeta = member.meta;
-      const onEntry: any = {};
-
-      if (meta.target) {
-        onEntry.target = meta.target;
-      }
-      if (meta.description) {
-        onEntry.description = meta.description;
-      }
-      if (meta.guards) {
-        // Stately/XState syntax for guards is 'cond'
-        onEntry.cond = meta.guards.map(g => g.name).join(' && ');
-      }
-      
-      // Handle invoked services separately, as they are a state property
-      if (meta.invoke) {
-        if (!chart.states[stateName].invoke) {
-          chart.states[stateName].invoke = [];
-        }
-        chart.states[stateName].invoke.push({
-          src: meta.invoke.src,
-          onDone: { target: meta.invoke.onDone },
-          onError: { target: meta.invoke.onError },
-        });
-      }
-
-      // Only add to 'on' if it's a direct transition event
-      if (meta.target) {
-          chart.states[stateName].on[key] = onEntry;
-      }
-    }
-  }
-
-  return chart;
-}
-
-
-export interface GuardMeta {
-  /** The name of the guard function (for visualization). */
-  name: string;
-  /** A description of the condition. */
-  description?: string;
-}
-
-export interface InvokeMeta {
-  /** A descriptive name for the invoked service. */
-  src: string;
-  /** The target state on successful completion. */
-  onDone: string;
-  /** The target state on error. */
-  onError: string;
-  /** A description of the service. */
-  description?: string;
-}
-
 /**
- * Metadata to describe a transition for static analysis.
- */
-export interface TransitionMeta {
-  /** The name of the state this transition targets (for simple transitions). */
-  target?: string;
-  /** A description of what this transition does. */
-  description?: string;
-  /** An array of guards that must pass for this transition to occur. */
-  guards?: GuardMeta[];
-  /** A description of a service this transition invokes. */
-  invoke?: InvokeMeta;
-}
-
-
-/**
- * A transition function that has been annotated with metadata.
- */
-type AnnotatedFunction = ((...args: any[]) => any) & { meta: TransitionMeta };
-
-/**
- * Wraps a transition function with metadata for static analysis.
- * This function is the key to making a code-defined machine formalizable.
- * It attaches the metadata to the function object itself without changing its behavior.
+ * Annotates a transition with a side-effect Action.
+ * Useful for logging, analytics, or external event firing that doesn't change state structure.
  *
- * @param fn The transition function implementation.
- * @param meta An object describing the transition (e.g., its target state).
- * @returns The original function, now with metadata attached.
+ * @param action - Object containing the name and optional description.
+ * @param transition - The transition function to annotate.
+ * @example
+ * click = action({ name: "trackClick" }, (ctx) => ...);
  */
-export function defineTransition<F extends (...args: any[]) => any>(
-  fn: F,
-  meta: TransitionMeta
-): F {
-  // Attach the metadata to a 'meta' property on the function object.
-  Object.assign(fn, { meta });
-  return fn;
+export function action<
+  F extends (...args: any[]) => any,
+  M extends TransitionMeta
+>(
+  action: ActionMeta,
+  transition: WithMeta<F, M>
+): WithMeta<F, M & { actions: [typeof action] }> {
+  return transition as any;
 }
