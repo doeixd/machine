@@ -42,7 +42,7 @@ An FSM is a 5-tuple: **M = (S, Σ, δ, s₀, F)** where:
 
 ```typescript
 type Machine<C extends object> = {
-  readonly context: C;  // Encodes the current state (s ∈ S)
+  context: C;  // Encodes the current state (s ∈ S)
 } & Record<string, (...args: any[]) => Machine<any>>; // Transition functions (δ)
 ```
 
