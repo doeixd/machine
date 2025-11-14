@@ -285,54 +285,338 @@ export function runMachine<C extends object>(
 }
 
 
-// // Define the two distinct machine shapes (our "states")
-// type LoggedOutMachine = Machine<{ status: "loggedOut" }> & {
-//   login: (username: string) => LoggedInMachine;
-// };
+/**
+ * A function that describes a state transition.
+ * It receives the current context and any arguments, and returns the new context.
+ * @template C - The context object type.
+ * @template A - The array of argument types for the transition.
+ */
+type TransitionLogic<C extends object, A extends any[]> = (
+  ctx: Readonly<C>,
+  ...args: A
+) => C;
 
-// type LoggedInMachine = Machine<{ status: "loggedIn"; username: string }> & {
-//   logout: () => LoggedOutMachine;
-//   viewProfile: () => LoggedInMachine;
-// };
+/**
+ * A record of transition logic functions for a specific context type.
+ */
+type TransitionImplementations<C extends object> = Record<
+  string,
+  TransitionLogic<C, any[]>
+>;
 
-// // State 1: Logged Out
-// const createLoggedOutMachine = (): LoggedOutMachine => {
-//   return createMachine(
-//     { status: "loggedOut" },
-//     {
-//       login: function (username: string): LoggedInMachine {
-//         // We transition by returning a completely different machine type
-//         return createLoggedInMachine(username);
-//       },
-//     }
-//   );
-// };
+// Utility to get all but the first parameter from a function's parameters
+type Tail<T extends (...args: any) => any> = T extends (
+  first: any,
+  ...rest: infer R
+) => any
+  ? R
+  : never;
 
-// // State 2: Logged In
-// const createLoggedInMachine = (username: string): LoggedInMachine => {
-//   return createMachine(
-//     { status: "loggedIn", username },
-//     {
-//       logout: function (): LoggedOutMachine {
-//         return createLoggedOutMachine();
-//       },
-//       viewProfile: function (): LoggedInMachine {
-//         console.log(`Viewing profile for ${this.username}`);
-//         return this; // Or create a new instance
-//       },
-//     }
-//   );
-// };
+/**
+ * The final, constructed machine type produced by the factory.
+ * It infers the method signatures from the transition logic.
+ */
+type FactoryMachine<
+  C extends object,
+  T extends TransitionImplementations<C>
+> = Machine<C> &
+  {
+    [K in keyof T]: (...args: Tail<T[K]>) => FactoryMachine<C, T>;
+  };
 
-// // --- Usage ---
-// const machine = createLoggedOutMachine();
+/**
+ * Creates a factory for building machines with a specific context type.
+ * This utility uses partial application to reduce boilerplate, allowing you to
+ * define transitions as pure functions that only return the next context.
+ *
+ * @template C - The context object type.
+ * @returns A function that takes transition implementations and returns a machine constructor.
+ * @example
+ * const counterFactory = createMachineFactory<{ count: number }>()({
+ *   increment: (ctx) => ({ count: ctx.count + 1 }),
+ *   add: (ctx, n: number) => ({ count: ctx.count + n }),
+ * });
+ * const counter = counterFactory({ count: 0 });
+ * const next = counter.increment().add(5); // { context: { count: 6 }, ... }
+ */
+export function createMachineFactory<C extends object>() {
+  return function <T extends TransitionImplementations<C>>(implementations: T) {
+    const machineMethods: Functions<C> = {};
 
-// // machine.logout(); // -> TypeScript Error! Property 'logout' does not exist on type 'LoggedOutMachine'.
+    for (const key in implementations) {
+      if (Object.prototype.hasOwnProperty.call(implementations, key)) {
+        const logicFn = implementations[key];
+        machineMethods[key] = function (this: C, ...args: any[]) {
+          // 'this' is the current context, which is the first argument
+          // to our transition logic function.
+          const newContext = logicFn(this, ...args);
+          // Recursively create the next machine with the same methods
+          return createMachine(newContext, machineMethods) as any;
+        };
+      }
+    }
 
-// const loggedInState = machine.login("Alice");
-// console.log(loggedInState.context); // { status: "loggedIn", username: "Alice" }
+    return function (initialContext: C): FactoryMachine<C, T> {
+      return createMachine(initialContext, machineMethods) as FactoryMachine<
+        C,
+        T
+      >;
+    };
+  };
+}
 
-// // loggedInState.login("Bob"); // -> TypeScript Error! Property 'login' does not exist on type 'LoggedInMachine'.
 
-// const loggedOutState = loggedInState.logout();
-// console.log(loggedOutState.context); // { status: "loggedOut" }
+/**
+ * Creates a builder function from a "template" machine instance.
+ *
+ * This utility captures the transition methods of the provided machine and returns
+ * a new function. This builder function takes a new context and returns a new
+ * machine of the original type, preserving all of its methods.
+ *
+ * It's particularly useful for creating multiple instances of a class-based
+ * machine without repeatedly calling its constructor.
+ *
+ * @template M - The machine type, which must have a context property.
+ * @param {M} templateMachine - An instance of a machine to use as the template.
+ * @returns {(context: Context<M>) => M} A function that builds new machines of type M.
+ * @example
+ * class User extends MachineBase<{ id: number; name: string }> {
+ *   rename(newName: string) {
+ *     return buildUser({ ...this.context, name: newName });
+ *   }
+ * }
+ *
+ * // Create a builder from a template instance.
+ * const buildUser = createMachineBuilder(new User({ id: 0, name: "template" }));
+ *
+ * // Now use the builder to create new, fully-functional instances.
+ * const user1 = buildUser({ id: 1, name: "Alice" });
+ * const user2 = buildUser({ id: 2, name: "Bob" });
+ *
+ * const user1Renamed = user1.rename("Alicia");
+ *
+ * console.log(user2.context.name); // "Bob"
+ * console.log(user1Renamed.context.name); // "Alicia"
+ */
+export function createMachineBuilder<M extends Machine<any>>(
+  templateMachine: M
+): (context: Context<M>) => M {
+  // Omit the 'context' to capture only the transition functions.
+  // This is done once when the builder is created.
+  const { context, ...transitions } = templateMachine;
+
+  // Return the builder function.
+  return (newContext: Context<M>): M => {
+    // Use the captured transitions to create a new machine with the new context.
+    // The cast is safe because we are reconstructing the machine from its own parts.
+    return createMachine(newContext, transitions) as M;
+  };
+}
+
+
+
+/**
+ * Creates a new machine by overriding or adding transition functions to an existing machine.
+ *
+ * This utility is perfect for:
+ * - Mocking transitions during testing.
+ * - Decorating existing transitions with additional logic (e.g., logging).
+ * - Dynamically extending a machine's capabilities at runtime.
+ *
+ * The original machine remains unchanged. The return type is precisely calculated
+ * to reflect the new set of available transitions.
+ *
+ * @template M - The original machine type.
+ * @template T - An object of new or overriding transition functions.
+ * @param {M} machine - The base machine instance.
+ * @param {T} overrides - An object containing the transition functions to add or overwrite.
+ * @returns {Machine<Context<M>> & Omit<M, "context" | keyof T> & T} A new machine instance with the merged transitions.
+ * @example
+ * const counter = createMachine({ count: 0 }, {
+ *   increment: function() { return createMachine({ count: this.count + 1 }, this) }
+ * });
+ *
+ * // Example 1: Overriding 'increment' and adding 'reset'
+ * const newCounter = overrideTransitions(counter, {
+ *   increment: function() { // Overwrites original
+ *     return createMachine({ count: this.count + 10 }, this);
+ *   },
+ *   reset: function() { // Adds a new transition
+ *     return createMachine({ count: 0 }, this);
+ *   }
+ * });
+ *
+ * const s1 = newCounter.increment(); // s1.context.count === 10
+ * const s2 = s1.reset();           // s2.context.count === 0
+ *
+ * // Example 2: Decorating a transition with logging
+ * const decoratedCounter = overrideTransitions(counter, {
+ *   increment: function(...args) {
+ *     console.log(`Incrementing from ${this.count}...`);
+ *     // Call the original machine's implementation
+ *     return counter.increment.apply(this, args);
+ *   }
+ * });
+ *
+ * decoratedCounter.increment(); // Logs "Incrementing from 0..."
+ */
+export function overrideTransitions<
+  M extends Machine<any>,
+  T extends Functions<Context<M>>
+>(
+  machine: M,
+  overrides: T
+): Machine<Context<M>> & Omit<M, "context" | keyof T> & T {
+  // 1. Separate the original machine's context from its transitions.
+  const { context, ...originalTransitions } = machine;
+
+  // 2. Merge the original transitions with the new/overriding ones.
+  //    The properties in 'overrides' will take precedence.
+  const newTransitions = { ...originalTransitions, ...overrides };
+
+  // 3. Create a new machine with the original context and the merged transitions.
+  //    The cast is safe because we have programmatically constructed the object
+  //    to match the complex return type.
+  return createMachine(context, newTransitions) as any;
+}
+
+/**
+ * Creates a new machine instance with an updated context, preserving all original transitions.
+ * This is a fundamental utility for applying state changes immutably.
+ *
+ * @template M - The machine type.
+ * @param {M} machine - The original machine instance.
+ * @param {Context<M> | ((ctx: Readonly<Context<M>>) => Context<M>)} newContextOrFn -
+ *   Either the new context object directly, or a function that receives the old
+ *   context and returns the new one.
+ * @returns {M} A new machine instance of the same type with the updated context.
+ * @example
+ * const counter = createMachine({ count: 0 }, {
+ *   increment: function() { return setContext(this, { count: this.count + 1 }) }
+ * });
+ *
+ * // Using a direct object
+ * const resetCounter = setContext(counter, { count: 0 });
+ *
+ * // Using an updater function
+ * const nextCounter = setContext(counter, (ctx) => ({ count: ctx.count + 1 }));
+ *
+ * console.log(resetCounter.context.count); // 0
+ * console.log(nextCounter.context.count); // 1
+ */
+export function setContext<M extends Machine<any>>(
+  machine: M,
+  newContextOrFn: Context<M> | ((ctx: Readonly<Context<M>>) => Context<M>)
+): M {
+  const { context, ...transitions } = machine;
+  const newContext =
+    typeof newContextOrFn === "function"
+      ? (newContextOrFn as (ctx: Readonly<Context<M>>) => Context<M>)(context)
+      : newContextOrFn;
+
+  return createMachine(newContext, transitions) as M;
+}
+
+/**
+ * Creates a new machine by adding new transition functions to an existing machine.
+ *
+ * This utility safely extends a machine's capabilities without altering its existing
+ * transitions. It will produce a compile-time error if you attempt to add a
+ * transition that already exists.
+ *
+ * For overwriting existing transitions, see `overrideTransitions`.
+ *
+ * @template M - The original machine type.
+ * @template T - An object of new transition functions. The keys must not exist in M.
+ * @param {M} machine - The base machine instance.
+ * @param {T} newTransitions - An object containing the new transition functions to add.
+ * @returns {M & T} A new machine instance with the combined original and new transitions.
+ * @example
+ * const counter = createMachine({ count: 0 }, {
+ *   increment: function() { return setContext(this, c => ({ count: c.count + 1 })) },
+ * });
+ *
+ * const extendedCounter = extendTransitions(counter, {
+ *   decrement: function() { return setContext(this, c => ({ count: c.count - 1 })) },
+ *   reset: function() { return setContext(this, { count: 0 }) },
+ * });
+ *
+ * const s1 = extendedCounter.increment();   // Original method works
+ * const s2 = s1.decrement();              // New method works
+ * console.log(s2.context.count); // 0
+ *
+ * // This would be a TypeScript error:
+ * // extendTransitions(counter, {
+ * //   increment: function() { ... } // Error: 'increment' already exists on counter
+ * // });
+ */
+export function extendTransitions<
+  M extends Machine<any>,
+  T extends Functions<Context<M>> & {
+    // This constraint ensures that no key in T can also be a key in M's transitions.
+    [K in keyof T]: K extends keyof M ? never : T[K];
+  }
+>(machine: M, newTransitions: T): M & T {
+  const { context, ...originalTransitions } = machine;
+
+  // Merge the transitions. Since the types guarantee no overlap, this is safe.
+  const combinedTransitions = { ...originalTransitions, ...newTransitions };
+
+  return createMachine(context, combinedTransitions) as M & T;
+}
+
+/ src/primitives.ts
+
+export const META_KEY = Symbol("MachineMeta");
+
+// We now store the target as a class constructor type.
+export interface TransitionMeta {
+  target?: new (...args: any) => any;
+  guards?: { name: string; description?: string }[];
+  invoke?: {
+    src: string;
+    onDone: new (...args: any) => any;
+    onError: new (...args: any) => any;
+  };
+}
+
+export type WithMeta<
+  F extends (...args: any[]) => any,
+  M extends TransitionMeta
+> = F & { [META_KEY]: M };
+
+// --- Primitives ---
+
+/**
+ * Defines a transition to a target state, using the target's class constructor.
+ */
+export function transitionTo<T extends new (...args: any) => any, F extends (...args: any[]) => any>(
+  target: T,
+  implementation: F
+): WithMeta<F, { target: T }> {
+  return implementation as any;
+}
+
+/**
+ * Adds a guard condition to a transition.
+ */
+export function guarded<F extends (...args: any[]) => any, M extends TransitionMeta>(
+  guard: { name: string; description?: string },
+  transition: WithMeta<F, M>
+): WithMeta<F, M & { guards: [typeof guard] }> {
+  return transition as any;
+}
+
+/**
+ * Defines an invoked service using class constructors for onDone/onError.
+ */
+export function invoke<
+  D extends new (...args: any) => any,
+  E extends new (...args: any) => any,
+  F extends (...args: any[]) => any
+>(
+  service: { src: string; onDone: D; onError: E },
+  implementation: F
+): WithMeta<F, { invoke: typeof service }> {
+  return implementation as any;
+}
