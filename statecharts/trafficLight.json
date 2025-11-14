@@ -1,0 +1,54 @@
+{
+  "id": "trafficLight",
+  "initial": "RedLightMachine",
+  "states": {
+    "RedLightMachine": {
+      "on": {
+        "next": {
+          "target": "GreenLightMachine",
+          "description": "Change to green light after red duration expires",
+          "actions": [
+            "logLightChange"
+          ]
+        },
+        "emergency": {
+          "target": "GreenLightMachine",
+          "description": "Emergency vehicle override - immediately go to green",
+          "actions": [
+            "logEmergencyOverride"
+          ]
+        }
+      }
+    },
+    "YellowLightMachine": {
+      "on": {
+        "next": {
+          "target": "RedLightMachine",
+          "description": "Change to red light after yellow duration expires",
+          "actions": [
+            "logLightChange"
+          ]
+        }
+      }
+    },
+    "GreenLightMachine": {
+      "on": {
+        "next": {
+          "target": "YellowLightMachine",
+          "description": "Change to yellow light after green duration expires",
+          "actions": [
+            "logLightChange"
+          ]
+        },
+        "pedestrianRequest": {
+          "target": "YellowLightMachine",
+          "description": "Pedestrian crossing button pressed - advance to yellow",
+          "actions": [
+            "logPedestrianRequest"
+          ]
+        }
+      }
+    }
+  },
+  "description": "Simple traffic light state machine with cyclic transitions"
+}

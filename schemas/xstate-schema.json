@@ -1,0 +1,237 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://xstate.js.org/schemas/statechart.json",
+  "title": "XState Statechart JSON Schema",
+  "description": "JSON Schema for validating XState statechart definitions",
+  "type": "object",
+  "required": ["id", "initial", "states"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier for the state machine"
+    },
+    "initial": {
+      "type": "string",
+      "description": "The key of the initial state node"
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable description of the machine"
+    },
+    "states": {
+      "type": "object",
+      "description": "State node definitions",
+      "additionalProperties": {
+        "$ref": "#/definitions/stateNode"
+      }
+    },
+    "context": {
+      "description": "Initial context (data) for the machine"
+    },
+    "version": {
+      "type": "string",
+      "description": "Version of the machine definition"
+    }
+  },
+  "definitions": {
+    "stateNode": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["atomic", "compound", "parallel", "final", "history"],
+          "description": "Type of state node"
+        },
+        "initial": {
+          "type": "string",
+          "description": "Initial child state for compound states"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of this state"
+        },
+        "on": {
+          "type": "object",
+          "description": "Event transitions",
+          "additionalProperties": {
+            "oneOf": [
+              { "$ref": "#/definitions/transition" },
+              {
+                "type": "array",
+                "items": { "$ref": "#/definitions/transition" }
+              }
+            ]
+          }
+        },
+        "invoke": {
+          "oneOf": [
+            { "$ref": "#/definitions/invoke" },
+            {
+              "type": "array",
+              "items": { "$ref": "#/definitions/invoke" }
+            }
+          ],
+          "description": "Invoked services/actors"
+        },
+        "entry": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" } }
+          ],
+          "description": "Actions to execute when entering this state"
+        },
+        "exit": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" } }
+          ],
+          "description": "Actions to execute when exiting this state"
+        },
+        "states": {
+          "type": "object",
+          "description": "Child state nodes for compound/parallel states",
+          "additionalProperties": {
+            "$ref": "#/definitions/stateNode"
+          }
+        },
+        "after": {
+          "type": "object",
+          "description": "Delayed transitions",
+          "additionalProperties": {
+            "oneOf": [
+              { "$ref": "#/definitions/transition" },
+              {
+                "type": "array",
+                "items": { "$ref": "#/definitions/transition" }
+              }
+            ]
+          }
+        },
+        "always": {
+          "oneOf": [
+            { "$ref": "#/definitions/transition" },
+            {
+              "type": "array",
+              "items": { "$ref": "#/definitions/transition" }
+            }
+          ],
+          "description": "Eventless transitions evaluated immediately"
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Tags for categorizing states"
+        },
+        "meta": {
+          "type": "object",
+          "description": "Metadata about this state"
+        }
+      }
+    },
+    "transition": {
+      "oneOf": [
+        {
+          "type": "string",
+          "description": "Simple transition - target state name"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "target": {
+              "oneOf": [
+                { "type": "string" },
+                {
+                  "type": "array",
+                  "items": { "type": "string" }
+                }
+              ],
+              "description": "Target state(s)"
+            },
+            "description": {
+              "type": "string",
+              "description": "Human-readable description of this transition"
+            },
+            "cond": {
+              "oneOf": [
+                { "type": "string" },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["type"]
+                }
+              ],
+              "description": "Guard condition(s) for this transition"
+            },
+            "actions": {
+              "oneOf": [
+                { "type": "string" },
+                {
+                  "type": "array",
+                  "items": { "type": "string" }
+                }
+              ],
+              "description": "Actions to execute during transition"
+            },
+            "internal": {
+              "type": "boolean",
+              "description": "Whether this is an internal transition (no exit/entry)"
+            },
+            "meta": {
+              "type": "object",
+              "description": "Metadata about this transition"
+            }
+          }
+        }
+      ]
+    },
+    "invoke": {
+      "type": "object",
+      "required": ["src"],
+      "properties": {
+        "src": {
+          "type": "string",
+          "description": "Source of the invoked service"
+        },
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for this invocation"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of this service"
+        },
+        "autoForward": {
+          "type": "boolean",
+          "description": "Whether to auto-forward events to the service"
+        },
+        "data": {
+          "description": "Data to pass to the invoked service"
+        },
+        "onDone": {
+          "oneOf": [
+            { "$ref": "#/definitions/transition" },
+            {
+              "type": "array",
+              "items": { "$ref": "#/definitions/transition" }
+            }
+          ],
+          "description": "Transitions when service completes successfully"
+        },
+        "onError": {
+          "oneOf": [
+            { "$ref": "#/definitions/transition" },
+            {
+              "type": "array",
+              "items": { "$ref": "#/definitions/transition" }
+            }
+          ],
+          "description": "Transitions when service encounters an error"
+        }
+      }
+    }
+  }
+}

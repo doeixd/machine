@@ -71,7 +71,11 @@
     "watch": "pridepack watch",
     "start": "pridepack start",
     "dev": "pridepack dev",
-    "test": "vitest --test"
+    "test": "vitest --test",
+    "extract": "tsx scripts/extract-statechart.ts --config .statechart.config.ts",
+    "extract:watch": "tsx scripts/extract-statechart.ts --config .statechart.config.ts --watch",
+    "extract:validate": "tsx scripts/extract-statechart.ts --config .statechart.config.ts --validate",
+    "extract:legacy": "tsx src/extract.ts"
   },
   "private": false,
   "description": "A minimal, type-safe state machine library for TypeScript centered on Type-State Programming. Uses the TypeScript compiler to catch invalid state transitions at compile-time, making illegal states unrepresentable. Features immutable updates, discriminated unions, async support, and integrations for React and Solid.js. Includes static analysis tools for generating formal statecharts compatible with Stately Viz and XState tooling.",

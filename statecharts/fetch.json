@@ -1,0 +1,100 @@
+{
+  "id": "fetch",
+  "initial": "IdleMachine",
+  "states": {
+    "IdleMachine": {
+      "on": {
+        "fetch": {
+          "target": "LoadingMachine",
+          "description": "Initiate data fetching operation",
+          "actions": [
+            "startFetch"
+          ]
+        }
+      }
+    },
+    "LoadingMachine": {
+      "on": {
+        "cancel": {
+          "target": "IdleMachine",
+          "description": "Cancel the data fetch and return to idle",
+          "actions": [
+            "cancelFetch"
+          ]
+        }
+      },
+      "invoke": [
+        {
+          "src": "fetchData",
+          "onDone": {
+            "target": "SuccessMachine"
+          },
+          "onError": {
+            "target": "ErrorMachine"
+          },
+          "description": "Asynchronous data fetch from API endpoint"
+        }
+      ]
+    },
+    "SuccessMachine": {
+      "on": {
+        "refetch": {
+          "target": "LoadingMachine",
+          "description": "Refresh the data by fetching again",
+          "actions": [
+            "logRefetch"
+          ]
+        },
+        "reset": {
+          "target": "IdleMachine",
+          "description": "Clear the fetched data and return to idle state"
+        },
+        "updateData": {
+          "target": "SuccessMachine",
+          "description": "Update the cached data optimistically"
+        }
+      }
+    },
+    "ErrorMachine": {
+      "on": {
+        "retry": {
+          "target": "RetryingMachine",
+          "description": "Retry the failed fetch operation",
+          "cond": "canRetry"
+        },
+        "dismiss": {
+          "target": "IdleMachine",
+          "description": "Dismiss the error and return to idle state",
+          "actions": [
+            "logErrorDismissed"
+          ]
+        },
+        "refetch": {
+          "target": "LoadingMachine",
+          "description": "Manually trigger a new fetch, bypassing retry logic"
+        }
+      }
+    },
+    "RetryingMachine": {
+      "on": {
+        "cancel": {
+          "target": "IdleMachine",
+          "description": "Cancel the pending retry and return to idle"
+        }
+      },
+      "invoke": [
+        {
+          "src": "retryFetch",
+          "onDone": {
+            "target": "SuccessMachine"
+          },
+          "onError": {
+            "target": "ErrorMachine"
+          },
+          "description": "Retry the fetch operation with exponential backoff"
+        }
+      ]
+    }
+  },
+  "description": "Generic data fetching machine with retry logic and error recovery"
+}

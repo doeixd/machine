@@ -527,5 +527,51 @@ export {
   stepAsync
 } from './generators';
 
+// =============================================================================
+// SECTION: TYPE-LEVEL METADATA PRIMITIVES
+// =============================================================================
+
+export {
+  transitionTo,
+  describe,
+  guarded,
+  invoke,
+  action,
+  metadata,
+  META_KEY,
+  type TransitionMeta,
+  type GuardMeta,
+  type InvokeMeta,
+  type ActionMeta,
+  type ClassConstructor,
+  type WithMeta
+} from './primitives';
+
+// =============================================================================
+// SECTION: STATECHART EXTRACTION
+// =============================================================================
+
+export {
+  extractMachine,
+  extractMachines,
+  generateChart,
+  type MachineConfig,
+  type ExtractionConfig
+} from './extract';
+
+// =============================================================================
+// SECTION: RUNTIME EXTRACTION
+// =============================================================================
+
+export {
+  extractFunctionMetadata,
+  extractStateNode,
+  generateStatechart,
+  extractFromInstance
+} from './runtime-extract';
+
+// Export runtime metadata symbol and type (for advanced use)
+export { RUNTIME_META, type RuntimeTransitionMeta } from './primitives';
+
 
 export * from './multi'

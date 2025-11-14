@@ -10,12 +10,50 @@
  *
  * @usage
  * 1. Ensure you have `ts-node` and `ts-morph` installed: `npm install -D ts-node ts-morph`
- * 2. Configure the settings in the `generateChart` function below.
- * 3. Run the script from your project root: `npx ts-node ./scripts/extract.ts > chart.json`
+ * 2. Create a configuration object or use .statechart.config.ts
+ * 3. Run the script from your project root: `npx ts-node ./scripts/extract-statechart.ts`
  */
 
 import { Project, ts, Type, Symbol as TSSymbol, Node } from 'ts-morph';
 import { META_KEY } from './primitives';
+
+// =============================================================================
+// SECTION: CONFIGURATION TYPES
+// =============================================================================
+
+/**
+ * Configuration for a single machine to extract
+ */
+export interface MachineConfig {
+  /** Path to the source file containing the machine */
+  input: string;
+  /** Array of class names that represent states */
+  classes: string[];
+  /** Output file path (optional, defaults to stdout) */
+  output?: string;
+  /** Top-level ID for the statechart */
+  id: string;
+  /** Name of the class that represents the initial state */
+  initialState: string;
+  /** Optional description of the machine */
+  description?: string;
+}
+
+/**
+ * Global extraction configuration
+ */
+export interface ExtractionConfig {
+  /** Array of machines to extract */
+  machines: MachineConfig[];
+  /** Validate output against XState JSON schema (optional) */
+  validate?: boolean;
+  /** Output format (json, mermaid, or both) */
+  format?: 'json' | 'mermaid' | 'both';
+  /** Watch mode - auto-regenerate on file changes */
+  watch?: boolean;
+  /** Verbose logging */
+  verbose?: boolean;
+}
 
 // =============================================================================
 // SECTION: CORE ANALYSIS LOGIC
@@ -27,9 +65,10 @@ import { META_KEY } from './primitives';
  * types into their string names.
  *
  * @param type - The `ts-morph` Type object to serialize.
+ * @param verbose - Enable debug logging
  * @returns A JSON-compatible value (string, number, object, array).
  */
-function typeToJson(type: Type): any {
+function typeToJson(type: Type, verbose = false): any {
   // --- Terminal Types ---
   const symbol = type.getSymbol();
   if (symbol && symbol.getDeclarations().some(Node.isClassDeclaration)) {
@@ -38,42 +77,327 @@ function typeToJson(type: Type): any {
   if (type.isStringLiteral()) return type.getLiteralValue();
   if (type.isNumberLiteral()) return type.getLiteralValue();
   if (type.isBooleanLiteral()) return type.getLiteralValue();
+  if (type.isString()) return 'string';
+  if (type.isNumber()) return 'number';
+  if (type.isBoolean()) return 'boolean';
 
   // --- Recursive Types ---
   if (type.isArray()) {
     const elementType = type.getArrayElementTypeOrThrow();
-    return [typeToJson(elementType)]; // Note: Assumes homogenous array for simplicity
+    return [typeToJson(elementType, verbose)];
   }
-  if (type.isObject()) {
+
+  // --- Object Types ---
+  if (type.isObject() || type.isIntersection()) {
     const obj: { [key: string]: any } = {};
-    for (const prop of type.getProperties()) {
+    const properties = type.getProperties();
+
+    // Filter out symbol properties and internal properties
+    for (const prop of properties) {
+      const propName = prop.getName();
+
+      // Skip symbol properties (those starting with "__@")
+      if (propName.startsWith('__@')) continue;
+
       const declaration = prop.getValueDeclaration();
       if (!declaration) continue;
-      obj[prop.getName()] = typeToJson(declaration.getType());
+
+      try {
+        obj[propName] = typeToJson(declaration.getType(), verbose);
+      } catch (e) {
+        if (verbose) console.error(`      Warning: Failed to serialize property ${propName}:`, e);
+        obj[propName] = 'unknown';
+      }
     }
-    return obj;
+
+    // If we got an empty object, return null (no metadata)
+    return Object.keys(obj).length > 0 ? obj : null;
+  }
+
+  if (verbose) {
+    console.error(`      Unhandled type: ${type.getText()}`);
   }
 
   return 'unknown'; // Fallback for unhandled types
 }
 
+// =============================================================================
+// SECTION: AST-BASED METADATA EXTRACTION
+// =============================================================================
+
 /**
+ * Resolves a class name from an AST node (handles identifiers and typeof expressions)
+ */
+function resolveClassName(node: Node): string {
+  // Handle: LoggingInMachine
+  if (Node.isIdentifier(node)) {
+    return node.getText();
+  }
+
+  // Handle: typeof LoggingInMachine
+  if (Node.isTypeOfExpression(node)) {
+    return node.getExpression().getText();
+  }
+
+  return 'unknown';
+}
+
+/**
+ * Parses an object literal expression into a plain JavaScript object
+ */
+function parseObjectLiteral(obj: Node): any {
+  if (!Node.isObjectLiteralExpression(obj)) {
+    return {};
+  }
+
+  const result: any = {};
+
+  for (const prop of obj.getProperties()) {
+    if (Node.isPropertyAssignment(prop)) {
+      const name = prop.getName();
+      const init = prop.getInitializer();
+
+      if (init) {
+        if (Node.isStringLiteral(init)) {
+          result[name] = init.getLiteralValue();
+        } else if (Node.isNumericLiteral(init)) {
+          result[name] = init.getLiteralValue();
+        } else if (Node.isTrueKeyword(init) || Node.isFalseKeyword(init)) {
+          result[name] = init.getText() === 'true';
+        } else if (Node.isIdentifier(init)) {
+          result[name] = init.getText();
+        } else if (Node.isObjectLiteralExpression(init)) {
+          result[name] = parseObjectLiteral(init);
+        } else if (Node.isArrayLiteralExpression(init)) {
+          result[name] = init.getElements().map(el => {
+            if (Node.isObjectLiteralExpression(el)) {
+              return parseObjectLiteral(el);
+            }
+            return el.getText();
+          });
+        }
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Parses an invoke service configuration, resolving class names for onDone/onError
+ */
+function parseInvokeService(obj: Node): any {
+  if (!Node.isObjectLiteralExpression(obj)) {
+    return {};
+  }
+
+  const service: any = {};
+
+  for (const prop of obj.getProperties()) {
+    if (Node.isPropertyAssignment(prop)) {
+      const name = prop.getName();
+      const init = prop.getInitializer();
+
+      if (!init) continue;
+
+      if (name === 'onDone' || name === 'onError') {
+        // Resolve class names for state targets
+        service[name] = resolveClassName(init);
+      } else if (Node.isStringLiteral(init)) {
+        service[name] = init.getLiteralValue();
+      } else if (Node.isIdentifier(init)) {
+        service[name] = init.getText();
+      }
+    }
+  }
+
+  return service;
+}
+
+/**
+ * Recursively extracts metadata from a call expression chain
+ * Handles nested DSL primitive calls like: describe(text, guarded(guard, transitionTo(...)))
+ */
+function extractFromCallExpression(call: Node, verbose = false): any | null {
+  if (!Node.isCallExpression(call)) {
+    return null;
+  }
+
+  const expression = call.getExpression();
+  const fnName = Node.isIdentifier(expression) ? expression.getText() : null;
+
+  if (!fnName) {
+    return null;
+  }
+
+  const metadata: any = {};
+  const args = call.getArguments();
+
+  switch (fnName) {
+    case 'transitionTo':
+      // Args: (target, implementation)
+      if (args[0]) {
+        metadata.target = resolveClassName(args[0]);
+      }
+      // The second argument might be another call expression, but we don't recurse there
+      // because transitionTo is the innermost wrapper
+      break;
+
+    case 'describe':
+      // Args: (description, transition)
+      if (args[0] && Node.isStringLiteral(args[0])) {
+        metadata.description = args[0].getLiteralValue();
+      }
+      // Recurse into wrapped transition
+      if (args[1] && Node.isCallExpression(args[1])) {
+        const nested = extractFromCallExpression(args[1], verbose);
+        if (nested) {
+          Object.assign(metadata, nested);
+        }
+      }
+      break;
+
+    case 'guarded':
+      // Args: (guard, transition)
+      if (args[0]) {
+        const guard = parseObjectLiteral(args[0]);
+        if (Object.keys(guard).length > 0) {
+          metadata.guards = [guard];
+        }
+      }
+      // Recurse into wrapped transition
+      if (args[1] && Node.isCallExpression(args[1])) {
+        const nested = extractFromCallExpression(args[1], verbose);
+        if (nested) {
+          Object.assign(metadata, nested);
+        }
+      }
+      break;
+
+    case 'invoke':
+      // Args: (service, implementation)
+      if (args[0]) {
+        const service = parseInvokeService(args[0]);
+        if (Object.keys(service).length > 0) {
+          metadata.invoke = service;
+        }
+      }
+      break;
+
+    case 'action':
+      // Args: (action, transition)
+      if (args[0]) {
+        const actionMeta = parseObjectLiteral(args[0]);
+        if (Object.keys(actionMeta).length > 0) {
+          metadata.actions = [actionMeta];
+        }
+      }
+      // Recurse into wrapped transition
+      if (args[1] && Node.isCallExpression(args[1])) {
+        const nested = extractFromCallExpression(args[1], verbose);
+        if (nested) {
+          Object.assign(metadata, nested);
+        }
+      }
+      break;
+
+    default:
+      // Not a DSL primitive we recognize
+      return null;
+  }
+
+  return Object.keys(metadata).length > 0 ? metadata : null;
+}
+
+/**
+ * Extracts metadata by parsing the AST of DSL primitive calls.
+ * This is the new approach that solves the generic type parameter resolution problem.
+ *
+ * @param member - The class member (property declaration) to analyze
+ * @param verbose - Enable debug logging
+ * @returns The extracted metadata object, or `null` if no metadata is found.
+ */
+function extractMetaFromMember(member: Node, verbose = false): any | null {
+  // Only process property declarations (methods with initializers)
+  if (!Node.isPropertyDeclaration(member)) {
+    if (verbose) console.error(`      ⚠️ Not a property declaration`);
+    return null;
+  }
+
+  const initializer = member.getInitializer();
+  if (!initializer) {
+    if (verbose) console.error(`      ⚠️ No initializer`);
+    return null;
+  }
+
+  // Check if it's a call expression (DSL primitive call)
+  if (!Node.isCallExpression(initializer)) {
+    if (verbose) console.error(`      ⚠️ Initializer is not a call expression`);
+    return null;
+  }
+
+  // Extract metadata by parsing the call chain
+  const metadata = extractFromCallExpression(initializer, verbose);
+
+  if (metadata && verbose) {
+    console.error(`      ✅ Extracted metadata:`, JSON.stringify(metadata, null, 2));
+  }
+
+  return metadata;
+}
+
+/**
+ * OLD IMPLEMENTATION: Type-based extraction (kept for reference/validation)
+ * @deprecated Use extractMetaFromMember instead
+ *
  * Given a type, this function looks for our special `META_KEY` brand and,
  * if found, extracts and serializes the metadata type into a plain object.
  *
  * @param type - The type of a class member (e.g., a transition method).
+ * @param verbose - Enable debug logging
  * @returns The extracted metadata object, or `null` if no metadata is found.
  */
-function extractMetaFromType(type: Type): any | null {
-  // The META_KEY is escaped because it's a unique symbol, not a plain string property.
-  const escapedKey = String(ts.escapeLeadingUnderscores(META_KEY.description!));
-  const metaProperty = type.getProperty(escapedKey);
-  if (!metaProperty) return null;
+function extractMetaFromType(type: Type, verbose = false): any | null {
+  // Try to find a property that contains our META_KEY symbol
+  // The property name will be something like "__@META_KEY@61" where 61 is a unique ID
+  const properties = type.getProperties();
 
-  const declaration = metaProperty.getValueDeclaration();
-  if (!declaration) return null;
+  if (verbose) {
+    console.error(`      Type properties: ${properties.map(p => p.getName()).join(', ')}`);
+  }
 
-  return typeToJson(declaration.getType());
+  // Look for a property whose name starts with "__@" and contains our symbol description
+  // This handles the escaped form that TypeScript uses for symbol properties
+  const metaProperty = properties.find(prop => {
+    const name = prop.getName();
+    // The pattern is: __@<symbolDescription>@<uniqueId>
+    return name.startsWith('__@') && name.includes('META_KEY');
+  });
+
+  if (!metaProperty) {
+    if (verbose) console.error(`      ⚠️ No meta property found`);
+    return null;
+  }
+
+  if (verbose) {
+    console.error(`      Found meta property: ${metaProperty.getName()}`);
+  }
+
+  // Get the type of the property directly (not from the declaration)
+  // This helps resolve generic type parameters
+  const metaType = metaProperty.getTypeAtLocation(type.getSymbol()?.getDeclarations()[0] as any);
+
+  if (!metaType) {
+    if (verbose) console.error(`      ⚠️ Could not get type`);
+    return null;
+  }
+
+  const metadata = typeToJson(metaType, verbose);
+  if (verbose) {
+    console.error(`      ✅ Found metadata:`, JSON.stringify(metadata, null, 2));
+  }
+
+  return metadata;
 }
 
 /**
@@ -81,22 +405,41 @@ function extractMetaFromType(type: Type): any | null {
  * building a state node definition for the final statechart.
  *
  * @param classSymbol - The `ts-morph` Symbol for the class to analyze.
+ * @param verbose - Enable verbose logging
  * @returns A state node object (e.g., `{ on: {...}, invoke: [...] }`).
  */
-function analyzeStateNode(classSymbol: TSSymbol): object {
+function analyzeStateNode(classSymbol: TSSymbol, verbose = false): object {
   const chartNode: any = { on: {} };
   const classDeclaration = classSymbol.getDeclarations()[0];
   if (!classDeclaration || !Node.isClassDeclaration(classDeclaration)) {
+    if (verbose) {
+      console.error(`⚠️ Warning: Could not get class declaration for ${classSymbol.getName()}`);
+    }
     return chartNode;
   }
 
+  const className = classSymbol.getName();
+  if (verbose) {
+    console.error(`  Analyzing state: ${className}`);
+  }
+
   for (const member of classDeclaration.getInstanceMembers()) {
-    const meta = extractMetaFromType(member.getType());
+    const memberName = member.getName();
+    if (verbose) {
+      console.error(`    Checking member: ${memberName}`);
+    }
+
+    // NEW: Use AST-based extraction instead of type-based
+    const meta = extractMetaFromMember(member, verbose);
     if (!meta) continue;
+
+    if (verbose) {
+      console.error(`    Found transition: ${memberName}`);
+    }
 
     // Separate `invoke` metadata from standard `on` transitions, as it's a
     // special property of a state node in XState/Stately syntax.
-    const { invoke, ...onEntry } = meta;
+    const { invoke, actions, guards, ...onEntry } = meta;
 
     if (invoke) {
       if (!chartNode.invoke) chartNode.invoke = [];
@@ -106,15 +449,40 @@ function analyzeStateNode(classSymbol: TSSymbol): object {
         onError: { target: invoke.onError },
         description: invoke.description,
       });
+      if (verbose) {
+        console.error(`      → Invoke: ${invoke.src}`);
+      }
     }
 
     // If there's a target, it's a standard event transition.
     if (onEntry.target) {
-      if (onEntry.guards) {
-        // Stately/XState syntax for guards is the `cond` property.
-        onEntry.cond = onEntry.guards.map((g: any) => g.name).join(' && ');
+      const transition: any = { target: onEntry.target };
+
+      // Add description if present
+      if (onEntry.description) {
+        transition.description = onEntry.description;
       }
-      chartNode.on[member.getName()] = onEntry;
+
+      // Add guards as 'cond' property
+      if (guards) {
+        transition.cond = guards.map((g: any) => g.name).join(' && ');
+        if (verbose) {
+          console.error(`      → Guard: ${transition.cond}`);
+        }
+      }
+
+      // Add actions array
+      if (actions && actions.length > 0) {
+        transition.actions = actions.map((a: any) => a.name);
+        if (verbose) {
+          console.error(`      → Actions: ${transition.actions.join(', ')}`);
+        }
+      }
+
+      chartNode.on[memberName] = transition;
+      if (verbose) {
+        console.error(`      → Target: ${onEntry.target}`);
+      }
     }
   }
 
@@ -126,62 +494,134 @@ function analyzeStateNode(classSymbol: TSSymbol): object {
 // =============================================================================
 
 /**
- * The main analysis function.
- * Configures the project, specifies which files and classes to analyze,
- * and orchestrates the generation of the final JSON chart to standard output.
+ * Extracts a single machine configuration to a statechart
+ *
+ * @param config - Machine configuration
+ * @param project - ts-morph Project instance
+ * @param verbose - Enable verbose logging
+ * @returns The generated statechart object
+ */
+export function extractMachine(
+  config: MachineConfig,
+  project: Project,
+  verbose = false
+): any {
+  if (verbose) {
+    console.error(`\n🔍 Analyzing machine: ${config.id}`);
+    console.error(`  Source: ${config.input}`);
+  }
+
+  const sourceFile = project.getSourceFile(config.input);
+  if (!sourceFile) {
+    throw new Error(`Source file not found: ${config.input}`);
+  }
+
+  const fullChart: any = {
+    id: config.id,
+    initial: config.initialState,
+    states: {},
+  };
+
+  if (config.description) {
+    fullChart.description = config.description;
+  }
+
+  for (const className of config.classes) {
+    const classDeclaration = sourceFile.getClass(className);
+    if (!classDeclaration) {
+      console.warn(`⚠️ Warning: Class '${className}' not found in '${config.input}'. Skipping.`);
+      continue;
+    }
+    const classSymbol = classDeclaration.getSymbolOrThrow();
+    const stateNode = analyzeStateNode(classSymbol, verbose);
+    fullChart.states[className] = stateNode;
+  }
+
+  if (verbose) {
+    console.error(`  ✅ Extracted ${config.classes.length} states`);
+  }
+
+  return fullChart;
+}
+
+/**
+ * Extracts multiple machines based on configuration
+ *
+ * @param config - Full extraction configuration
+ * @returns Array of generated statecharts
+ */
+export function extractMachines(config: ExtractionConfig): any[] {
+  const verbose = config.verbose ?? false;
+
+  if (verbose) {
+    console.error(`\n📊 Starting statechart extraction`);
+    console.error(`  Machines to extract: ${config.machines.length}`);
+  }
+
+  const project = new Project();
+  project.addSourceFilesAtPaths("src/**/*.ts");
+  project.addSourceFilesAtPaths("examples/**/*.ts");
+
+  const results: any[] = [];
+
+  for (const machineConfig of config.machines) {
+    try {
+      const chart = extractMachine(machineConfig, project, verbose);
+      results.push(chart);
+    } catch (error) {
+      console.error(`❌ Error extracting machine '${machineConfig.id}':`, error);
+      if (!verbose) {
+        console.error(`   Run with --verbose for more details`);
+      }
+    }
+  }
+
+  if (verbose) {
+    console.error(`\n✅ Extraction complete: ${results.length}/${config.machines.length} machines extracted`);
+  }
+
+  return results;
+}
+
+/**
+ * Legacy function for backwards compatibility
+ * Extracts a single hardcoded machine configuration
+ * @deprecated Use extractMachine or extractMachines instead
  */
 export function generateChart() {
   // --- 🎨 CONFIGURATION 🎨 ---
   // Adjust these settings to match your project structure.
 
-  /** The relative path to the file containing your machine class definitions. */
-  const sourceFilePath = "src/authMachine.ts";
-
-  /** An array of the string names of all classes that represent a state. */
-  const classesToAnalyze = [
-    "LoggedOutMachine",
-    "LoggedInMachine",
-  ];
-
-  /** The top-level ID for your statechart. */
-  const chartId = "auth";
-
-  /** The string name of the class that represents the initial state. */
-  const initialState = "LoggedOutMachine";
+  const config: MachineConfig = {
+    input: "examples/authMachine.ts",
+    classes: [
+      "LoggedOutMachine",
+      "LoggingInMachine",
+      "LoggedInMachine",
+      "SessionExpiredMachine",
+      "ErrorMachine"
+    ],
+    id: "auth",
+    initialState: "LoggedOutMachine",
+    description: "Authentication state machine"
+  };
 
   // --- End Configuration ---
 
-  console.error("🔍 Analyzing state machine from:", sourceFilePath);
+  console.error("🔍 Using legacy generateChart function");
+  console.error("⚠️ Consider using extractMachines() with a config file instead\n");
 
   const project = new Project();
   project.addSourceFilesAtPaths("src/**/*.ts");
+  project.addSourceFilesAtPaths("examples/**/*.ts");
 
-  const sourceFile = project.getSourceFile(sourceFilePath);
-  if (!sourceFile) {
-    console.error(`❌ Error: Source file not found at '${sourceFilePath}'.`);
+  try {
+    const chart = extractMachine(config, project, true);
+    console.log(JSON.stringify(chart, null, 2));
+  } catch (error) {
+    console.error(`❌ Error:`, error);
     process.exit(1);
   }
-
-  const fullChart: any = {
-    id: chartId,
-    initial: initialState,
-    states: {},
-  };
-
-  for (const className of classesToAnalyze) {
-    const classDeclaration = sourceFile.getClass(className);
-    if (!classDeclaration) {
-      console.warn(`⚠️ Warning: Class '${className}' not found in '${sourceFilePath}'. Skipping.`);
-      continue;
-    }
-    const classSymbol = classDeclaration.getSymbolOrThrow();
-    const stateNode = analyzeStateNode(classSymbol);
-    fullChart.states[className] = stateNode;
-  }
-
-  console.error("✅ Analysis complete. Generating JSON chart...");
-  // Print the final JSON to stdout so it can be piped to a file.
-  console.log(JSON.stringify(fullChart, null, 2));
 }
 
 // This allows the script to be executed directly from the command line.

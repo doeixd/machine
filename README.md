@@ -1364,6 +1364,269 @@ pipeTransitions(
 );
 ```
 
+## 📊 Statechart Extraction & Visualization
+
+**NEW**: Generate formal statechart definitions from your TypeScript machines for visualization and documentation.
+
+### Overview
+
+The statechart extraction system performs build-time static analysis to generate [XState](https://xstate.js.org/)-compatible JSON from your type-safe machines. This enables:
+
+- 🎨 **Visualization** in [Stately Viz](https://stately.ai/viz) and other tools
+- 📖 **Documentation** with auto-generated state diagrams
+- ✅ **Formal verification** using XState tooling
+- 🔄 **Team communication** via visual state charts
+
+### Quick Example
+
+**1. Annotate your machines with metadata:**
+
+```typescript
+import { MachineBase } from '@doeixd/machine';
+import { transitionTo, describe, action, guarded } from '@doeixd/machine/primitives';
+
+class LoggedOut extends MachineBase<{ status: 'loggedOut' }> {
+  login = describe(
+    "Start the login process",
+    action(
+      { name: "logAttempt", description: "Track login attempts" },
+      transitionTo(LoggingIn, (username: string) => new LoggingIn({ username }))
+    )
+  );
+}
+
+class LoggingIn extends MachineBase<{ status: 'loggingIn'; username: string }> {
+  success = transitionTo(LoggedIn, (token: string) => new LoggedIn({ token }));
+  failure = transitionTo(LoggedOut, () => new LoggedOut());
+}
+
+class LoggedIn extends MachineBase<{ status: 'loggedIn'; token: string }> {
+  logout = describe(
+    "Log out and clear session",
+    action(
+      { name: "clearSession" },
+      transitionTo(LoggedOut, () => new LoggedOut())
+    )
+  );
+
+  deleteAccount = guarded(
+    { name: "isAdmin", description: "Only admins can delete accounts" },
+    transitionTo(LoggedOut, () => new LoggedOut())
+  );
+}
+```
+
+**2. Create extraction config (`.statechart.config.ts`):**
+
+```typescript
+import type { ExtractionConfig } from '@doeixd/machine';
+
+export default {
+  machines: [{
+    input: 'src/auth.ts',
+    classes: ['LoggedOut', 'LoggingIn', 'LoggedIn'],
+    output: 'statecharts/auth.json',
+    id: 'auth',
+    initialState: 'LoggedOut'
+  }],
+  verbose: true
+} satisfies ExtractionConfig;
+```
+
+**3. Run extraction:**
+
+```bash
+npm run extract
+```
+
+**4. Generated output (`statecharts/auth.json`):**
+
+```json
+{
+  "id": "auth",
+  "initial": "LoggedOut",
+  "states": {
+    "LoggedOut": {
+      "on": {
+        "login": {
+          "target": "LoggingIn",
+          "description": "Start the login process",
+          "actions": ["logAttempt"]
+        }
+      }
+    },
+    "LoggingIn": {
+      "on": {
+        "success": { "target": "LoggedIn" },
+        "failure": { "target": "LoggedOut" }
+      }
+    },
+    "LoggedIn": {
+      "on": {
+        "logout": {
+          "target": "LoggedOut",
+          "description": "Log out and clear session",
+          "actions": ["clearSession"]
+        },
+        "deleteAccount": {
+          "target": "LoggedOut",
+          "cond": "isAdmin"
+        }
+      }
+    }
+  }
+}
+```
+
+**5. Visualize in [Stately Viz](https://stately.ai/viz):**
+
+Paste the JSON into Stately Viz to see your state machine as an interactive diagram!
+
+### Metadata Primitives
+
+The extraction system recognizes these annotation primitives:
+
+| Primitive | Purpose | Extracted As |
+|-----------|---------|--------------|
+| `transitionTo(Target, impl)` | Declare target state | `"target": "TargetClass"` |
+| `describe(text, transition)` | Add description | `"description": "..."` |
+| `guarded(guard, transition)` | Add guard condition | `"cond": "guardName"` |
+| `action(action, transition)` | Add side effect | `"actions": ["actionName"]` |
+| `invoke(service, impl)` | Async service | `"invoke": [...]` |
+
+**All primitives are identity functions** - they have **zero runtime overhead**. They exist purely for:
+1. Type-level documentation
+2. Build-time extraction
+3. IDE autocomplete
+
+### CLI Usage
+
+```bash
+# Extract from config
+npx tsx scripts/extract-statechart.ts --config .statechart.config.ts
+
+# Extract single machine
+npx tsx scripts/extract-statechart.ts \
+  --input src/machine.ts \
+  --id myMachine \
+  --classes State1,State2 \
+  --initial State1
+
+# Watch mode
+npx tsx scripts/extract-statechart.ts --config .statechart.config.ts --watch
+
+# With validation
+npx tsx scripts/extract-statechart.ts --config .statechart.config.ts --validate
+```
+
+### npm Scripts
+
+Add to your `package.json`:
+
+```json
+{
+  "scripts": {
+    "extract": "tsx scripts/extract-statechart.ts --config .statechart.config.ts",
+    "extract:watch": "tsx scripts/extract-statechart.ts --config .statechart.config.ts --watch"
+  }
+}
+```
+
+### How It Works
+
+The extraction system uses **AST-based static analysis**:
+
+1. **Parse TypeScript source** using ts-morph (TypeScript Compiler API)
+2. **Find DSL primitive calls** in class property initializers
+3. **Extract literal arguments** from the Abstract Syntax Tree
+4. **Resolve class name identifiers** to target states
+5. **Generate XState-compatible JSON** with full metadata
+
+**Why AST-based?** TypeScript's type system resolves generic parameters in branded types (`WithMeta<F, M>`) as constraints rather than concrete values. AST parsing reads the actual source code, bypassing type system limitations. This is the same approach used by XState's extraction tooling.
+
+### Static Extraction API (Build-Time)
+
+```typescript
+import { extractMachine, extractMachines } from '@doeixd/machine';
+import { Project } from 'ts-morph';
+
+// Extract single machine
+const project = new Project();
+project.addSourceFilesAtPaths('src/**/*.ts');
+
+const chart = extractMachine({
+  input: 'src/auth.ts',
+  classes: ['LoggedOut', 'LoggedIn'],
+  id: 'auth',
+  initialState: 'LoggedOut'
+}, project);
+
+console.log(JSON.stringify(chart, null, 2));
+
+// Extract multiple machines
+const charts = extractMachines({
+  machines: [
+    { input: 'src/auth.ts', classes: [...], id: 'auth', initialState: 'LoggedOut' },
+    { input: 'src/fetch.ts', classes: [...], id: 'fetch', initialState: 'Idle' }
+  ],
+  verbose: true
+});
+```
+
+### Runtime Extraction API
+
+Extract statecharts from **running machine instances** without requiring source code access:
+
+```typescript
+import { generateStatechart, extractFromInstance } from '@doeixd/machine';
+
+// Create machine instances (annotated with DSL primitives)
+const loggedOutMachine = new LoggedOut({ status: 'loggedOut' });
+const loggedInMachine = new LoggedIn({ status: 'loggedIn', token: 'abc' });
+
+// Generate complete statechart from multiple states
+const chart = generateStatechart({
+  LoggedOut: loggedOutMachine,
+  LoggedIn: loggedInMachine
+}, {
+  id: 'auth',
+  initial: 'LoggedOut'
+});
+
+// Or extract from a single instance
+const singleChart = extractFromInstance(loggedOutMachine, {
+  id: 'auth',
+  stateName: 'LoggedOut'
+});
+```
+
+**Use cases:**
+- 🐛 Debug production machines without source access
+- 🌐 Extract statecharts in browser DevTools
+- 🧪 Generate diagrams from test instances
+- 📦 Work with dynamically created machines
+
+The DSL primitives (`transitionTo`, `describe`, etc.) attach metadata at runtime via non-enumerable Symbols with zero performance overhead.
+
+### Full Documentation
+
+For comprehensive documentation including:
+- Type-level metadata DSL reference
+- Configuration options
+- Limitations and gotchas
+- Troubleshooting guide
+- Advanced usage patterns
+
+See **[docs/statechart-extraction.md](./docs/statechart-extraction.md)**
+
+### Examples
+
+Complete annotated examples in the `examples/` directory:
+- [`examples/authMachine.ts`](./examples/authMachine.ts) - Authentication flow with guards and actions
+- [`examples/fetchMachine.ts`](./examples/fetchMachine.ts) - Data fetching with invoke services
+- [`examples/formMachine.ts`](./examples/formMachine.ts) - Multi-step wizard
+- [`examples/trafficLightMachine.ts`](./examples/trafficLightMachine.ts) - Simple cyclic machine
+
 ## Philosophy & Design Principles
 
 ### 1. Type-State Programming First

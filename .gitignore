@@ -105,3 +105,8 @@ dist
 .tern-port
 
 .npmrc
+
+
+test-*js
+
+debug-*.js

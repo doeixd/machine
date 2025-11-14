@@ -22,6 +22,13 @@
 export const META_KEY = Symbol("MachineMeta");
 
 /**
+ * Runtime metadata symbol.
+ * Non-enumerable property key for storing metadata on function objects at runtime.
+ * @internal
+ */
+export const RUNTIME_META = Symbol('__machine_runtime_meta__');
+
+/**
  * Helper type representing a Class Constructor.
  * Used to reference target states by their class definition rather than magic strings.
  */
@@ -87,6 +94,65 @@ export type WithMeta<
   M extends TransitionMeta
 > = F & { [META_KEY]: M };
 
+// =============================================================================
+// SECTION: RUNTIME METADATA ATTACHMENT
+// =============================================================================
+
+/**
+ * Runtime metadata interface (resolved class names as strings)
+ */
+export interface RuntimeTransitionMeta {
+  target?: string;
+  description?: string;
+  guards?: Array<{ name: string; description?: string }>;
+  invoke?: {
+    src: string;
+    onDone: string;
+    onError: string;
+    description?: string;
+  };
+  actions?: Array<{ name: string; description?: string }>;
+}
+
+/**
+ * Attaches runtime metadata to a function object.
+ * Merges with existing metadata if present.
+ *
+ * @param fn - The function to attach metadata to
+ * @param metadata - Partial metadata to merge
+ * @internal
+ */
+function attachRuntimeMeta(fn: any, metadata: Partial<RuntimeTransitionMeta>): void {
+  // Read existing metadata (may be undefined)
+  const existing = fn[RUNTIME_META] || {};
+
+  // Shallow merge for simple properties
+  const merged: any = { ...existing, ...metadata };
+
+  // Deep merge for array properties
+  if (metadata.guards && existing.guards) {
+    merged.guards = [...existing.guards, ...metadata.guards];
+  } else if (metadata.guards) {
+    merged.guards = [...metadata.guards];
+  }
+
+  if (metadata.actions && existing.actions) {
+    merged.actions = [...existing.actions, ...metadata.actions];
+  } else if (metadata.actions) {
+    merged.actions = [...metadata.actions];
+  }
+
+  // Replace invoke entirely (not an array, can't merge)
+  // Last invoke wins (this matches XState semantics)
+
+  // Define or redefine the metadata property
+  Object.defineProperty(fn, RUNTIME_META, {
+    value: merged,
+    enumerable: false,
+    writable: false,
+    configurable: true  // CRITICAL: Must be configurable for re-definition
+  });
+}
 
 // =============================================================================
 // SECTION: ANNOTATION PRIMITIVES (THE DSL)
@@ -109,6 +175,11 @@ export function transitionTo<
   _target: T,
   implementation: F
 ): WithMeta<F, { target: T }> {
+  // Attach runtime metadata with class name
+  attachRuntimeMeta(implementation, {
+    target: _target.name || _target.toString()
+  });
+
   return implementation as any;
 }
 
@@ -127,6 +198,11 @@ export function describe<
   _text: string,
   transition: WithMeta<F, M>
 ): WithMeta<F, M & { description: string }> {
+  // Attach runtime metadata
+  attachRuntimeMeta(transition, {
+    description: _text
+  });
+
   return transition as any;
 }
 
@@ -146,6 +222,12 @@ export function guarded<
   guard: GuardMeta,
   transition: WithMeta<F, M>
 ): WithMeta<F, M & { guards: [typeof guard] }> {
+  // Attach runtime metadata
+  // Note: guards is an array, will be merged by attachRuntimeMeta
+  attachRuntimeMeta(transition, {
+    guards: [guard]
+  });
+
   return transition as any;
 }
 
@@ -168,6 +250,16 @@ export function invoke<
   service: { src: string; onDone: D; onError: E; description?: string },
   implementation: F
 ): WithMeta<F, { invoke: typeof service }> {
+  // Attach runtime metadata with class names resolved
+  attachRuntimeMeta(implementation, {
+    invoke: {
+      src: service.src,
+      onDone: service.onDone.name || service.onDone.toString(),
+      onError: service.onError.name || service.onError.toString(),
+      description: service.description
+    }
+  });
+
   return implementation as any;
 }
 
@@ -187,5 +279,47 @@ export function action<
   action: ActionMeta,
   transition: WithMeta<F, M>
 ): WithMeta<F, M & { actions: [typeof action] }> {
+  // Attach runtime metadata
+  // Note: actions is an array, will be merged by attachRuntimeMeta
+  attachRuntimeMeta(transition, {
+    actions: [action]
+  });
+
   return transition as any;
+}
+
+/**
+ * Flexible metadata wrapper for functional and type-state patterns.
+ *
+ * This function allows attaching metadata to values that don't use the class-based
+ * MachineBase pattern. It's particularly useful for:
+ * - Functional machines created with createMachine()
+ * - Type-state discriminated unions
+ * - Generic machine configurations
+ *
+ * @param meta - Partial metadata object describing states, transitions, etc.
+ * @param value - The value to annotate (machine, config, factory function, etc.)
+ * @returns The value unchanged (identity function at runtime)
+ *
+ * @example
+ * // Annotate a functional machine
+ * const machine = metadata(
+ *   {
+ *     target: IdleState,
+ *     description: "Counter machine with increment/decrement"
+ *   },
+ *   createMachine({ count: 0 }, { ... })
+ * );
+ *
+ * @example
+ * // Annotate a factory function
+ * export const createCounter = metadata(
+ *   { description: "Creates a counter starting at 0" },
+ *   () => createMachine({ count: 0 }, { ... })
+ * );
+ */
+export function metadata<T>(meta: Partial<TransitionMeta>, value: T): T {
+  // At runtime, this is a no-op identity function
+  // At compile-time/static-analysis, the metadata can be extracted from the type signature
+  return value;
 }

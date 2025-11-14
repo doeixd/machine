@@ -1,0 +1,79 @@
+{
+  "id": "form",
+  "initial": "PersonalInfoMachine",
+  "states": {
+    "PersonalInfoMachine": {
+      "on": {
+        "next": {
+          "target": "AddressMachine",
+          "description": "Proceed to address information step",
+          "cond": "validatePersonalInfo"
+        },
+        "validationFailed": {
+          "target": "ValidationErrorMachine",
+          "description": "Handle validation errors in personal info"
+        }
+      }
+    },
+    "AddressMachine": {
+      "on": {
+        "next": {
+          "target": "PreferencesMachine",
+          "description": "Proceed to preferences step",
+          "cond": "validateAddress"
+        },
+        "back": {
+          "target": "PersonalInfoMachine",
+          "description": "Return to personal information step"
+        },
+        "validationFailed": {
+          "target": "ValidationErrorMachine",
+          "description": "Handle validation errors in address"
+        }
+      }
+    },
+    "PreferencesMachine": {
+      "on": {
+        "submit": {
+          "target": "CompleteMachine",
+          "description": "Submit the complete form",
+          "actions": [
+            "submitForm"
+          ]
+        },
+        "back": {
+          "target": "AddressMachine",
+          "description": "Return to address step"
+        }
+      }
+    },
+    "CompleteMachine": {
+      "on": {
+        "startOver": {
+          "target": "PersonalInfoMachine",
+          "description": "Reset and start a new form"
+        },
+        "downloadConfirmation": {
+          "target": "CompleteMachine",
+          "description": "Download form confirmation PDF",
+          "actions": [
+            "downloadPDF"
+          ]
+        }
+      }
+    },
+    "ValidationErrorMachine": {
+      "on": {
+        "retry": {
+          "target": "PersonalInfoMachine",
+          "description": "Return to the form step to fix validation errors"
+        },
+        "cancel": {
+          "target": "PersonalInfoMachine",
+          "description": "Cancel form and start over"
+        }
+      }
+    }
+  },
+  "description": "Multi-step form wizard with validation and backward navigation"
+}

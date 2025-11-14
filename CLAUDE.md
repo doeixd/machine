@@ -95,6 +95,370 @@ The codebase is organized into focused, single-purpose modules:
    - `createMachineEffect()`, `createMachineValueEffect()` - Lifecycle effects
    - Integrates state machines with Solid's fine-grained reactivity
 
+9. **`src/primitives.ts`** - Type-level metadata DSL
+   - Annotation functions: `transitionTo()`, `guarded()`, `invoke()`, `action()`, `describe()`, `metadata()`
+   - These are runtime **identity functions** (zero overhead) that add type-level metadata
+   - The `META_KEY` symbol brands types with `TransitionMeta` for static analysis
+   - Used by the extraction tool to generate formal statecharts
+   - See "Type-Level Metadata DSL" section below for details
+
+10. **`src/extract.ts`** - Statechart extraction engine
+    - Build-time static analysis tool using ts-morph (TypeScript Compiler API)
+    - Generates XState-compatible JSON from TypeScript machine definitions
+    - **AST-based extraction** - parses source code directly, not type system
+    - Core functions:
+      - `extractMachine()` - Extract a single machine configuration
+      - `extractMachines()` - Extract multiple machines from config
+      - `extractMetaFromMember()` - Parse DSL primitive calls from AST
+      - `extractFromCallExpression()` - Recursively extract nested metadata
+    - Supports all DSL primitives (transitionTo, describe, guarded, action, invoke)
+    - See "Statechart Extraction Architecture" section below
+
+11. **`scripts/extract-statechart.ts`** - CLI tool for extraction
+    - Commander-based CLI with full argument parsing
+    - Config file support (.statechart.config.ts or .json)
+    - Watch mode with chokidar for development workflow
+    - Output formats: JSON, Mermaid (planned)
+    - Schema validation against XState JSON schema
+    - Cross-platform file URL handling for Windows
+
+12. **`.statechart.config.ts`** - Extraction configuration
+    - TypeScript-based config with type safety
+    - Defines which machines to extract and output paths
+    - Supports multiple machines in one extraction pass
+
+13. **`schemas/xstate-schema.json`** - XState v5 JSON schema
+    - Validation schema for generated statecharts
+    - Ensures compatibility with Stately Viz and XState tooling
+
+### Statechart Extraction Architecture
+
+#### Overview
+
+The statechart extraction system provides **two complementary approaches** for generating formal statechart definitions (JSON):
+
+1. **Static Extraction (Build-Time)** - AST-based analysis using ts-morph
+2. **Runtime Extraction** - Symbol-based metadata collection from running instances
+
+Both generate XState-compatible JSON for use with Stately Viz and XState tooling.
+
+#### Static Extraction (AST-Based)
+
+#### Why AST-Based Extraction?
+
+**Problem**: TypeScript's type system doesn't preserve concrete generic type instantiations.
+
+When using branded intersection types like `WithMeta<F, M>`, the type checker resolves:
+- Generic constraint: `M extends TransitionMeta`
+- NOT the concrete value: `{ target: LoggedInMachine, description: "..." }`
+
+**Original Approach (Failed)**:
+```typescript
+// Tried to extract metadata from type system
+const metaType = type.getProperty(META_KEY);
+// Result: TypeScript sees "M extends TransitionMeta", not the actual metadata
+```
+
+**Current Approach (AST-Based)**:
+```typescript
+// Parse the actual source code AST instead
+login = describe(
+  "Start login",  // ← Extract this string literal from AST
+  transitionTo(LoggedInMachine, ...)  // ← Extract this class identifier from AST
+)
+```
+
+This is the **proven approach** used by XState's `@xstate/machine-extractor`.
+
+#### Extraction Pipeline
+
+```
+TypeScript Source
+    ↓
+ts-morph (Parse to AST)
+    ↓
+Find Class Declarations
+    ↓
+Analyze Instance Members
+    ↓
+extractMetaFromMember()
+    ↓
+extractFromCallExpression() [Recursive]
+    ↓
+Parse DSL Primitives:
+  - transitionTo → target
+  - describe → description
+  - guarded → guards/cond
+  - action → actions array
+  - invoke → invoke services
+    ↓
+Aggregate Metadata
+    ↓
+Build State Nodes
+    ↓
+Assemble Chart
+    ↓
+XState-Compatible JSON
+```
+
+#### Key Functions (src/extract.ts)
+
+**`extractMetaFromMember(member, verbose)`**
+- Entry point for extracting metadata from a class member
+- Checks if member is a PropertyDeclaration with CallExpression initializer
+- Returns metadata object or null
+
+**`extractFromCallExpression(call, verbose)`**
+- Recursively parses nested DSL primitive calls
+- Switches on function name (transitionTo, describe, guarded, etc.)
+- Extracts arguments and composes metadata
+- Returns aggregated metadata object
+
+**`resolveClassName(node)`**
+- Resolves class name identifiers from AST nodes
+- Handles both `Identifier` and `TypeOfExpression` nodes
+
+**`parseObjectLiteral(obj)`**
+- Parses object literal expressions to plain JavaScript objects
+- Handles string, number, boolean literals
+- Recursively parses nested objects
+
+**`parseInvokeService(obj)`**
+- Specialized parser for invoke service metadata
+- Resolves onDone/onError to class names
+
+**`analyzeStateNode(classSymbol, verbose)`**
+- Analyzes all instance members of a class
+- Separates invoke metadata from on transitions
+- Builds state node object: `{ on: {...}, invoke: [...] }`
+
+**`extractMachine(config, project, verbose)`**
+- Orchestrates extraction for a single machine
+- Loads source file, finds classes, calls analyzeStateNode
+- Returns complete statechart object
+
+**`extractMachines(config)`**
+- Extracts multiple machines from configuration
+- Creates ts-morph Project, processes all machines
+- Returns array of statecharts
+
+---
+
+#### Runtime Extraction (Symbol-Based)
+
+**NEW**: Runtime metadata collection system that complements static extraction.
+
+##### Architecture
+
+Runtime extraction uses JavaScript Symbols to attach metadata directly to function objects at runtime:
+
+```typescript
+// When DSL primitive is called
+transitionTo(TargetState, implFn)
+  ↓
+attachRuntimeMeta(implFn, { target: "TargetState" })
+  ↓
+Object.defineProperty(implFn, RUNTIME_META, {
+  value: metadata,
+  enumerable: false,    // Invisible to iteration
+  configurable: true    // Allows composition
+})
+  ↓
+implFn[RUNTIME_META] = { target: "TargetState" }
+```
+
+##### Key Design Decisions
+
+1. **Symbol-based storage** - Unique, non-enumerable, no naming conflicts
+2. **Mutation with constraints** - Non-enumerable, immutable value, but configurable for composition
+3. **Metadata merging** - Nested DSL calls accumulate metadata on same function
+4. **Zero runtime cost** - Metadata only accessed during extraction, not execution
+
+##### Core Module (src/runtime-extract.ts)
+
+**`RUNTIME_META: Symbol`** - Non-enumerable symbol for metadata storage
+
+**`attachRuntimeMeta(fn, metadata)`** - Internal helper (not exported)
+- Reads existing `fn[RUNTIME_META]`
+- Merges with new metadata (smart merging for arrays)
+- Redefines property with merged value
+
+**`extractFunctionMetadata(fn)`** - Public API
+- Returns `fn[RUNTIME_META]` or null
+- Used for inspecting individual transitions
+
+**`extractStateNode(instance)`** - Public API
+- Iterates over instance properties
+- Filters for functions with metadata
+- Separates invoke services from transitions
+- Returns XState-compatible state node
+
+**`generateStatechart(states, config)`** - Public API
+- Takes object mapping state names to instances
+- Calls `extractStateNode()` for each
+- Assembles complete XState JSON
+
+**`extractFromInstance(instance, config)`** - Public API
+- Convenience wrapper for single-state extraction
+- Uses `constructor.name` as state name
+
+##### DSL Primitive Updates
+
+All DSL primitives in `src/primitives.ts` now call `attachRuntimeMeta()`:
+
+- `transitionTo()` → attaches `{ target: className }`
+- `describe()` → attaches `{ description: string }`
+- `guarded()` → attaches `{ guards: [guard] }` (mergeable)
+- `action()` → attaches `{ actions: [action] }` (mergeable)
+- `invoke()` → attaches `{ invoke: { src, onDone, onError } }`
+
+##### Comparison: Static vs Runtime
+
+| Feature | Static Extraction | Runtime Extraction |
+|---------|------------------|-------------------|
+| When | Build time | Runtime |
+| Input | TypeScript source | Running instances |
+| Dependencies | ts-morph | None (pure JS) |
+| Use Case | CI/CD, docs | Debugging, DevTools |
+| Dynamic values | ❌ Literals only | ✅ Resolved at runtime |
+| Overhead | Build time | ~40-80 bytes/function |
+
+**Recommendation**: Use both. Static for docs/CI, runtime for debugging.
+
+---
+
+#### Type-Level Metadata DSL
+
+The DSL primitives serve **four purposes** now:
+1. **Runtime**: Attach metadata via Symbols
+2. **Compile-time**: Type-level documentation and safety
+3. **Build-time**: Parsed by static extraction tool
+4. **Type branding**: Enable type inference and checking
+
+**Core Primitive Signatures**:
+
+```typescript
+// Declare target state
+transitionTo<T extends ClassConstructor, F>(target: T, impl: F)
+  : WithMeta<F, { target: T }>
+
+// Add description
+describe<F, M>(text: string, transition: WithMeta<F, M>)
+  : WithMeta<F, M & { description: string }>
+
+// Add guard condition
+guarded<F, M>(guard: GuardMeta, transition: WithMeta<F, M>)
+  : WithMeta<F, M & { guards: [typeof guard] }>
+
+// Async service invocation
+invoke<D, E, F>(service: InvokeMeta, impl: F)
+  : WithMeta<F, { invoke: typeof service }>
+
+// Side-effect action
+action<F, M>(action: ActionMeta, transition: WithMeta<F, M>)
+  : WithMeta<F, M & { actions: [typeof action] }>
+```
+
+**The META_KEY Branding**:
+```typescript
+const META_KEY = Symbol("MachineMeta");
+type WithMeta<F, M> = F & { [META_KEY]: M };
+```
+
+At runtime, this is completely erased. At build-time, the extraction tool:
+1. Finds the CallExpression in the AST
+2. Parses the function name and arguments
+3. Extracts literal values
+4. Ignores the type branding entirely
+
+#### Configuration System
+
+**MachineConfig**:
+```typescript
+interface MachineConfig {
+  input: string;           // Source file path
+  classes: string[];       // State class names
+  output?: string;         // Output file (optional)
+  id: string;             // Machine ID
+  initialState: string;   // Initial state class name
+  description?: string;   // Optional description
+}
+```
+
+**ExtractionConfig**:
+```typescript
+interface ExtractionConfig {
+  machines: MachineConfig[];
+  validate?: boolean;     // Validate against XState schema
+  format?: 'json' | 'mermaid' | 'both';
+  watch?: boolean;        // Watch mode
+  verbose?: boolean;      // Debug logging
+}
+```
+
+#### CLI Architecture (scripts/extract-statechart.ts)
+
+**Commander-based** with these features:
+- Argument parsing with type safety
+- Config file loading (TypeScript and JSON)
+- Watch mode using chokidar
+- File URL handling for cross-platform compatibility (Windows file:// URLs)
+- Validation against XState JSON schema (placeholder)
+- Mermaid diagram generation (planned)
+
+**Key Functions**:
+- `loadConfig()` - Loads .ts or .json config with proper module imports
+- `pathToFileURL()` - Converts Windows paths to file:// URLs
+- `writeOutput()` - Writes JSON or Mermaid to file/stdout
+- `extract()` - Main extraction orchestrator
+- `watch()` - Watch mode with chokidar
+
+#### Output Format
+
+XState v5 compatible JSON:
+```json
+{
+  "id": "machineName",
+  "initial": "InitialState",
+  "states": {
+    "StateName": {
+      "on": {
+        "eventName": {
+          "target": "TargetState",
+          "description": "...",
+          "cond": "guardName",
+          "actions": ["action1", "action2"]
+        }
+      },
+      "invoke": [{
+        "src": "serviceName",
+        "onDone": { "target": "SuccessState" },
+        "onError": { "target": "ErrorState" }
+      }]
+    }
+  }
+}
+```
+
+#### Limitations
+
+1. **Class-based machines only** - Functional machines not supported
+2. **Literal arguments required** - No computed values or variables
+3. **Source code must be available** - Can't extract from compiled JS
+4. **Guard/action implementations not extracted** - Only metadata/names
+
+#### Examples
+
+See `examples/` directory for annotated machines:
+- `authMachine.ts` - Full authentication flow with all primitives
+- `fetchMachine.ts` - Data fetching with invoke services
+- `formMachine.ts` - Multi-step wizard
+- `trafficLightMachine.ts` - Simple cyclic machine
+
+Run extraction: `npm run extract`
+
+Generated statecharts: `statecharts/*.json`
+
 ### Key Design Patterns
 
 #### Type-State Programming (THE CORE PARADIGM)
