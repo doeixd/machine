@@ -4,7 +4,7 @@
 
 # Machine
 
-A minimal, type-safe state machine library for TypeScript built on mathematical foundations.
+A minimal, type-safe state machine library for TypeScript.
 
 > **Philosophy**: Provide minimal primitives that capture the essence of finite state machines, with maximum type safety and flexibility. **Type-State Programming** is our core paradigm—we use TypeScript's type system itself to represent finite states, making illegal states unrepresentable and invalid transitions impossible to write. The compiler becomes your safety net, catching state-related bugs before your code ever runs.
 
