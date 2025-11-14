@@ -1,3 +1,5 @@
+[![npm version](https://badge.fury.io/js/@doeixd%2Fmachine.svg)](https://badge.fury.io/js/@doeixd%2Fmachine)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/doeixd/machine)
 
 # Machine
