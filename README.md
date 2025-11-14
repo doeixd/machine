@@ -1,3 +1,5 @@
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/doeixd/machine)
+
 # Machine
 
 A minimal, type-safe state machine library for TypeScript built on mathematical foundations.
@@ -52,6 +54,8 @@ type Machine<C extends object> = {
 - **Markov Property**: Transitions only access `this.context` (current state) and their arguments (input). No hidden state or history.
 
 **Flexibility**: Unlike rigid FSM implementations, you can choose your level of immutability. Want to mutate? You can. Want pure functions? You can. Want compile-time state validation? Type-State Programming gives you that.
+
+**Read more about our core principles:** [ 📖 Core Principles Guide ](./docs/principles.md)
 
 ## Quick Start
 
@@ -963,7 +967,7 @@ This library is designed to be extended:
 
 ## Comparison with Other Libraries
 
-> **📖 [Read the full in-depth comparison with XState](./XSTATE_COMPARISON.md)** - Comprehensive analysis of philosophy, features, API differences, strengths/weaknesses, use cases, and code examples.
+> **📖 [Read the full in-depth comparison with XState](./docs/XSTATE_COMPARISON.md)** - Comprehensive analysis of philosophy, features, API differences, strengths/weaknesses, use cases, and code examples.
 
 ### vs. XState (Summary)
 
