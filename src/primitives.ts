@@ -130,14 +130,15 @@ function attachRuntimeMeta(fn: any, metadata: Partial<RuntimeTransitionMeta>): v
   const merged: any = { ...existing, ...metadata };
 
   // Deep merge for array properties
+  // Prepend new items to preserve order (outer wraps first in call stack)
   if (metadata.guards && existing.guards) {
-    merged.guards = [...existing.guards, ...metadata.guards];
+    merged.guards = [...metadata.guards, ...existing.guards];
   } else if (metadata.guards) {
     merged.guards = [...metadata.guards];
   }
 
   if (metadata.actions && existing.actions) {
-    merged.actions = [...existing.actions, ...metadata.actions];
+    merged.actions = [...metadata.actions, ...existing.actions];
   } else if (metadata.actions) {
     merged.actions = [...metadata.actions];
   }

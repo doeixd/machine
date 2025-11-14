@@ -22,7 +22,7 @@ import {
   type Accessor,
   type Setter
 } from 'solid-js';
-import { createStore, type SetStoreFunction, type Store, produce } from 'solid-js/store';
+import { createStore, type SetStoreFunction, type Store } from 'solid-js/store';
 import { Machine, AsyncMachine, Event, Context, runMachine as runMachineCore } from './index';
 
 // =============================================================================
@@ -86,12 +86,12 @@ export function createMachine<M extends Machine<any>>(
   const { context, ...transitions } = machine();
 
   const handlers = Object.fromEntries(
-    Object.entries(transitions).map(([key, fn]) => [
+    Object.entries(transitions).map(([key]) => [
       key,
       (...args: any[]) => {
         const currentMachine = machine();
         const nextMachine = (currentMachine as any)[key](...args);
-        setMachine(() => nextMachine);
+        setMachine(nextMachine);
         return nextMachine;
       }
     ])
@@ -153,11 +153,11 @@ export function createMachineStore<M extends Machine<any>>(
   const { context, ...transitions } = initial;
 
   const handlers = Object.fromEntries(
-    Object.entries(transitions).map(([key, fn]) => [
+    Object.entries(transitions).map(([key]) => [
       key,
       (...args: any[]) => {
         const nextMachine = (store as any)[key](...args);
-        setStore(() => nextMachine);
+        setStore(nextMachine);
         return nextMachine;
       }
     ])
@@ -289,12 +289,12 @@ export function createMachineContext<C extends object, M extends Machine<C>>(
   const { context: _, ...transitions } = currentMachine;
 
   const handlers = Object.fromEntries(
-    Object.entries(transitions).map(([key, fn]) => [
+    Object.entries(transitions).map(([key]) => [
       key,
       (...args: any[]) => {
         const nextMachine = (currentMachine as any)[key](...args);
         currentMachine = nextMachine;
-        setContext(() => nextMachine.context);
+        setContext(nextMachine.context);
         return nextMachine;
       }
     ])
@@ -383,7 +383,7 @@ export function batchTransitions<M extends Machine<any>>(
 
   return batch(() => {
     const finalMachine = transitions.reduce((m, transition) => transition(m), machine);
-    setMachine(finalMachine);
+    setMachine(() => finalMachine);
     return finalMachine;
   });
 }
