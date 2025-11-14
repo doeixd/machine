@@ -63,6 +63,8 @@ type Machine<C extends object> = {
 
 ### Basic Counter (Simple State)
 
+**Immutable approach (recommended):**
+
 ```typescript
 import { createMachine } from "@doeixd/machine";
 
@@ -85,6 +87,26 @@ console.log(next.context.count); // 1
 // Original is untouched (immutability by default)
 console.log(counter.context.count); // 0
 ```
+
+**Mutable approach (also supported):**
+
+```typescript
+// If you prefer mutable state, just return `this`
+const counter = createMachine(
+  { count: 0 },
+  {
+    increment: function() {
+      (this.context as any).count++;
+      return this; // Return same instance
+    }
+  }
+);
+
+counter.increment();
+console.log(counter.context.count); // 1 (mutated in place)
+```
+
+This shows the **flexibility** of the library: immutability is the default pattern because it's safer, but you can choose mutability when it makes sense for your use case.
 
 ### Type-State Programming (Compile-Time State Safety)
 
