@@ -181,6 +181,50 @@ Creates a factory function from a template class instance.
     const createCounter = createMachineBuilder(new Counter({ count: 0 }));
     const counter1 = createCounter({ count: 50 });
     ```
+---
+### `createTransitionFactory()`
+Creates a factory for building type-safe transitions from pure context transformers.
+
+-   **Signature:** `function createTransitionFactory<C>(): (transformer) => TransitionFunction`
+-   **Use Case:** For functional-style machine construction where you want to separate data transformation logic from machine creation.
+-   **Example:**
+    ```typescript
+    const createTransition = createTransitionFactory<{ count: number }>();
+    const increment = createTransition(ctx => ({ count: ctx.count + 1 }));
+    const add = createTransition((ctx, amount: number) => ({ count: ctx.count + amount }));
+
+    const machine = createMachine({ count: 0 }, { increment, add });
+    ```
+---
+### `createTransitionExtender()`
+Creates a factory for functionally extending existing machines with new transitions.
+
+-   **Signature:** `function createTransitionExtender<M>(machine: M): ExtenderObject`
+-   **Use Case:** For progressive enhancement of machines through functional composition.
+-   **Example:**
+    ```typescript
+    const baseMachine = createMachine({ value: 10 }, {});
+    const extended = createTransitionExtender(baseMachine)
+      .addTransition('double', ctx => ({ value: ctx.value * 2 }))
+      .addTransition('reset', ctx => ({ value: 0 }));
+
+    const result = extended.machine.double().reset();
+    ```
+---
+### `createFunctionalMachine()`
+Creates a complete machine using a curried, two-step approach that separates data from behavior.
+
+-   **Signature:** `function createFunctionalMachine<C>(initialContext: C): (transformers) => Machine<C>`
+-   **Use Case:** For the most declarative machine construction where everything is defined as pure data transformations.
+-   **Example:**
+    ```typescript
+    const createCounter = createFunctionalMachine({ count: 0 });
+    const counter = createCounter({
+      increment: ctx => ({ count: ctx.count + 1 }),
+      add: (ctx, amount: number) => ({ count: ctx.count + amount }),
+      reset: ctx => ({ count: 0 })
+    });
+    ```
 
 <br />
 
@@ -382,6 +426,28 @@ Orchestrates machine logic over an external, framework-agnostic state store (lik
     // Both ensembles operate on the same global state without knowing about each other.
     authEnsemble.actions.login('user');
     cartEnsemble.actions.addItem({ id: 1, name: 'Book' });
+    ```
+---
+### `createEnsembleFactory()`
+Creates a higher-order factory function that captures your application's state store and discriminant logic, enabling consistent ensemble creation across large applications.
+
+-   **Signature:** `function createEnsembleFactory<C>(store: StateStore<C>, getDiscriminant): (factories) => Ensemble<...>`
+-   **Best for:** Large applications where you want to establish architectural consistency and separate infrastructure setup from feature business logic.
+-   **Example:**
+    ```typescript
+    // Set up your app's state environment once
+    const createAppEnsemble = createEnsembleFactory(globalStore, ctx => ctx.auth.status);
+
+    // Feature developers only provide business logic
+    const authEnsemble = createAppEnsemble({
+      loggedOut: ctx => createMachine(ctx, { login: () => globalStore.setContext({...}) }),
+      loggedIn: ctx => createMachine(ctx, { logout: () => globalStore.setContext({...}) })
+    });
+
+    const cartEnsemble = createAppEnsemble({
+      idle: ctx => createMachine(ctx, { addItem: item => globalStore.setContext({...}) }),
+      checkout: ctx => createMachine(ctx, { complete: () => globalStore.setContext({...}) })
+    });
     ```
 ---
 ### `createMutableMachine()`
