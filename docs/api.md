@@ -225,6 +225,27 @@ Creates a complete machine using a curried, two-step approach that separates dat
       reset: ctx => ({ count: 0 })
     });
     ```
+---
+### `state()`
+A smart, type-safe function that automatically chooses between traditional and functional machine creation patterns based on the arguments provided.
+
+-   **Signature:** `function state<C>(context: C): (transformers) => Machine<C>` (functional pattern)
+-   **Signature:** `function state<C, T>(context: C, transitions: T): Machine<C> & T` (traditional pattern)
+-   **Use Case:** When you want a single function that can handle both machine creation patterns intelligently.
+-   **Example:**
+    ```typescript
+    // Traditional pattern (with transitions object)
+    const machine1 = state({ count: 0 }, {
+      increment() { return createMachine({ count: this.count + 1 }, this); }
+    });
+
+    // Functional pattern (curried, with transformers)
+    const createCounter = state({ count: 0 });
+    const machine2 = createCounter({
+      increment: ctx => ({ count: ctx.count + 1 }),
+      add: (ctx, n: number) => ({ count: ctx.count + n })
+    });
+    ```
 
 <br />
 

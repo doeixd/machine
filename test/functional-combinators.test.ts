@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createMachine } from '../src/index';
-import { createTransitionFactory, createTransitionExtender, createFunctionalMachine } from '../src/functional-combinators';
+import { createTransitionFactory, createTransitionExtender, createFunctionalMachine, state } from '../src/functional-combinators';
 
 describe('createTransitionFactory', () => {
   it('should create a factory that generates type-safe transitions', () => {
@@ -385,5 +385,121 @@ describe('createFunctionalMachine', () => {
 
     const squared = multiplier.square();
     expect(squared.context.count).toBe(100);
+  });
+});
+
+describe('state()', () => {
+  it('should work as createMachine when called with 2 arguments (traditional pattern)', () => {
+    const machine = state({ count: 0 }, {
+      increment() {
+        return createMachine({ count: this.context.count + 1 }, this);
+      },
+      decrement() {
+        return createMachine({ count: this.context.count - 1 }, this);
+      }
+    });
+
+    expect(machine.context.count).toBe(0);
+    expect(typeof machine.increment).toBe('function');
+    expect(typeof machine.decrement).toBe('function');
+
+    const incremented = machine.increment();
+    expect(incremented.context.count).toBe(1);
+
+    const decremented = incremented.decrement();
+    expect(decremented.context.count).toBe(0);
+  });
+
+  it('should work as createFunctionalMachine when called with 1 argument (functional pattern)', () => {
+    const createCounter = state({ count: 0 });
+
+    // Should return a function that takes transformers
+    expect(typeof createCounter).toBe('function');
+
+    const counter = createCounter({
+      increment: (ctx) => ({ count: ctx.count + 1 }),
+      add: (ctx, amount: number) => ({ count: ctx.count + amount }),
+      reset: (ctx) => ({ count: 0 })
+    });
+
+    expect(counter.context.count).toBe(0);
+    expect(typeof counter.increment).toBe('function');
+    expect(typeof counter.add).toBe('function');
+    expect(typeof counter.reset).toBe('function');
+
+    const result = counter.increment().add(5).reset();
+    expect(result.context.count).toBe(0);
+  });
+
+  it('should maintain type safety in both patterns', () => {
+    // Traditional pattern
+    const traditional = state({ value: 'hello' }, {
+      uppercase() {
+        return createMachine({ value: this.context.value.toUpperCase() }, this);
+      }
+    });
+
+    // TypeScript should know about the uppercase method
+    const upper = traditional.uppercase();
+    expect(upper.context.value).toBe('HELLO');
+
+    // Functional pattern
+    const createStringMachine = state({ text: 'world' });
+    const functional = createStringMachine({
+      reverse: (ctx) => ({ text: ctx.text.split('').reverse().join('') }),
+      append: (ctx, suffix: string) => ({ text: ctx.text + suffix })
+    });
+
+    // TypeScript should know about reverse and append methods
+    const reversed = functional.reverse();
+    expect(reversed.context.text).toBe('dlrow');
+
+    const appended = functional.append('!');
+    expect(appended.context.text).toBe('world!');
+  });
+
+  it('should handle edge cases correctly', () => {
+    // Empty transitions object (should still work as traditional pattern)
+    const emptyTransitions = state({ count: 0 }, {});
+    expect(emptyTransitions.context.count).toBe(0);
+
+    // Complex context types
+    const complexContext = {
+      user: { name: 'Alice', age: 30 },
+      settings: { theme: 'dark' as const },
+      data: [1, 2, 3]
+    };
+
+    const complexMachine = state(complexContext, {
+      updateName(newName: string) {
+        return createMachine({
+          ...this.context,
+          user: { ...this.context.user, name: newName }
+        }, this);
+      }
+    });
+
+    const updated = complexMachine.updateName('Bob');
+    expect(updated.context.user.name).toBe('Bob');
+    expect(updated.context.settings.theme).toBe('dark');
+    expect(updated.context.data).toEqual([1, 2, 3]);
+  });
+
+  it('should work with async machines in traditional pattern', () => {
+    // Note: This tests that the function correctly delegates to createMachine
+    // which handles both sync and async patterns
+    const asyncMachine = state({ loading: false }, {
+      async fetchData() {
+        // Simulate async operation
+        return new Promise(resolve => {
+          setTimeout(() => {
+            resolve(createMachine({ loading: false }, this));
+          }, 1);
+        });
+      }
+    });
+
+    expect(asyncMachine.context.loading).toBe(false);
+    expect(typeof asyncMachine.fetchData).toBe('function');
   });
 });

@@ -794,5 +794,6 @@ export {
 export {
   createTransitionFactory,
   createTransitionExtender,
-  createFunctionalMachine
+  createFunctionalMachine,
+  state
 } from './functional-combinators';

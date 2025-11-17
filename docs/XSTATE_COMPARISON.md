@@ -831,3 +831,435 @@ They solve different problems and are highly complementary. A common and effecti
     *   Example: A machine to manage the state of a complex file upload component (`uploading`, `processing`, `complete`). When the upload is `complete`, its final action is to call `userStore.trigger.updateAvatar({ url: ... })`.
 
 In this model, `@xstate/store` is the central source of truth for data, and `@doeixd/machine` is the engine that manages the complex, temporary workflows that interact with that data.
+
+
+
+---
+
+
+# Why Not XState?
+
+### Understanding the Tradeoffs of a Statechart-First Library in a TypeScript-First World
+
+XState is a powerful, mature, feature-rich library. Its statechart model is excellent for workflows involving complex parallelism, formal modeling, and visual alignment with UX designers.
+
+But XState also brings substantial *weight*, *complexity*, and *runtime-centric constraints* that are not ideal for modern TypeScript-heavy applications.
+
+`@doeixd/machine` exists because **most applications don’t need a formal statechart interpreter** — they need:
+
+* **Type-level guarantees**
+* **Impossible states made unrepresentable**
+* **Async-first transitions**
+* **Simple mental models**
+* **Small runtime footprint**
+* **Composable JS primitives instead of DSL config objects**
+
+This page explains **where XState struggles**, **why Machine approaches the problem differently**, and **when the difference matters**.
+
+---
+
+ ## 1. XState’s Core Pain Points
+
+XState is intentionally built around SCXML semantics. This gives it power — but also baggage.
+
+---
+
+ ### ❌ 1. A Verbose, Complex, JSON-Like DSL
+
+XState machines are defined via deeply nested config objects:
+
+```ts
+createMachine({
+  initial: "idle",
+  states: {
+    idle: { on: { FETCH: "loading" } },
+    loading: {
+      invoke: {
+        src: "getData",
+        onDone: "success",
+        onError: "error"
+      }
+    }
+  }
+})
+```
+
+This DSL is:
+
+* verbose
+* stringly-typed
+* rigid
+* inherently separated from the *real code* handling transitions
+
+You end up maintaining:
+
+* guards in one section
+* services in another
+* actions in another
+* transitions elsewhere
+* state names as strings
+* events as strings
+
+This becomes brittle at scale.
+
+---
+
+ ### ❌ 2. TypeScript Support Is Derived, Not Fundamental
+
+Even in XState v5, TypeScript types are generated *after* the machine is created.
+
+This means:
+
+* illegal transitions are still **possible at compile time**
+* event shapes are not tied to state types
+* context can accidentally be mutated or mis-typed
+* editors cannot fully infer safe transitions based on current state
+
+Machine takes the opposite approach:
+
+> **First define your states as real TypeScript types, then transitions become methods, and illegal states become unrepresentable.**
+
+---
+
+ ### ❌ 3. Async Logic Requires “Invoke”, Which Is Awkward
+
+XState forces async logic into “invoke” blocks:
+
+```ts
+invoke: {
+  src: "fetchUser",
+  onDone: "success",
+  onError: "error"
+}
+```
+
+This is:
+
+* not idiomatic
+* redundant
+* not compatible with normal async/await code
+* difficult to debug
+
+Machine uses normal JavaScript:
+
+```ts
+async load() {
+  const user = await fetchUser();
+  return Loaded(user);
+}
+```
+
+Cleaner. Direct. Type-safe.
+
+---
+
+ ### ❌ 4. Runtime-Heavy Interpreter Model
+
+XState includes:
+
+* an event bus
+* action queues
+* event bubbling
+* an Exec/IO semantics layer
+* Activity management
+* History nodes
+* Serializable behavior trees
+* A full SCXML interpreter
+
+This is great **if you need a statechart engine** — but most frontend apps do not.
+
+Machine:
+
+* has **no interpreter**
+* machines are **just functions**
+* async is handled via **runner** (only when needed)
+* runtime overhead is near **zero**
+
+---
+
+ ### ❌ 5. Difficult to Refactor
+
+Renaming a state in XState means:
+
+* changing strings in the config
+* updating the event handlers
+* fixing inferred types
+* updating guard/action/service config
+
+In Machine, each state is a function:
+
+```ts
+function Loading() { ... }
+```
+
+Refactor by renaming the function. Done.
+
+---
+
+ ### ❌ 6. Visualizer Is Locked to XState’s DSL
+
+XState’s visual tooling is powerful — but only works with the XState DSL.
+
+Machine supports **extraction**, so you can still use Stately, but without being forced into the SCXML semantics.
+
+---
+
+ ## 2. Why Machine Exists
+
+Machine asks:
+
+> “What if we built a state machine library for **TypeScript**, not for SCXML?”
+
+And answers:
+
+* No DSL
+* No config objects
+* No interpreter
+* No magic strings
+* No illegal transitions
+* Every state is a real TS type
+* Every transition is a TS method
+* Async uses real JS
+* Parallel states via composition, not SCXML runtime
+
+It's not a replacement for XState’s statecharts — it’s a different philosophy entirely.
+
+---
+
+ ## 3. Visual Diagram – XState vs Machine
+
+## **Architecture Comparison Diagram**
+
+```
+                   XSTATE                              MACHINE
+               (Statechart Engine)                (TS-Native Type-State)
+
+          ┌──────────────────────┐           ┌───────────────────────┐
+          │   Config Object DSL  │           │   Functions as States  │
+          └───────────┬──────────┘           └──────────┬────────────┘
+                      │                                 │
+             ┌────────▼────────┐                ┌───────▼────────┐
+             │ Runtime Builder │                │ Typed Machine   │
+             └────────┬────────┘                └────────┬────────┘
+                      │                                 │
+             ┌────────▼────────┐                ┌───────▼────────┐
+             │  Interpreter     │                │  Transitions    │
+             │  (SCXML Engine) │                │  as Methods     │
+             └────────┬────────┘                └────────┬────────┘
+                      │                                 │
+             ┌────────▼────────┐                ┌────────▼─────────┐
+             │ Action Queue     │                │ Pure JS/TS Logic │
+             └──────────────────┘                └───────────────────┘
+```
+
+## **One-line Summary**
+
+> **XState models behavior through a runtime interpreter.
+> Machine models behavior directly in TypeScript’s type system.**
+
+---
+
+ # Migration Guide
+
+# “Moving from XState → Machine”
+
+This guide assumes familiarity with XState’s patterns and maps them into Machine equivalents.
+
+---
+
+ ## 1. Basic Machine
+
+## XState
+
+```ts
+const m = createMachine({
+  initial: "idle",
+  states: { idle: {}, loading: {} }
+});
+```
+
+## Machine
+
+```ts
+function Idle() {
+  return createMachine({ type: "idle" });
+}
+function Loading() {
+  return createMachine({ type: "loading" });
+}
+```
+
+---
+
+ ## 2. Simple Transition
+
+## XState
+
+```ts
+idle: {
+  on: { FETCH: "loading" }
+}
+```
+
+## Machine
+
+```ts
+function Idle() {
+  return createMachine({ type: "idle" }, {
+    fetch() {
+      return Loading();
+    }
+  });
+}
+```
+
+---
+
+ ## 3. Context
+
+## XState
+
+```ts
+context: { count: 0 },
+actions: {
+  inc: (ctx) => ctx.count++
+}
+```
+
+## Machine
+
+```ts
+function Idle(count = 0) {
+  return createMachine({ type: "idle", count }, {
+    inc() {
+      return Idle(count + 1);
+    }
+  });
+}
+```
+
+---
+
+ ## 4. Async (Invoke)
+
+## XState
+
+```ts
+loading: {
+  invoke: {
+    src: "fetchData",
+    onDone: "success",
+    onError: "error"
+  }
+}
+```
+
+## Machine
+
+```ts
+function Loading() {
+  return createMachine({ type: "loading" }, {
+    async resolve() {
+      const data = await fetchData();
+      return Success(data);
+    },
+    reject() { return Error(); }
+  });
+}
+```
+
+---
+
+ ## 5. Guards
+
+## XState
+
+```ts
+on: {
+  NEXT: { target: "confirm", cond: "isValid" }
+}
+```
+
+## Machine
+
+```ts
+next() {
+  if (!isValid(this)) return this;  // or return no-op
+  return Confirm();
+}
+```
+
+---
+
+ ## 6. Parallel States
+
+## XState
+
+```ts
+type: "parallel"
+```
+
+## Machine
+
+Use ensembles:
+
+```ts
+const checkout = createEnsemble({
+  payment: PaymentIdle(),
+  shipping: ShippingSelect()
+});
+```
+
+---
+
+ ## 7. Hierarchical States
+
+XState uses nested states.
+Machine uses simple composition or factories:
+
+```ts
+function Parent() {
+  return createMachine({ type: "parent" }, {
+    child() { return Child(); }
+  });
+}
+```
+
+---
+
+ ## 8. Final States
+
+## XState
+
+```ts
+success: { type: "final" }
+```
+
+## Machine
+
+State becomes “terminal” by not defining transitions.
+
+```ts
+function Success(data) {
+  return createMachine({ type: "success", data });
+}
+```
+
+
+ # Summary
+
+Migrating from XState → Machine generally provides:
+
+* **less config, more code**
+* **stronger type guarantees**
+* **simpler mental model**
+* **no illegal transitions**
+* **async as natural JS**
+* **parallel/hierarchy via composition**
+* **dramatically lower runtime cost**
+
+Everything becomes:
+- smaller
+- safer
+- clearer
+- more TypeScript-native

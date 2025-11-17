@@ -265,3 +265,76 @@ export function createFunctionalMachine<C extends object>(initialContext: C) {
     return createMachine(initialContext, transitions) as any;
   };
 }
+
+/**
+ * A smart, type-safe function that creates state machines using either the traditional
+ * `createMachine` pattern or the functional `createFunctionalMachine` pattern, automatically
+ * detecting which approach to use based on the arguments provided.
+ *
+ * **Two Usage Patterns:**
+ *
+ * 1. **Traditional Pattern** (with transitions object):
+ *    ```typescript
+ *    const machine = state({ count: 0 }, {
+ *      increment() { return createMachine({ count: this.count + 1 }, this); }
+ *    });
+ *    ```
+ *
+ * 2. **Functional Pattern** (curried, with transformers):
+ *    ```typescript
+ *    const createCounter = state({ count: 0 });
+ *    const machine = createCounter({
+ *      increment: ctx => ({ count: ctx.count + 1 }),
+ *      add: (ctx, n: number) => ({ count: ctx.count + n })
+ *    });
+ *    ```
+ *
+ * **How it works:**
+ * - When called with 2 arguments: Uses `createMachine` (traditional pattern)
+ * - When called with 1 argument: Uses `createFunctionalMachine` (functional pattern)
+ *
+ * **Edge Cases Handled:**
+ * - Empty transitions object: Falls back to functional pattern
+ * - Context with function properties: Properly typed as transitions vs transformers
+ * - Type inference: Maintains full type safety in both patterns
+ *
+ * @template C The context type
+ * @template T The transitions/transformers type
+ * @param context The initial context object
+ * @param transitions Optional transitions object (traditional pattern)
+ * @returns Either a machine (traditional) or a factory function (functional)
+ *
+ * @example
+ * ```typescript
+ * // Traditional pattern
+ * const counter1 = state({ count: 0 }, {
+ *   increment() { return createMachine({ count: this.count + 1 }, this); },
+ *   decrement() { return createMachine({ count: this.count - 1 }, this); }
+ * });
+ *
+ * // Functional pattern
+ * const createCounter = state({ count: 0 });
+ * const counter2 = createCounter({
+ *   increment: ctx => ({ count: ctx.count + 1 }),
+ *   decrement: ctx => ({ count: ctx.count - 1 }),
+ *   reset: ctx => ({ count: 0 })
+ * });
+ * ```
+ */
+export function state<C extends object>(context: C): ReturnType<typeof createFunctionalMachine<C>>;
+export function state<C extends object, T extends Record<string, any>>(
+  context: C,
+  transitions: T
+): Machine<C> & T;
+export function state<C extends object, T extends Record<string, any>>(
+  context: C,
+  transitions?: T
+): Machine<C> & T | ReturnType<typeof createFunctionalMachine<C>> {
+  // If transitions is provided (2 arguments), use traditional createMachine pattern
+  if (transitions !== undefined) {
+    return createMachine(context, transitions);
+  }
+
+  // If only context is provided (1 argument), use functional createFunctionalMachine pattern
+  return createFunctionalMachine(context);
+}

@@ -42,14 +42,15 @@ npm run clean
 The codebase is organized into focused, single-purpose modules:
 
 1. **`src/index.ts`** - Core library exports
-   - `Machine<C>` and `AsyncMachine<C>` types - fundamental machine shapes
-   - `createMachine()` / `createAsyncMachine()` - factory functions for creating machines
-   - `runMachine()` - the runtime "interpreter" for async machines with event dispatch
-   - `setContext()` - immutably update machine context
-   - `overrideTransitions()` / `extendTransitions()` - compose/decorate machines
-   - `createMachineBuilder()` - create factory functions from template machines
-   - `MachineBase` - optional OOP base class
-   - Type utilities: `Context<M>`, `Event<M>`, `Transitions<M>`, etc.
+    - `Machine<C>` and `AsyncMachine<C>` types - fundamental machine shapes
+    - `createMachine()` / `createAsyncMachine()` - factory functions for creating machines
+    - `state()` - smart function that chooses between `createMachine` or `createFunctionalMachine` based on arguments
+    - `runMachine()` - the runtime "interpreter" for async machines with event dispatch
+    - `setContext()` - immutably update machine context
+    - `overrideTransitions()` / `extendTransitions()` - compose/decorate machines
+    - `createMachineBuilder()` - create factory functions from template machines
+    - `MachineBase` - optional OOP base class
+    - Type utilities: `Context<M>`, `Event<M>`, `Transitions<M>`, etc.
 
 2. **`src/primitives.ts`** - Type-level metadata DSL
    - Annotation functions like `transitionTo()`, `guard()`, `guardAsync()`, `invoke()`, `action()`, `describe()`
@@ -539,6 +540,23 @@ const counter = createMachine({ count: 0 }, {
 });
 ```
 
+### Using the Smart `state()` Function
+The `state()` function automatically chooses the right machine creation pattern:
+
+```typescript
+// Traditional pattern (like createMachine)
+const machine1 = state({ count: 0 }, {
+  increment() { return state({ count: this.context.count + 1 }, this); }
+});
+
+// Functional pattern (like createFunctionalMachine)
+const createCounter = state({ count: 0 });
+const machine2 = createCounter({
+  increment: ctx => ({ count: ctx.count + 1 }),
+  add: (ctx, n: number) => ({ count: ctx.count + n })
+});
+```
+
 ### Creating a Type-State Machine
 Define types first, then create factory functions that return those types.
 
@@ -572,6 +590,7 @@ Use `overrideTransitions()` to mock transitions in tests.
 - `createTransitionFactory<C>()` - Curried factory for building type-safe transitions from pure context transformers
 - `createTransitionExtender<M>(machine)` - Functional composition for extending existing machines with new transitions
 - `createFunctionalMachine<C>(initialContext)` - Curried creator for pure functional machines using declarative data transformations
+- `state()` - Smart function that automatically chooses between `createMachine` or `createFunctionalMachine` based on arguments
 
 ### Type Utilities
 - `BaseMachine<C>` - Base type that both Machine and AsyncMachine extend
