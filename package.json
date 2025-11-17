@@ -71,7 +71,7 @@
     "watch": "pridepack watch",
     "start": "pridepack start",
     "dev": "pridepack dev",
-    "test": "vitest --test",
+    "test": "vitest run",
     "extract": "tsx scripts/extract-statechart.ts --config .statechart.config.ts",
     "extract:watch": "tsx scripts/extract-statechart.ts --config .statechart.config.ts --watch",
     "extract:validate": "tsx scripts/extract-statechart.ts --config .statechart.config.ts --validate",

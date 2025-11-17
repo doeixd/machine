@@ -4,6 +4,7 @@
  * Tests demonstrating the new hierarchical and parallel machine extraction capabilities.
  */
 
+import { describe, it, expect, beforeEach } from 'vitest';
 import { Project } from 'ts-morph';
 import { extractMachine, type MachineConfig } from '../src/extract';
 
@@ -18,8 +19,30 @@ describe('Advanced Statechart Extraction', () => {
 
   describe('Parallel Machines', () => {
     it('should extract parallel regions with correct structure', () => {
+      // Create test source file with parallel state classes
+      const testSource = project.createSourceFile('test-parallel.ts', `
+        import { MachineBase } from './src/index';
+        import { transitionTo } from './src/primitives';
+
+        class StateA extends MachineBase<{ value: string }> {
+          next = transitionTo(StateB, () => new StateB({ value: 'b' }));
+        }
+
+        class StateB extends MachineBase<{ value: string }> {
+          next = transitionTo(StateA, () => new StateA({ value: 'a' }));
+        }
+
+        class StateC extends MachineBase<{ count: number }> {
+          next = transitionTo(StateD, () => new StateD({ count: 1 }));
+        }
+
+        class StateD extends MachineBase<{ count: number }> {
+          next = transitionTo(StateC, () => new StateC({ count: 0 }));
+        }
+      `);
+
       const config: MachineConfig = {
-        input: 'examples/trafficLightMachine.ts',
+        input: 'test-parallel.ts',
         id: 'parallelExample',
         description: 'Example parallel machine',
         parallel: {
@@ -52,8 +75,29 @@ describe('Advanced Statechart Extraction', () => {
     });
 
     it('should have region states nested under initial property', () => {
+      // Create test source file with font style classes
+      const testSource = project.createSourceFile('test-font-style.ts', `
+        import { MachineBase } from './src/index';
+        import { transitionTo } from './src/primitives';
+
+        class Normal extends MachineBase<{ style: string }> {
+          italic = transitionTo(Italic, () => new Italic({ style: 'italic' }));
+          bold = transitionTo(Bold, () => new Bold({ style: 'bold' }));
+        }
+
+        class Italic extends MachineBase<{ style: string }> {
+          normal = transitionTo(Normal, () => new Normal({ style: 'normal' }));
+          bold = transitionTo(Bold, () => new Bold({ style: 'bold' }));
+        }
+
+        class Bold extends MachineBase<{ style: string }> {
+          normal = transitionTo(Normal, () => new Normal({ style: 'normal' }));
+          italic = transitionTo(Italic, () => new Italic({ style: 'italic' }));
+        }
+      `);
+
       const config: MachineConfig = {
-        input: 'examples/trafficLightMachine.ts',
+        input: 'test-font-style.ts',
         id: 'parallelStates',
         parallel: {
           regions: [
@@ -78,8 +122,30 @@ describe('Advanced Statechart Extraction', () => {
 
   describe('Hierarchical Machines', () => {
     it('should extract hierarchical machines with nested states', () => {
+      // Create test source file with hierarchical state classes
+      const testSource = project.createSourceFile('test-hierarchical.ts', `
+        import { MachineBase } from './src/index';
+        import { transitionTo } from './src/primitives';
+
+        class LoggedOutMachine extends MachineBase<{ status: string }> {
+          login = transitionTo(LoggedInMachine, () => new LoggedInMachine({ status: 'loggedIn' }));
+        }
+
+        class LoggedInMachine extends MachineBase<{ status: string }> {
+          logout = transitionTo(LoggedOutMachine, () => new LoggedOutMachine({ status: 'loggedOut' }));
+        }
+
+        class ChildState1 extends MachineBase<{ value: number }> {
+          next = transitionTo(ChildState2, () => new ChildState2({ value: 2 }));
+        }
+
+        class ChildState2 extends MachineBase<{ value: number }> {
+          next = transitionTo(ChildState1, () => new ChildState1({ value: 1 }));
+        }
+      `);
+
       const config: MachineConfig = {
-        input: 'examples/authMachine.ts',
+        input: 'test-hierarchical.ts',
         classes: ['LoggedOutMachine', 'LoggedInMachine'],
         output: undefined,
         id: 'hierarchicalAuth',
@@ -104,8 +170,30 @@ describe('Advanced Statechart Extraction', () => {
     });
 
     it('should not add children to non-initial states', () => {
+      // Create test source file with hierarchical state classes
+      const testSource = project.createSourceFile('test-mixed-hierarchy.ts', `
+        import { MachineBase } from './src/index';
+        import { transitionTo } from './src/primitives';
+
+        class LoggedOutMachine extends MachineBase<{ status: string }> {
+          login = transitionTo(LoggedInMachine, () => new LoggedInMachine({ status: 'loggedIn' }));
+        }
+
+        class LoggedInMachine extends MachineBase<{ status: string }> {
+          logout = transitionTo(LoggedOutMachine, () => new LoggedOutMachine({ status: 'loggedOut' }));
+        }
+
+        class Child1 extends MachineBase<{ value: number }> {
+          next = transitionTo(Child2, () => new Child2({ value: 2 }));
+        }
+
+        class Child2 extends MachineBase<{ value: number }> {
+          next = transitionTo(Child1, () => new Child1({ value: 1 }));
+        }
+      `);
+
       const config: MachineConfig = {
-        input: 'examples/authMachine.ts',
+        input: 'test-mixed-hierarchy.ts',
         classes: ['LoggedOutMachine', 'LoggedInMachine'],
         id: 'mixedHierarchy',
         initialState: 'LoggedOutMachine',
@@ -163,8 +251,30 @@ describe('Advanced Statechart Extraction', () => {
 
   describe('Metadata Extraction in Hierarchical Contexts', () => {
     it('should extract transition metadata from child states', () => {
+      // Create test source file with hierarchical state classes with metadata
+      const testSource = project.createSourceFile('test-child-meta.ts', `
+        import { MachineBase } from './src/index';
+        import { transitionTo, describe } from './src/primitives';
+
+        class LoggedInMachine extends MachineBase<{ status: string }> {
+          logout = transitionTo(LoggedOutMachine, () => new LoggedOutMachine({ status: 'loggedOut' }));
+        }
+
+        class LoggedOutMachine extends MachineBase<{ status: string }> {
+          login = transitionTo(LoggedInMachine, () => new LoggedInMachine({ status: 'loggedIn' }));
+        }
+
+        class ViewMode extends MachineBase<{ mode: string }> {
+          edit = describe('Switch to edit mode', transitionTo(EditMode, () => new EditMode({ mode: 'edit' })));
+        }
+
+        class EditMode extends MachineBase<{ mode: string }> {
+          view = describe('Switch to view mode', transitionTo(ViewMode, () => new ViewMode({ mode: 'view' })));
+        }
+      `);
+
       const config: MachineConfig = {
-        input: 'examples/authMachine.ts',
+        input: 'test-child-meta.ts',
         classes: ['LoggedInMachine'],
         id: 'withChildMeta',
         initialState: 'LoggedInMachine',

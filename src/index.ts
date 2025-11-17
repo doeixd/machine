@@ -579,6 +579,49 @@ export * from './multi'
 export * from './higher-order'
 
 // =============================================================================
+// SECTION: MIDDLEWARE & INTERCEPTION
+// =============================================================================
+
+export {
+  createMiddleware,
+  withLogging,
+  withAnalytics,
+  withValidation,
+  withPermissions,
+  withErrorReporting,
+  withPerformanceMonitoring,
+  withRetry,
+  withHistory,
+  withSnapshot,
+  withTimeTravel,
+  compose,
+  composeTyped,
+  createPipeline,
+  createMiddlewareRegistry,
+  when,
+  inDevelopment,
+  whenContext,
+  combine,
+  branch,
+  isMiddlewareFn,
+  isConditionalMiddleware,
+  createCustomMiddleware,
+  type MiddlewareHooks,
+  type MiddlewareOptions,
+  type MiddlewareContext,
+  type MiddlewareResult,
+  type MiddlewareError,
+  type HistoryEntry,
+  type ContextSnapshot,
+  type Serializer,
+  type MiddlewareFn,
+  type ConditionalMiddleware,
+  type NamedMiddleware,
+  type PipelineConfig,
+  type PipelineResult
+} from './middleware';
+
+// =============================================================================
 // SECTION: UTILITIES & HELPERS
 // =============================================================================
 

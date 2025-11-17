@@ -1,0 +1,19 @@
+
+> @doeixd/machine@0.0.7 build
+> pridepack build
+
+- "[34mdist/esm/development/index.js.map[39m": [32m232 kB[39m
+- "[34mdist/esm/development/index.js[39m": [32m54.1 kB[39m
+- "[34mdist/esm/production/index.js[39m": [32m24.6 kB[39m
+- "[34mdist/cjs/development/index.js.map[39m": [32m232 kB[39m
+- "[34mdist/cjs/development/index.js[39m": [32m56.4 kB[39m
+- "[34mdist/cjs/production/index.js[39m": [32m24.9 kB[39m
+[31m✖[39m [34msrc\extract.ts[39m ([33m110[39m, [33m10[39m): '_typeToJson' is declared but its value is never read.
+[31m✖[39m [34msrc\middleware.ts[39m ([33m6[39m, [33m15[39m): 'Machine' is declared but never used.
+[31m✖[39m [34msrc\middleware.ts[39m ([33m6[39m, [33m24[39m): 'AsyncMachine' is declared but never used.
+[31m✖[39m [34msrc\middleware.ts[39m ([33m6[39m, [33m60[39m): 'MaybePromise' is declared but never used.
+[31m✖[39m [34msrc\middleware.ts[39m ([33m580[39m, [33m13[39m): Not all code paths return a value.
+[31m✖[39m [34msrc\middleware.ts[39m ([33m619[39m, [33m13[39m): Not all code paths return a value.
+[31m✖[39m [34msrc\middleware.ts[39m ([33m713[39m, [33m12[39m): Not all code paths return a value.
+[31m✖[39m [34msrc\middleware.ts[39m ([33m880[39m, [33m13[39m): Not all code paths return a value.
+[31m✖[39m [34msrc\middleware.ts[39m ([33m1058[39m, [33m30[39m): 'C' is declared but its value is never read.

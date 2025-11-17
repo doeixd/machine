@@ -1,0 +1,20 @@
+
+> @doeixd/machine@0.0.7 test
+> vitest run test/middleware-history.test.ts
+
+
+[1m[7m[36m RUN [39m[27m[22m [36mv2.1.9 [39m[90mc:/Users/Patrick/machine[39m
+
+ [31m❯[39m test/middleware-history.test.ts [2m([22m[2m18 tests[22m[2m | [22m[31m3 failed[39m[2m)[22m[90m 18[2mms[22m[39m
+[31m   [31m×[31m withTimeTravel[2m > [22mshould track both history and snapshots[90m 7[2mms[22m[31m[39m
+[31m     → Target cannot be null or undefined.[39m
+[31m   [31m×[31m withTimeTravel[2m > [22mshould restore to previous state[90m 1[2mms[22m[31m[39m
+[31m     → Cannot read properties of undefined (reading '0')[39m
+[31m   [31m×[31m withTimeTravel[2m > [22mshould replay from snapshot[90m 0[2mms[22m[31m[39m
+[31m     → tracker.replayFrom is not a function[39m
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m3 failed[39m[22m[2m | [22m[1m[32m15 passed[39m[22m[90m (18)[39m
+[2m   Start at [22m 08:31:56
+[2m   Duration [22m 1.03s[2m (transform 170ms, setup 0ms, collect 507ms, tests 18ms, environment 0ms, prepare 172ms)[22m
+

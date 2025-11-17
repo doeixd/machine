@@ -5,7 +5,8 @@
       "Bash(npm test:*)",
       "WebSearch",
       "Bash(npm run extract:*)",
-      "Bash(node debug-test.js:*)"
+      "Bash(node debug-test.js:*)",
+      "Bash(npx vitest:*)"
     ],
     "deny": [],
     "ask": []
