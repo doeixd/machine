@@ -568,6 +568,11 @@ Use `overrideTransitions()` to mock transitions in tests.
 - `hasState<M, K, V>(machine, key, value)` - Type guard for state checking with type narrowing
 - `createMachineFactory<C>()` - Higher-order function for creating machines with pure context transformers
 
+### Functional Combinators (`src/functional-combinators.ts`)
+- `createTransitionFactory<C>()` - Curried factory for building type-safe transitions from pure context transformers
+- `createTransitionExtender<M>(machine)` - Functional composition for extending existing machines with new transitions
+- `createFunctionalMachine<C>(initialContext)` - Curried creator for pure functional machines using declarative data transformations
+
 ### Type Utilities
 - `BaseMachine<C>` - Base type that both Machine and AsyncMachine extend
 - `TransitionNames<M>` - Extracts transition names as string union

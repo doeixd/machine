@@ -3,6 +3,7 @@ import { createMachine } from '../src/index';
 import {
   createRunner,
   createEnsemble,
+  createEnsembleFactory,
   runWithRunner,
   runWithEnsemble,
   MultiMachineBase,
@@ -866,6 +867,113 @@ describe('createMultiMachine', () => {
     expect('count' in machine).toBe(true);
     expect('increment' in machine).toBe(true);
     expect('nonExistent' in machine).toBe(false);
+  });
+});
+
+// ============================================================================
+// ENSEMBLE FACTORY TESTS
+// ============================================================================
+
+describe('createEnsembleFactory', () => {
+  it('should create a factory that captures store and discriminant', () => {
+    let context: { status: 'idle' | 'loading' } = { status: 'idle' };
+    const store = {
+      getContext: () => context,
+      setContext: (newCtx: typeof context) => { context = newCtx; }
+    };
+
+    const createEnsembleForApp = createEnsembleFactory(store, (ctx) => ctx.status);
+
+    const factories = {
+      idle: (ctx: typeof context) => createMachine(ctx, {
+        start: () => store.setContext({ status: 'loading' })
+      }),
+      loading: (ctx: typeof context) => createMachine(ctx, {
+        stop: () => store.setContext({ status: 'idle' })
+      })
+    };
+
+    const ensemble = createEnsembleForApp(factories);
+
+    expect(ensemble.context).toEqual({ status: 'idle' });
+    expect(typeof ensemble.actions.start).toBe('function');
+  });
+
+  it('should allow creating multiple ensembles with the same environment', () => {
+    let context1: { status: 'idle' | 'active' } = { status: 'idle' };
+    let context2: { status: 'idle' | 'active' } = { status: 'idle' };
+
+    const store1 = {
+      getContext: () => context1,
+      setContext: (newCtx: typeof context1) => { context1 = newCtx; }
+    };
+
+    const store2 = {
+      getContext: () => context2,
+      setContext: (newCtx: typeof context2) => { context2 = newCtx; }
+    };
+
+    // Create separate factories for each store
+    const createEnsembleForApp1 = createEnsembleFactory(store1, (ctx) => ctx.status);
+    const createEnsembleForApp2 = createEnsembleFactory(store2, (ctx) => ctx.status);
+
+    const factories1 = {
+      idle: (ctx: typeof context1) => createMachine(ctx, {
+        activate: () => store1.setContext({ status: 'active' })
+      }),
+      active: (ctx: typeof context1) => createMachine(ctx, {
+        deactivate: () => store1.setContext({ status: 'idle' })
+      })
+    };
+
+    const factories2 = {
+      idle: (ctx: typeof context2) => createMachine(ctx, {
+        activate: () => store2.setContext({ status: 'active' })
+      }),
+      active: (ctx: typeof context2) => createMachine(ctx, {
+        deactivate: () => store2.setContext({ status: 'idle' })
+      })
+    };
+
+    const ensemble1 = createEnsembleForApp1(factories1);
+    const ensemble2 = createEnsembleForApp2(factories2);
+
+    // Both ensembles should work independently
+    ensemble1.actions.activate();
+    expect(ensemble1.context.status).toBe('active');
+    expect(ensemble2.context.status).toBe('idle'); // unchanged
+
+    ensemble2.actions.activate();
+    expect(ensemble1.context.status).toBe('active');
+    expect(ensemble2.context.status).toBe('active');
+  });
+
+  it('should maintain type safety across factory calls', () => {
+    let context: { status: 'idle' | 'loading'; data?: string } = { status: 'idle' };
+    const store = {
+      getContext: () => context,
+      setContext: (newCtx: typeof context) => { context = newCtx; }
+    };
+
+    const createEnsembleForApp = createEnsembleFactory(store, (ctx) => ctx.status);
+
+    const factories = {
+      idle: (ctx: typeof context) => createMachine(ctx, {
+        fetch: (url: string) => store.setContext({ status: 'loading', data: url })
+      }),
+      loading: (ctx: typeof context) => createMachine(ctx, {
+        complete: (result: string) => store.setContext({ status: 'idle', data: result })
+      })
+    };
+
+    const ensemble = createEnsembleForApp(factories);
+
+    // TypeScript should enforce correct parameter types
+    ensemble.actions.fetch('https://api.example.com');
+    expect(ensemble.context.data).toBe('https://api.example.com');
+
+    ensemble.actions.complete('success');
+    expect(ensemble.context.data).toBe('success');
   });
 });
 

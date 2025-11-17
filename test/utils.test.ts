@@ -3,6 +3,7 @@ import { createMachine, createAsyncMachine } from '../src/index';
 import {
   isState,
   createEvent,
+  createTransition,
   mergeContext,
   pipeTransitions,
   logState,
@@ -437,5 +438,80 @@ describe('sequence', () => {
     expect(() => {
       sequence([], () => true);
     }).toThrow('Sequence must contain at least one machine');
+  });
+});
+
+describe('createTransition', () => {
+  it('should create a transition function that transforms context', () => {
+    const transitions = {
+      increment: createTransition(
+        () => transitions,
+        (ctx: { count: number }) => ({ count: ctx.count + 1 })
+      ),
+    };
+
+    const machine = createMachine({ count: 0 }, transitions);
+    const nextMachine = machine.increment();
+
+    expect(nextMachine.context.count).toBe(1);
+    expect(nextMachine).not.toBe(machine); // Should be a new instance
+  });
+
+  it('should work with arguments', () => {
+    const transitions = {
+      add: createTransition(
+        () => transitions,
+        (ctx: { count: number }, n: number) => ({ count: ctx.count + n })
+      ),
+    };
+
+    const machine = createMachine({ count: 5 }, transitions);
+    const nextMachine = machine.add(3);
+
+    expect(nextMachine.context.count).toBe(8);
+  });
+
+  it('should preserve transitions in the new machine', () => {
+    const transitions = {
+      increment: createTransition(
+        () => transitions,
+        (ctx: { count: number }) => ({ count: ctx.count + 1 })
+      ),
+      add: createTransition(
+        () => transitions,
+        (ctx: { count: number }, n: number) => ({ count: ctx.count + n })
+      ),
+    };
+
+    const machine = createMachine({ count: 0 }, transitions);
+    const incremented = machine.increment();
+    const added = incremented.add(5);
+
+    expect(added.context.count).toBe(6);
+    expect(typeof added.increment).toBe('function');
+    expect(typeof added.add).toBe('function');
+  });
+
+  it('should work with complex self-referencing transitions', () => {
+    // Create transitions that reference themselves
+    const transitions = {
+      increment: createTransition(
+        () => transitions,
+        (ctx: { count: number }) => ({ count: ctx.count + 1 })
+      ),
+      add: createTransition(
+        () => transitions,
+        (ctx: { count: number }, n: number) => ({ count: ctx.count + n })
+      ),
+      reset: createTransition(
+        () => transitions,
+        (ctx: { count: number }) => ({ count: 0 })
+      ),
+    };
+
+    const machine = createMachine({ count: 0 }, transitions);
+    const result = machine.increment().add(10).reset();
+
+    expect(result.context.count).toBe(0);
   });
 });

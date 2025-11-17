@@ -13,6 +13,7 @@ import {
   Transitions,
   TransitionArgs,
   setContext,
+  createMachine,
 } from './index'; // Assuming index.ts is in the same directory
 
 // =============================================================================
@@ -164,6 +165,79 @@ export function logState<M extends Machine<any>>(machine: M, label?: string): M 
      console.log(machine.context);
    }
    return machine;
+}
+
+/**
+ * A generic combinator that creates transition functions from pure context transformers.
+ * This enables writing transitions as simple, testable functions that only transform context,
+ * while automatically handling the machine creation boilerplate.
+ *
+ * @template C - The context object type.
+ * @template TArgs - The argument types for the transition function.
+ * @param getTransitions - A function that returns the transition functions object to use for the new machine.
+ * @param transformer - A pure function that transforms the context based on the current state and arguments.
+ * @returns A transition function that can be used as a machine method.
+ *
+ * @example
+ * ```typescript
+ * // Define transitions object with self-reference
+ * const counterTransitions = {
+ *   increment: createTransition(
+ *     () => counterTransitions,
+ *     (ctx) => ({ count: ctx.count + 1 })
+ *   ),
+ *   add: createTransition(
+ *     () => counterTransitions,
+ *     (ctx, n: number) => ({ count: ctx.count + n })
+ *   )
+ * };
+ *
+ * // Create machine
+ * const counter = createMachine({ count: 0 }, counterTransitions);
+ *
+ * // Use transitions
+ * const incremented = counter.increment(); // { count: 1 }
+ * const added = incremented.add(5);       // { count: 6 }
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // With class-based machines
+ * class Counter extends MachineBase<{ count: number }> {
+ *   constructor(count = 0) {
+ *     super({ count });
+ *   }
+ *
+ *   increment = createTransition(
+ *     () => ({ increment: this.increment, add: this.add }),
+ *     (ctx) => ({ count: ctx.count + 1 })
+ *   );
+ *
+ *   add = createTransition(
+ *     () => ({ increment: this.increment, add: this.add }),
+ *     (ctx, n: number) => ({ count: ctx.count + n })
+ *   );
+ * }
+ * ```
+ *
+ * @remarks
+ * This function promotes the library's philosophy of pure, immutable transitions.
+ * The transformer function should be pure and only depend on its parameters.
+ * The returned transition function automatically creates a new machine instance,
+ * preserving all transitions while updating only the context.
+ * The getTransitions function is called lazily to avoid circular reference issues.
+ */
+export function createTransition<
+  C extends object,
+  TArgs extends any[]
+>(
+  getTransitions: () => Record<string, (this: C, ...args: any[]) => any>,
+  transformer: (ctx: C, ...args: TArgs) => C
+): (this: { context: C }, ...args: TArgs) => Machine<C> {
+  return function (this: { context: C }, ...args: TArgs): Machine<C> {
+    const nextContext = transformer(this.context, ...args);
+    return createMachine(nextContext, getTransitions());
+  };
 }
 
 // =============================================================================

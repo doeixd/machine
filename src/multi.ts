@@ -514,6 +514,42 @@ export function createEnsemble<
   };
 }
 
+/**
+ * Creates a factory for building type-safe, framework-agnostic Ensembles.
+ * This is a higher-order function that captures the application's state store
+ * and state-discriminant logic in a closure.
+ *
+ * This allows you to define your application's state "environment" once and then
+ * easily create multiple, consistent ensembles by only providing the behavioral logic.
+ *
+ * @template C The shared context type for the application.
+ * @param store The application's state store (e.g., from React, Zustand, etc.).
+ * @param getDiscriminant An accessor function that determines the current state from the context.
+ * @returns A `withFactories` function that is pre-configured for your app's environment.
+ */
+export function createEnsembleFactory<C extends object>(
+  store: StateStore<C>,
+  getDiscriminant: (context: C) => keyof any
+) {
+  /**
+   * This returned function is pre-configured with the `store` and `getDiscriminant` logic.
+   * It takes the machine factories (the behavioral logic) and returns a complete Ensemble.
+   *
+   * @template F The type of the factories object.
+   * @param factories An object where each key is a state name and each value is a
+   *   function that creates a machine instance for that state.
+   * @returns A fully-formed, reactive, and type-safe Ensemble instance.
+   */
+  return function withFactories<
+    F extends Record<string, (context: C) => Machine<C>>
+  >(
+    factories: F
+  ): Ensemble<ReturnType<F[keyof F]>, C> {
+    // We simply call the original createEnsemble with the captured arguments.
+    return createEnsemble(store, factories, getDiscriminant as (context: C) => keyof F);
+  };
+}
+
 // =============================================================================
 // SECTION 3: GENERATOR INTEGRATION
 // =============================================================================

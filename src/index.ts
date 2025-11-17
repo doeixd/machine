@@ -778,6 +778,7 @@ export {
 export {
   isState,
   createEvent,
+  createTransition,
   mergeContext,
   pipeTransitions,
   logState,
@@ -785,3 +786,13 @@ export {
   bindTransitions,
   BoundMachine
 } from './utils';
+
+// =============================================================================
+// SECTION: FUNCTIONAL COMBINATORS
+// =============================================================================
+
+export {
+  createTransitionFactory,
+  createTransitionExtender,
+  createFunctionalMachine
+} from './functional-combinators';
