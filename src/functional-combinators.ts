@@ -196,7 +196,7 @@ type MachineTransitions<
   C extends object
 > = {
   [K in keyof T]: T[K] extends (ctx: C, ...args: infer A) => C
-    ? (this: { context: C } & T, ...args: A) => Machine<C>
+    ? (this: Machine<C>, ...args: A) => Machine<C>
     : never;
 };
 
