@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createMachine, guard, guardSync, whenGuard, type GuardOptions } from '../src/index';
+import { createMachine, guard, guardAsync, whenGuard, whenGuardAsync, type GuardOptions } from '../src/index';
 
-describe('guard', () => {
+describe('guardAsync', () => {
   it('should execute transition when condition passes', async () => {
     const machine = createMachine({ count: 5 }, {
       increment: function() {
@@ -9,7 +9,7 @@ describe('guard', () => {
       }
     });
 
-    const guardedIncrement = guard(
+    const guardedIncrement = guardAsync(
       (ctx) => ctx.count < 10,
       function() {
         return createMachine({ count: this.count + 1 }, this);
@@ -27,7 +27,7 @@ describe('guard', () => {
       }
     });
 
-    const guardedIncrement = guard(
+    const guardedIncrement = guardAsync(
       (ctx) => ctx.count < 10,
       function() {
         return createMachine({ count: this.count + 1 }, this);
@@ -45,7 +45,7 @@ describe('guard', () => {
       }
     });
 
-    const guardedIncrement = guard(
+    const guardedIncrement = guardAsync(
       (ctx) => ctx.count < 10,
       function() {
         return createMachine({ count: this.count + 1 }, this);
@@ -63,7 +63,7 @@ describe('guard', () => {
       }
     });
 
-    const guardedIncrement = guard(
+    const guardedIncrement = guardAsync(
       (ctx) => ctx.count < 10,
       function() {
         return createMachine({ count: this.count + 1 }, this);
@@ -87,7 +87,7 @@ describe('guard', () => {
       return createMachine({ ...this.context, error: 'Too high' }, this);
     });
 
-    const guardedIncrement = guard(
+    const guardedIncrement = guardAsync(
       (ctx) => ctx.count < 10,
       function() {
         return createMachine({ count: this.count + 1 }, this);
@@ -110,7 +110,7 @@ describe('guard', () => {
 
     const errorMachine = createMachine({ count: 15, error: 'Too high' }, machine);
 
-    const guardedIncrement = guard(
+    const guardedIncrement = guardAsync(
       (ctx) => ctx.count < 10,
       function() {
         return createMachine({ count: this.count + 1 }, this);
@@ -135,7 +135,7 @@ describe('guard', () => {
       return ctx.count < 10;
     };
 
-    const guardedIncrement = guard(
+    const guardedIncrement = guardAsync(
       asyncCondition,
       function() {
         return createMachine({ count: this.count + 1 }, this);
@@ -158,7 +158,7 @@ describe('guard', () => {
       return createMachine({ balance: this.balance - amount }, this);
     });
 
-    const guardedWithdraw = guard(conditionSpy, transitionSpy);
+    const guardedWithdraw = guardAsync(conditionSpy, transitionSpy);
 
     const result = await guardedWithdraw.call(machine, 50);
 
@@ -168,7 +168,7 @@ describe('guard', () => {
   });
 
   it('should have guard metadata properties', () => {
-    const guardedFn = guard(
+    const guardedFn = guardAsync(
       (ctx) => true,
       function() { return createMachine({ count: 1 }, {}); }
     );
@@ -180,7 +180,7 @@ describe('guard', () => {
   });
 });
 
-describe('guardSync', () => {
+describe('guard', () => {
   it('should execute transition when condition passes', () => {
     const machine = createMachine({ count: 5 }, {
       increment: function() {
@@ -188,7 +188,7 @@ describe('guardSync', () => {
       }
     });
 
-    const guardedIncrement = guardSync(
+    const guardedIncrement = guard(
       (ctx) => ctx.count < 10,
       function() {
         return createMachine({ count: this.count + 1 }, this);
@@ -206,7 +206,7 @@ describe('guardSync', () => {
       }
     });
 
-    const guardedIncrement = guardSync(
+    const guardedIncrement = guard(
       (ctx) => ctx.count < 10,
       function() {
         return createMachine({ count: this.count + 1 }, this);
@@ -224,7 +224,7 @@ describe('guardSync', () => {
       }
     });
 
-    const guardedIncrement = guardSync(
+    const guardedIncrement = guard(
       (ctx) => ctx.count < 10,
       function() {
         return createMachine({ count: this.count + 1 }, this);
@@ -242,7 +242,7 @@ describe('guardSync', () => {
       }
     });
 
-    const guardedIncrement = guardSync(
+    const guardedIncrement = guard(
       (ctx) => ctx.count < 10,
       function() {
         return createMachine({ count: this.count + 1 }, this);
@@ -266,7 +266,7 @@ describe('guardSync', () => {
       return createMachine({ ...this.context, error: 'Too high' }, this);
     });
 
-    const guardedIncrement = guardSync(
+    const guardedIncrement = guard(
       (ctx) => ctx.count < 10,
       function() {
         return createMachine({ count: this.count + 1 }, this);
@@ -289,7 +289,7 @@ describe('guardSync', () => {
 
     const errorMachine = createMachine({ count: 15, error: 'Too high' }, machine);
 
-    const guardedIncrement = guardSync(
+    const guardedIncrement = guard(
       (ctx) => ctx.count < 10,
       function() {
         return createMachine({ count: this.count + 1 }, this);
@@ -314,7 +314,7 @@ describe('guardSync', () => {
       return createMachine({ balance: this.balance - amount }, this);
     });
 
-    const guardedWithdraw = guardSync(conditionSpy, transitionSpy);
+    const guardedWithdraw = guard(conditionSpy, transitionSpy);
 
     const result = guardedWithdraw.call(machine, 50);
 
@@ -324,7 +324,7 @@ describe('guardSync', () => {
   });
 
   it('should have guard metadata properties', () => {
-    const guardedFn = guardSync(
+    const guardedFn = guard(
       (ctx) => true,
       function() { return createMachine({ count: 1 }, {}); }
     );
@@ -342,7 +342,7 @@ describe('guardSync', () => {
       }
     });
 
-    const guardedIncrement = guardSync(
+    const guardedIncrement = guard(
       (ctx) => ctx.count < 10,
       function() {
         return createMachine({ count: this.count + 1 }, this);
@@ -355,9 +355,28 @@ describe('guardSync', () => {
     expect(result.context.count).toBe(6);
     expect(result).not.toBeInstanceOf(Promise);
   });
+
+  it('should reject async conditions at compile time', () => {
+    const machine = createMachine({ count: 5 }, {
+      increment: function() {
+        return createMachine({ count: this.count + 1 }, this);
+      }
+    });
+
+    // @ts-expect-error - guard() should not accept async conditions
+    const guardedIncrement = guard(
+      async (ctx) => ctx.count < 10, // This should cause a TypeScript error
+      function() {
+        return createMachine({ count: this.count + 1 }, this);
+      }
+    );
+
+    // This test will fail to compile if the @ts-expect-error is not needed
+    expect(true).toBe(true); // Dummy assertion
+  });
 });
 
-describe('whenGuard', () => {
+describe('whenGuardAsync', () => {
   it('should create guarded transition with .do()', async () => {
     const machine = createMachine({ isAdmin: true }, {
       deleteUser: function() {
@@ -365,7 +384,7 @@ describe('whenGuard', () => {
       }
     });
 
-    const guardedDelete = whenGuard((ctx) => ctx.isAdmin)
+    const guardedDelete = whenGuardAsync((ctx) => ctx.isAdmin)
       .do(function() {
         return createMachine({ ...this.context, deleted: true }, this);
       });
@@ -381,7 +400,7 @@ describe('whenGuard', () => {
       }
     });
 
-    const guardedDelete = whenGuard((ctx) => ctx.isAdmin)
+    const guardedDelete = whenGuardAsync((ctx) => ctx.isAdmin)
       .do(function() {
         return createMachine({ ...this.context, deleted: true }, this);
       })
@@ -406,7 +425,7 @@ describe('whenGuard', () => {
       return ctx.isAdmin;
     };
 
-    const guardedDelete = whenGuard(asyncCheck)
+    const guardedDelete = whenGuardAsync(asyncCheck)
       .do(function() {
         return createMachine({ ...this.context, deleted: true }, this);
       });
@@ -416,10 +435,48 @@ describe('whenGuard', () => {
   });
 });
 
+describe('whenGuard', () => {
+  it('should create guarded transition with .do()', () => {
+    const machine = createMachine({ isAdmin: true }, {
+      deleteUser: function() {
+        return createMachine({ ...this.context, deleted: true }, this);
+      }
+    });
+
+    const guardedDelete = whenGuard((ctx) => ctx.isAdmin)
+      .do(function() {
+        return createMachine({ ...this.context, deleted: true }, this);
+      });
+
+    const result = guardedDelete.call(machine);
+    expect(result.context.deleted).toBe(true);
+  });
+
+  it('should create guarded transition with .do().else()', () => {
+    const machine = createMachine({ isAdmin: false }, {
+      deleteUser: function() {
+        return createMachine({ ...this.context, deleted: true }, this);
+      }
+    });
+
+    const guardedDelete = whenGuard((ctx) => ctx.isAdmin)
+      .do(function() {
+        return createMachine({ ...this.context, deleted: true }, this);
+      })
+      .else(function() {
+        return createMachine({ ...this.context, error: 'Unauthorized' }, this);
+      });
+
+    const result = guardedDelete.call(machine);
+    expect(result.context.error).toBe('Unauthorized');
+    expect(result.context.deleted).toBeUndefined();
+  });
+});
+
 describe('guard integration with createMachine', () => {
   it('should work as machine transitions', async () => {
     // Create a guarded withdraw function
-    const guardedWithdraw = guard(
+    const guardedWithdraw = guardAsync(
       (ctx, amount) => ctx.isActive && ctx.balance >= amount,
       function(amount: number) {
         return createMachine({

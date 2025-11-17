@@ -210,21 +210,23 @@ if (lockedMachine.context.status === 'locked') {
 
 **Summary:** This pattern forces callers to handle both possible outcomes at compile time, making invalid state transitions impossible. It's the most robust approach for most situations and should be your default choice.
 
-## Section 2: The Ergonomic Pattern - The `guard()` Primitive for Runtime Safety
+## Section 2: The Ergonomic Pattern - `guard()` and `guardAsync()` for Runtime Checks
 
 **Philosophy:** "Cleanly express runtime rules without boilerplate."
 
-When you need complex runtime checks that can't be expressed as discriminated unions, the `guard()` primitive provides ergonomic runtime protection with excellent developer experience.
+When you need complex runtime checks that can't be expressed as discriminated unions, the `guard()` and `guardAsync()` primitives provide ergonomic runtime protection with excellent developer experience.
 
-### Basic Usage
+### Synchronous Guards with `guard()`
+
+Use `guard()` for synchronous conditions within a standard Machine:
 
 ```typescript
 import { createMachine, guard } from '@doeixd/machine';
 
 const machine = createMachine({ balance: 100 }, {
   withdraw: guard(
-    (ctx, amount) => ctx.balance >= amount,
-    function(amount: number) {
+    (ctx, amount) => ctx.balance >= amount, // ← Synchronous condition
+    function(amount: number) {              // ← Synchronous transition
       return createMachine({ balance: this.balance - amount }, this);
     },
     {
@@ -235,20 +237,89 @@ const machine = createMachine({ balance: 100 }, {
   )
 });
 
+machine.withdraw(50); // ✅ Works synchronously
+machine.withdraw(200); // ❌ Throws "Insufficient funds"
+```
+
+### Asynchronous Guards with `guardAsync()`
+
+Use `guardAsync()` for asynchronous conditions or transitions, which requires an AsyncMachine:
+
+```typescript
+import { createMachine, guardAsync } from '@doeixd/machine';
+
+const machine = createMachine({ balance: 100 }, {
+  withdraw: guardAsync(
+    async (ctx, amount) => {  // ← Async condition
+      // Simulate API call to check balance
+      await new Promise(resolve => setTimeout(resolve, 100));
+      return ctx.balance >= amount;
+    },
+    async function(amount: number) {  // ← Async transition
+      // Simulate API call to process withdrawal
+      await new Promise(resolve => setTimeout(resolve, 100));
+      return createMachine({ balance: this.balance - amount }, this);
+    },
+    {
+      onFail: 'throw',
+      errorMessage: 'Insufficient funds',
+      description: 'Withdraw money after API validation'
+    }
+  )
+});
+
 await machine.withdraw(50); // ✅ Works
 await machine.withdraw(200); // ❌ Throws "Insufficient funds"
 ```
 
 ### Failure Handling Options
 
+Both `guard()` and `guardAsync()` support the same failure handling options:
+
 **Throw on Failure:**
 ```typescript
-guard(
+guard(  // or guardAsync()
   condition,
   transition,
   { onFail: 'throw', errorMessage: 'Custom error message' }
 )
 // Throws an Error with the specified message when condition fails
+```
+
+**Ignore Failure:**
+```typescript
+guard(  // or guardAsync()
+  condition,
+  transition,
+  { onFail: 'ignore' }
+)
+// Returns the current machine unchanged when condition fails
+```
+
+**Custom Fallback Function:**
+```typescript
+guard(  // or guardAsync()
+  condition,
+  transition,
+  {
+    onFail: function() {
+      return createMachine({ ...this.context, error: 'Unauthorized' }, this);
+    }
+  }
+)
+// Executes custom logic when condition fails
+```
+
+**Static Fallback Machine:**
+```typescript
+const errorMachine = createMachine({ error: 'Failed' }, originalMachine);
+
+guard(  // or guardAsync()
+  condition,
+  transition,
+  { onFail: errorMachine }
+)
+// Returns the specified fallback machine when condition fails
 ```
 
 **Ignore Failure:**
@@ -277,13 +348,14 @@ guard(
 
 ### Fluent API for Complex Branching
 
-For the most readable conditional transitions, use the fluent `whenGuard()` API:
+For the most readable conditional transitions, use the fluent `whenGuard()` and `whenGuardAsync()` APIs:
 
+**Synchronous Fluent API (`whenGuard()`):**
 ```typescript
 import { createMachine, whenGuard } from '@doeixd/machine';
 
 const machine = createMachine({ isAdmin: false, userId: 123 }, {
-  deleteUser: whenGuard((ctx) => ctx.isAdmin)
+  deleteUser: whenGuard((ctx) => ctx.isAdmin)  // ← Synchronous condition
     .do(function(targetUserId: number) {
       return createMachine({
         ...this.context,
@@ -300,6 +372,39 @@ const machine = createMachine({ isAdmin: false, userId: 123 }, {
 
 // Usage
 const adminMachine = createMachine({ isAdmin: true, userId: 123 }, machine.transitions);
+adminMachine.deleteUser(456); // ✅ Success path (synchronous)
+
+const userMachine = createMachine({ isAdmin: false, userId: 123 }, machine.transitions);
+userMachine.deleteUser(456); // ❌ Error path (synchronous)
+```
+
+**Asynchronous Fluent API (`whenGuardAsync()`):**
+```typescript
+import { createMachine, whenGuardAsync } from '@doeixd/machine';
+
+const machine = createMachine({ isAdmin: false, userId: 123 }, {
+  deleteUser: whenGuardAsync(async (ctx) => {  // ← Async condition
+    // Simulate API call to check permissions
+    await checkUserPermissions(ctx.userId);
+    return ctx.isAdmin;
+  })
+    .do(async function(targetUserId: number) {  // ← Async transition
+      await deleteUserFromDatabase(targetUserId);
+      return createMachine({
+        ...this.context,
+        deletedUserId: targetUserId
+      }, this);
+    })
+    .else(function() {
+      return createMachine({
+        ...this.context,
+        error: 'Unauthorized: Admin access required'
+      }, this);
+    })
+});
+
+// Usage (requires async/await)
+const adminMachine = createMachine({ isAdmin: true, userId: 123 }, machine.transitions);
 await adminMachine.deleteUser(456); // ✅ Success path
 
 const userMachine = createMachine({ isAdmin: false, userId: 123 }, machine.transitions);
@@ -308,11 +413,11 @@ await userMachine.deleteUser(456); // ❌ Error path
 
 ### Integration with Tooling
 
-Because `guard()` uses `attachRuntimeMeta()`, it's fully compatible with the runtime statechart extractor:
+Both `guard()` and `guardAsync()` use `attachRuntimeMeta()` and are fully compatible with static and runtime statechart extractors:
 
 ```typescript
-const machine = createMachine({ count: 0 }, {
-  increment: guard(
+const syncMachine = createMachine({ count: 0 }, {
+  increment: guard(  // Synchronous
     (ctx) => ctx.count < 10,
     function() {
       return createMachine({ count: this.count + 1 }, this);
@@ -321,13 +426,27 @@ const machine = createMachine({ count: 0 }, {
   )
 });
 
-// Generates statechart JSON with:
+const asyncMachine = createMachine({ count: 0 }, {
+  increment: guardAsync(  // Asynchronous
+    async (ctx) => {
+      await validateCount(ctx.count);
+      return ctx.count < 10;
+    },
+    async function() {
+      await updateCounter();
+      return createMachine({ count: this.count + 1 }, this);
+    },
+    { description: 'Increment counter after async validation' }
+  )
+});
+
+// Both generate statechart JSON with guard conditions:
 // {
 //   "on": {
 //     "increment": {
 //       "target": "LimitedMachine",
-//       "description": "Increment counter if under limit",
-//       "cond": "runtime_guard"
+//       "description": "...",
+//       "cond": "runtime_guard"  // or "runtime_guard_async"
 //     }
 //   }
 // }
@@ -455,3 +574,65 @@ class SecureMachine<P extends Permission> extends MachineBase<{
 ```
 
 **Summary:** This pattern represents the ultimate expression of Type-State programming. Use it when you need absolute certainty about a transition's outcome before you even call it - perfect for critical security paths or complex business logic where runtime failures would be catastrophic.
+
+## Migration Guide
+
+### From `guarded()` to `guard()`/`guardAsync()`
+
+**Before (deprecated):**
+```typescript
+// Static analysis only - no runtime protection
+delete = guarded(
+  { name: "isAdmin", description: "Check admin permissions" },
+  transitionTo(DeletedMachine, () => new DeletedMachine())
+);
+```
+
+**After (runtime + static):**
+```typescript
+// Synchronous runtime protection + static analysis
+delete = guard(
+  (ctx) => ctx.isAdmin,
+  transitionTo(DeletedMachine, () => new DeletedMachine()),
+  { description: 'Delete item if user is admin' }
+);
+
+// Or for async cases:
+deleteAsync = guardAsync(
+  async (ctx) => await checkPermissions(ctx.userId),
+  async () => {
+    await performDelete();
+    return new DeletedMachine();
+  },
+  { description: 'Delete item after async permission check' }
+);
+```
+
+### Choosing Between `guard()` and `guardAsync()`
+
+- **Use `guard()`** for synchronous conditions and transitions (most common case)
+- **Use `guardAsync()`** when conditions or transitions are asynchronous
+- `guard()` avoids unnecessary Promise overhead and works with standard Machines
+- `guardAsync()` requires AsyncMachines and returns Promises
+
+## Best Practices
+
+1. **Prefer `guard()`** for synchronous machines (majority of use cases)
+2. **Use `guardAsync()`** only when async operations are required
+3. **Provide descriptive error messages** for better debugging
+4. **Use fluent APIs** (`whenGuard()`/`whenGuardAsync()`) for complex branching
+5. **Combine with static analysis** by providing `description` in options
+6. **Test both success and failure paths** in your test suites
+7. **Use generic state classes** for complex permission systems in critical paths
+
+## Error Handling
+
+Guards can fail in several ways:
+
+- **Condition throws**: Exception propagates up
+- **Transition throws**: Exception propagates up
+- **Guard fails with `onFail: 'throw'`**: Throws `Guard condition failed` or custom message
+- **Guard fails with `onFail: 'ignore'`**: Returns current machine unchanged
+- **Guard fails with custom fallback**: Executes fallback logic
+
+Always handle potential exceptions from guarded transitions in production code.

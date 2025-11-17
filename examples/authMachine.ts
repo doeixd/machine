@@ -11,7 +11,7 @@
  */
 
 import { MachineBase } from '../src/index';
-import { transitionTo, guarded, invoke, describe, action } from '../src/primitives';
+import { transitionTo, guard, invoke, describe, action } from '../src/primitives';
 
 // =============================================================================
 // CONTEXT TYPES
@@ -172,21 +172,22 @@ export class LoggedInMachine extends MachineBase<LoggedInContext> {
    */
   deleteAccount = describe(
     'Delete the user account (admin only)',
-    guarded(
-      {
-        name: 'hasAdminPermission',
-        description: 'User must have admin permission to delete accounts',
-      },
+    guard(
+      (ctx) => ctx.permissions.includes('admin'), // Synchronous permission check
       action(
         { name: 'logAccountDeletion', description: 'Audit log for account deletion' },
         transitionTo(LoggedOutMachine, () => {
-          // In real implementation, would check this.context.permissions.includes('admin')
           return new LoggedOutMachine({
             status: 'loggedOut',
             lastError: undefined,
           });
         })
-      )
+      ),
+      {
+        onFail: 'throw',
+        errorMessage: 'Admin permission required to delete accounts',
+        description: 'User must have admin permission to delete accounts'
+      }
     )
   );
 

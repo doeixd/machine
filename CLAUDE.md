@@ -52,7 +52,7 @@ The codebase is organized into focused, single-purpose modules:
    - Type utilities: `Context<M>`, `Event<M>`, `Transitions<M>`, etc.
 
 2. **`src/primitives.ts`** - Type-level metadata DSL
-   - Annotation functions like `transitionTo()`, `guarded()`, `invoke()`, `action()`, `describe()`
+   - Annotation functions like `transitionTo()`, `guard()`, `guardAsync()`, `invoke()`, `action()`, `describe()`
    - These are runtime no-ops but add type-level metadata via branded types
    - Used by static analysis tools to extract formal statecharts
    - The `META_KEY` symbol brands types with `TransitionMeta`
@@ -96,7 +96,7 @@ The codebase is organized into focused, single-purpose modules:
    - Integrates state machines with Solid's fine-grained reactivity
 
 9. **`src/primitives.ts`** - Type-level metadata DSL
-   - Annotation functions: `transitionTo()`, `guarded()`, `invoke()`, `action()`, `describe()`, `metadata()`
+   - Annotation functions: `transitionTo()`, `guard()`, `guardAsync()`, `invoke()`, `action()`, `describe()`, `metadata()`
    - These are runtime **identity functions** (zero overhead) that add type-level metadata
    - The `META_KEY` symbol brands types with `TransitionMeta` for static analysis
    - Used by the extraction tool to generate formal statecharts
@@ -111,7 +111,7 @@ The codebase is organized into focused, single-purpose modules:
       - `extractMachines()` - Extract multiple machines from config
       - `extractMetaFromMember()` - Parse DSL primitive calls from AST
       - `extractFromCallExpression()` - Recursively extract nested metadata
-    - Supports all DSL primitives (transitionTo, describe, guarded, action, invoke)
+    - Supports all DSL primitives (transitionTo, describe, guard, guardAsync, action, invoke)
     - See "Statechart Extraction Architecture" section below
 
 11. **`scripts/extract-statechart.ts`** - CLI tool for extraction
@@ -210,7 +210,7 @@ XState-Compatible JSON
 
 **`extractFromCallExpression(call, verbose)`**
 - Recursively parses nested DSL primitive calls
-- Switches on function name (transitionTo, describe, guarded, etc.)
+- Switches on function name (transitionTo, describe, guard, guardAsync, etc.)
 - Extracts arguments and composes metadata
 - Returns aggregated metadata object
 
@@ -308,7 +308,7 @@ All DSL primitives in `src/primitives.ts` now call `attachRuntimeMeta()`:
 
 - `transitionTo()` → attaches `{ target: className }`
 - `describe()` → attaches `{ description: string }`
-- `guarded()` → attaches `{ guards: [guard] }` (mergeable)
+- `guard()` / `guardAsync()` → attaches `{ guards: [guard] }` (mergeable)
 - `action()` → attaches `{ actions: [action] }` (mergeable)
 - `invoke()` → attaches `{ invoke: { src, onDone, onError } }`
 
@@ -346,9 +346,13 @@ transitionTo<T extends ClassConstructor, F>(target: T, impl: F)
 describe<F, M>(text: string, transition: WithMeta<F, M>)
   : WithMeta<F, M & { description: string }>
 
-// Add guard condition
-guarded<F, M>(guard: GuardMeta, transition: WithMeta<F, M>)
-  : WithMeta<F, M & { guards: [typeof guard] }>
+// Add guard condition (synchronous)
+guard<C, TSuccess, TFailure>(condition, transition, options?)
+  : (...args) => TSuccess | TFailure
+
+// Add guard condition (asynchronous)
+guardAsync<C, TSuccess, TFailure>(condition, transition, options?)
+  : GuardedTransition<C, TSuccess, TFailure>
 
 // Async service invocation
 invoke<D, E, F>(service: InvokeMeta, impl: F)

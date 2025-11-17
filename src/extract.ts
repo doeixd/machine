@@ -350,7 +350,7 @@ function extractFromCallExpression(call: Node, verbose = false): any | null {
          }
        }
        // Add a generic guard condition for static analysis
-       metadata.guards = [{ name: 'runtime_guard', description: metadata.description || 'Runtime condition check' }];
+       metadata.guards = [{ name: 'runtime_guard', description: metadata.description || 'Synchronous condition check' }];
        // Recurse into the transition (second argument)
        if (args[1] && Node.isCallExpression(args[1])) {
          const nested = extractFromCallExpression(args[1], verbose);
@@ -360,7 +360,7 @@ function extractFromCallExpression(call: Node, verbose = false): any | null {
        }
        break;
 
-     case 'guardSync':
+     case 'guardAsync':
        // Args: (condition, transition, options?)
        // Extract description from options object (third argument)
        if (args[2]) {
@@ -370,7 +370,7 @@ function extractFromCallExpression(call: Node, verbose = false): any | null {
          }
        }
        // Add a generic guard condition for static analysis
-       metadata.guards = [{ name: 'runtime_guard_sync', description: metadata.description || 'Synchronous condition check' }];
+       metadata.guards = [{ name: 'runtime_guard_async', description: metadata.description || 'Asynchronous condition check' }];
        // Recurse into the transition (second argument)
        if (args[1] && Node.isCallExpression(args[1])) {
          const nested = extractFromCallExpression(args[1], verbose);

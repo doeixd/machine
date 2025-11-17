@@ -109,7 +109,7 @@ describe('Runtime Metadata Extraction', () => {
       expect(meta).not.toBeNull();
       expect(meta?.guards).toHaveLength(1);
       expect(meta?.guards?.[0].name).toBe('runtime_guard');
-      expect(meta?.description).toBe('Runtime guarded transition');
+      expect(meta?.description).toBe('Synchronous guarded transition');
     });
 
     it('should extract metadata from guard with description', () => {
