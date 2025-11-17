@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createMachine, guard, whenGuard, type GuardOptions } from '../src/index';
+import { createMachine, guard, guardSync, whenGuard, type GuardOptions } from '../src/index';
 
 describe('guard', () => {
   it('should execute transition when condition passes', async () => {
@@ -177,6 +177,183 @@ describe('guard', () => {
     expect(typeof guardedFn.condition).toBe('function');
     expect(typeof guardedFn.transition).toBe('function');
     expect(guardedFn.options).toEqual({ onFail: 'throw' });
+  });
+});
+
+describe('guardSync', () => {
+  it('should execute transition when condition passes', () => {
+    const machine = createMachine({ count: 5 }, {
+      increment: function() {
+        return createMachine({ count: this.count + 1 }, this);
+      }
+    });
+
+    const guardedIncrement = guardSync(
+      (ctx) => ctx.count < 10,
+      function() {
+        return createMachine({ count: this.count + 1 }, this);
+      }
+    );
+
+    const result = guardedIncrement.call(machine);
+    expect(result.context.count).toBe(6);
+  });
+
+  it('should throw error when condition fails and onFail=throw', () => {
+    const machine = createMachine({ count: 15 }, {
+      increment: function() {
+        return createMachine({ count: this.count + 1 }, this);
+      }
+    });
+
+    const guardedIncrement = guardSync(
+      (ctx) => ctx.count < 10,
+      function() {
+        return createMachine({ count: this.count + 1 }, this);
+      },
+      { onFail: 'throw' }
+    );
+
+    expect(() => guardedIncrement.call(machine)).toThrow('Guard condition failed');
+  });
+
+  it('should use custom error message', () => {
+    const machine = createMachine({ count: 15 }, {
+      increment: function() {
+        return createMachine({ count: this.count + 1 }, this);
+      }
+    });
+
+    const guardedIncrement = guardSync(
+      (ctx) => ctx.count < 10,
+      function() {
+        return createMachine({ count: this.count + 1 }, this);
+      },
+      { onFail: 'throw', errorMessage: 'Count too high' }
+    );
+
+    expect(() => guardedIncrement.call(machine)).toThrow('Count too high');
+  });
+
+  it('should return unchanged machine when condition fails and onFail=ignore', () => {
+    const machine = createMachine({ count: 15 }, {
+      increment: function() {
+        return createMachine({ count: this.count + 1 }, this);
+      }
+    });
+
+    const guardedIncrement = guardSync(
+      (ctx) => ctx.count < 10,
+      function() {
+        return createMachine({ count: this.count + 1 }, this);
+      },
+      { onFail: 'ignore' }
+    );
+
+    const result = guardedIncrement.call(machine);
+    expect(result).toBe(machine);
+    expect(result.context.count).toBe(15);
+  });
+
+  it('should execute custom fallback function when condition fails', () => {
+    const machine = createMachine({ count: 15 }, {
+      increment: function() {
+        return createMachine({ count: this.count + 1 }, this);
+      }
+    });
+
+    const fallback = vi.fn(function() {
+      return createMachine({ ...this.context, error: 'Too high' }, this);
+    });
+
+    const guardedIncrement = guardSync(
+      (ctx) => ctx.count < 10,
+      function() {
+        return createMachine({ count: this.count + 1 }, this);
+      },
+      { onFail: fallback }
+    );
+
+    const result = guardedIncrement.call(machine);
+    expect(fallback).toHaveBeenCalledWith();
+    expect(result.context.count).toBe(15);
+    expect(result.context.error).toBe('Too high');
+  });
+
+  it('should execute custom fallback machine when condition fails', () => {
+    const machine = createMachine({ count: 15 }, {
+      increment: function() {
+        return createMachine({ count: this.count + 1 }, this);
+      }
+    });
+
+    const errorMachine = createMachine({ count: 15, error: 'Too high' }, machine);
+
+    const guardedIncrement = guardSync(
+      (ctx) => ctx.count < 10,
+      function() {
+        return createMachine({ count: this.count + 1 }, this);
+      },
+      { onFail: errorMachine }
+    );
+
+    const result = guardedIncrement.call(machine);
+    expect(result).toBe(errorMachine);
+    expect(result.context.error).toBe('Too high');
+  });
+
+  it('should pass arguments to condition and transition', () => {
+    const machine = createMachine({ balance: 100 }, {
+      withdraw: function(amount: number) {
+        return createMachine({ balance: this.balance - amount }, this);
+      }
+    });
+
+    const conditionSpy = vi.fn((ctx, amount) => ctx.balance >= amount);
+    const transitionSpy = vi.fn(function(amount: number) {
+      return createMachine({ balance: this.balance - amount }, this);
+    });
+
+    const guardedWithdraw = guardSync(conditionSpy, transitionSpy);
+
+    const result = guardedWithdraw.call(machine, 50);
+
+    expect(conditionSpy).toHaveBeenCalledWith(machine.context, 50);
+    expect(transitionSpy).toHaveBeenCalledWith(50);
+    expect(result.context.balance).toBe(50);
+  });
+
+  it('should have guard metadata properties', () => {
+    const guardedFn = guardSync(
+      (ctx) => true,
+      function() { return createMachine({ count: 1 }, {}); }
+    );
+
+    expect(guardedFn.__guard).toBe(true);
+    expect(typeof guardedFn.condition).toBe('function');
+    expect(typeof guardedFn.transition).toBe('function');
+    expect(guardedFn.options).toEqual({ onFail: 'throw' });
+  });
+
+  it('should work synchronously without promises', () => {
+    const machine = createMachine({ count: 5 }, {
+      increment: function() {
+        return createMachine({ count: this.count + 1 }, this);
+      }
+    });
+
+    const guardedIncrement = guardSync(
+      (ctx) => ctx.count < 10,
+      function() {
+        return createMachine({ count: this.count + 1 }, this);
+      }
+    );
+
+    // Should return synchronously, not a Promise
+    const result = guardedIncrement.call(machine);
+    expect(result).toBeInstanceOf(Object);
+    expect(result.context.count).toBe(6);
+    expect(result).not.toBeInstanceOf(Promise);
   });
 });
 

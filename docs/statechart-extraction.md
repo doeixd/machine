@@ -5,12 +5,13 @@
 1. [Overview](#overview)
 2. [Philosophy & Design Rationale](#philosophy--design-rationale)
 3. [Quick Start](#quick-start)
-4. [Static Extraction (Build-Time)](#static-extraction-build-time)
-   - [How It Works](#how-it-works)
-   - [API Reference](#api-reference)
-   - [Configuration](#configuration)
-   - [CLI Tool](#cli-tool)
-5. [Runtime Extraction](#runtime-extraction)
+4. [CLI Command](#cli-command)
+5. [Static Extraction (Build-Time)](#static-extraction-build-time)
+    - [How It Works](#how-it-works)
+    - [API Reference](#api-reference)
+    - [Configuration](#configuration)
+    - [CLI Tool](#cli-tool)
+6. [Runtime Extraction](#runtime-extraction)
    - [Overview](#runtime-extraction-overview)
    - [API Reference](#runtime-extraction-api)
    - [Use Cases](#runtime-extraction-use-cases)
@@ -32,6 +33,16 @@ The **Statechart Extraction System** provides **two complementary approaches** f
 
 Both approaches generate [XState](https://xstate.js.org/)-compatible JSON that works with [Stately Viz](https://stately.ai/viz) and other statechart tooling.
 
+**🚀 New: CLI Command Available**
+
+After installing `@doeixd/machine`, you can run statechart extraction directly:
+
+```bash
+npx @doeixd/machine extract --config .statechart.config.ts
+```
+
+This makes it easy to integrate statechart generation into your build process or development workflow.
+
 ### Key Features
 
 **Static Extraction:**
@@ -39,7 +50,7 @@ Both approaches generate [XState](https://xstate.js.org/)-compatible JSON that w
 - ✅ **Source Code Analysis** - Works with TypeScript AST via ts-morph
 - ✅ **Watch Mode** - Auto-regenerate statecharts during development
 - ✅ **Multiple Machines** - Extract many machines with a single config file
-- ✅ **CLI Tool** - Integrated build-time extraction workflow
+- ✅ **CLI Tool** - Run `npx @doeixd/machine extract` after installation
 
 **Runtime Extraction:**
 - ✅ **No Source Required** - Extract from running machine instances
@@ -195,24 +206,136 @@ export default {
 
 3. **Run extraction**:
 
+After installing `@doeixd/machine`, you can run the extraction command directly:
+
 ```bash
-npx tsx scripts/extract-statechart.ts --config .statechart.config.ts
+npx @doeixd/machine extract --config .statechart.config.ts
 ```
 
-Or add to `package.json`:
+Or add to your project's `package.json`:
 
 ```json
 {
   "scripts": {
-    "extract": "tsx scripts/extract-statechart.ts --config .statechart.config.ts"
+    "extract": "npx @doeixd/machine extract --config .statechart.config.ts"
   }
 }
 ```
 
+For development, you can also run it directly with tsx:
+
+```bash
+npx tsx scripts/extract-statechart.ts --config .statechart.config.ts
+```
+
 4. **View the statechart** in [Stately Viz](https://stately.ai/viz):
-   - Go to https://stately.ai/viz
-   - Paste the contents of `statecharts/my-machine.json`
-   - Visualize and validate your state machine
+    - Go to https://stately.ai/viz
+    - Paste the contents of `statecharts/my-machine.json`
+    - Visualize and validate your state machine
+
+---
+
+## CLI Command
+
+### Overview
+
+After installing `@doeixd/machine`, you can run statechart extraction directly from the command line without needing to set up tsx or worry about file paths.
+
+### Installation
+
+```bash
+npm install @doeixd/machine
+```
+
+### Basic Usage
+
+```bash
+# Extract using config file
+npx @doeixd/machine extract --config .statechart.config.ts
+
+# Extract a single machine
+npx @doeixd/machine extract \
+  --input src/auth.ts \
+  --id auth \
+  --classes LoggedOut,LoggedIn \
+  --initial LoggedOut \
+  --output statecharts/auth.json
+
+# Watch mode for development
+npx @doeixd/machine extract --config .statechart.config.ts --watch
+```
+
+### Command Line Options
+
+| Option | Alias | Description | Default |
+|--------|-------|-------------|---------|
+| `--input <file>` | `-i` | Input file containing machine definitions | - |
+| `--output <file>` | `-o` | Output file for the generated statechart | stdout |
+| `--config <file>` | `-c` | Configuration file path | `.statechart.config.ts` |
+| `--watch` | `-w` | Watch mode - regenerate on file changes | false |
+| `--format <type>` | `-f` | Output format: `json`, `mermaid`, or `both` | `json` |
+| `--validate` | - | Validate output against XState JSON schema | false |
+| `--verbose` | `-v` | Verbose logging | false |
+| `--id <id>` | - | Machine ID (required with `--input`) | - |
+| `--classes <classes>` | - | Comma-separated list of class names | - |
+| `--initial <state>` | - | Initial state class name | - |
+| `--help` | `-h` | Display help for command | - |
+
+### Integration with npm Scripts
+
+Add to your `package.json`:
+
+```json
+{
+  "scripts": {
+    "extract": "npx @doeixd/machine extract --config .statechart.config.ts",
+    "extract:watch": "npx @doeixd/machine extract --config .statechart.config.ts --watch",
+    "extract:validate": "npx @doeixd/machine extract --config .statechart.config.ts --validate"
+  }
+}
+```
+
+Then run:
+```bash
+npm run extract          # Extract once
+npm run extract:watch    # Watch mode
+npm run extract:validate # With validation
+```
+
+### Examples
+
+#### Extract from Config File
+```bash
+npx @doeixd/machine extract --config .statechart.config.ts
+```
+
+#### Extract Single Machine
+```bash
+npx @doeixd/machine extract \
+  --input src/auth.ts \
+  --id auth \
+  --classes LoggedOut,LoggingIn,LoggedIn \
+  --initial LoggedOut \
+  --output statecharts/auth.json \
+  --verbose
+```
+
+#### Watch Mode
+```bash
+npx @doeixd/machine extract --config .statechart.config.ts --watch
+```
+
+#### Validate Output
+```bash
+npx @doeixd/machine extract --config .statechart.config.ts --validate
+```
+
+### Benefits
+
+- **Zero Setup**: Works immediately after `npm install`
+- **Cross-Platform**: Handles Windows file paths automatically
+- **Build Integration**: Easy to add to CI/CD pipelines
+- **Development Friendly**: Watch mode for iterative development
 
 ---
 
@@ -859,7 +982,21 @@ class AdminMachine extends MachineBase<{ role: 'admin' }> {
 
 ## CLI Tool
 
+### Installation
+
+The CLI tool is included with `@doeixd/machine`. After installation, you can run it using:
+
+```bash
+npx @doeixd/machine extract [options]
+```
+
 ### Command-Line Options
+
+```bash
+npx @doeixd/machine extract [options]
+```
+
+Or directly with tsx (for development):
 
 ```bash
 tsx scripts/extract-statechart.ts [options]
@@ -882,12 +1019,12 @@ tsx scripts/extract-statechart.ts [options]
 
 #### Extract from config file:
 ```bash
-tsx scripts/extract-statechart.ts --config .statechart.config.ts
+npx @doeixd/machine extract --config .statechart.config.ts
 ```
 
 #### Extract a single machine:
 ```bash
-tsx scripts/extract-statechart.ts \
+npx @doeixd/machine extract \
   --input src/auth.ts \
   --id auth \
   --classes LoggedOut,LoggedIn \
@@ -897,21 +1034,26 @@ tsx scripts/extract-statechart.ts \
 
 #### Watch mode:
 ```bash
-tsx scripts/extract-statechart.ts --config .statechart.config.ts --watch
+npx @doeixd/machine extract --config .statechart.config.ts --watch
 ```
 
 #### Verbose output:
 ```bash
-tsx scripts/extract-statechart.ts --config .statechart.config.ts --verbose
+npx @doeixd/machine extract --config .statechart.config.ts --verbose
 ```
 
 #### Output to stdout:
 ```bash
-tsx scripts/extract-statechart.ts \
+npx @doeixd/machine extract \
   --input src/auth.ts \
   --id auth \
   --classes LoggedOut,LoggedIn \
   --initial LoggedOut
+```
+
+#### Development usage (with tsx):
+```bash
+tsx scripts/extract-statechart.ts --config .statechart.config.ts
 ```
 
 ### npm Scripts
@@ -921,9 +1063,9 @@ Add to your `package.json`:
 ```json
 {
   "scripts": {
-    "extract": "tsx scripts/extract-statechart.ts --config .statechart.config.ts",
-    "extract:watch": "tsx scripts/extract-statechart.ts --config .statechart.config.ts --watch",
-    "extract:validate": "tsx scripts/extract-statechart.ts --config .statechart.config.ts --validate"
+    "extract": "npx @doeixd/machine extract --config .statechart.config.ts",
+    "extract:watch": "npx @doeixd/machine extract --config .statechart.config.ts --watch",
+    "extract:validate": "npx @doeixd/machine extract --config .statechart.config.ts --validate"
   }
 }
 ```
@@ -933,6 +1075,17 @@ Then run:
 npm run extract          # Extract once
 npm run extract:watch    # Watch mode
 npm run extract:validate # With validation
+```
+
+For development workflows, you can also use tsx directly:
+
+```json
+{
+  "scripts": {
+    "extract:dev": "tsx scripts/extract-statechart.ts --config .statechart.config.ts",
+    "extract:dev:watch": "tsx scripts/extract-statechart.ts --config .statechart.config.ts --watch"
+  }
+}
 ```
 
 ---

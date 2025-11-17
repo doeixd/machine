@@ -675,6 +675,7 @@ export {
   describe,
   guarded,
   guard,
+  guardSync,
   whenGuard,
   invoke,
   action,
