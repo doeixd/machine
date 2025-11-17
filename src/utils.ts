@@ -300,8 +300,11 @@ export class BoundMachine<M extends { context: any }> {
     return new Proxy(this, {
       get: (target, prop) => {
         // Handle direct property access to wrapped machine
-        if (prop === 'wrappedMachine' || prop === 'context') {
+        if (prop === 'wrappedMachine') {
           return Reflect.get(target, prop);
+        }
+        if (prop === 'context') {
+          return this.wrappedMachine.context;
         }
 
         const value = this.wrappedMachine[prop as keyof M];
@@ -323,11 +326,223 @@ export class BoundMachine<M extends { context: any }> {
       },
     }) as any;
   }
+}
 
-  /**
-   * Access the underlying machine's context directly.
-   */
-  get context(): M extends { context: infer C } ? C : never {
-    return this.wrappedMachine.context;
+/**
+ * Creates a sequence machine that orchestrates multi-step flows by automatically
+ * advancing through a series of machines. When the current machine reaches a "final"
+ * state (determined by the isFinal predicate), the sequence automatically transitions
+ * to the next machine in the sequence.
+ *
+ * This implementation uses a functional approach with object delegation rather than Proxy.
+ */
+function createSequenceMachine<
+  M extends readonly [Machine<any>, ...Machine<any>[]]
+>(
+  machines: M,
+  isFinal: (machine: M[number]) => boolean
+): M[number] {
+  if (machines.length === 0) {
+    throw new Error('Sequence must contain at least one machine');
   }
+
+  let currentIndex = 0;
+  let currentMachine = machines[0];
+
+  const createDelegationObject = (machine: M[number]) => {
+    const delegationObject = Object.create(machine);
+
+    // The context getter returns the machine's own context
+    // (machine is the specific machine instance this delegation object represents)
+    Object.defineProperty(delegationObject, 'context', {
+      get: () => machine.context,
+      enumerable: true,
+      configurable: true
+    });
+
+    // Override all methods to add advancement logic
+    const originalProto = Object.getPrototypeOf(machine);
+    const methodNames = Object.getOwnPropertyNames(originalProto).filter(name =>
+      name !== 'constructor' && name !== 'context' && typeof (machine as any)[name] === 'function'
+    );
+
+    for (const methodName of methodNames) {
+      const methodKey = methodName as keyof any;
+
+      (delegationObject as any)[methodKey] = (...args: unknown[]) => {
+        const result = (currentMachine as any)[methodKey](...args);
+
+        // Handle both sync and async results
+        const handleResult = (resultMachine: unknown) => {
+          return advanceIfNeeded(resultMachine as M[number]);
+        };
+
+        // If the result is a Promise, handle it asynchronously
+        if (result && typeof (result as any).then === 'function') {
+          return (result as Promise<unknown>).then(handleResult);
+        }
+
+        // Otherwise, handle synchronously
+        return handleResult(result);
+      };
+    }
+
+    return delegationObject;
+  };
+
+  const advanceIfNeeded = (machine: M[number]): M[number] => {
+    currentMachine = machine;
+
+    // Check if we should advance to the next machine
+    if (isFinal(currentMachine) && currentIndex < machines.length - 1) {
+      currentIndex++;
+      currentMachine = machines[currentIndex];
+      // Create a new delegation object for the new currentMachine
+      return createDelegationObject(currentMachine);
+    }
+
+    return machine;
+  };
+
+  return createDelegationObject(currentMachine);
+}
+/**
+ * Creates a sequence machine that orchestrates multi-step flows by automatically
+ * advancing through a series of machines. When the current machine reaches a "final"
+ * state (determined by the isFinal predicate), the sequence automatically transitions
+ * to the next machine in the sequence.
+ *
+ * This is perfect for wizard-style flows, multi-step processes, or any scenario where
+ * you need to chain machines together with automatic progression.
+ *
+ * @template M - The tuple of machine types in the sequence.
+ * @param machines - The machines to sequence, in order.
+ * @param isFinal - A predicate function that determines when a machine is in a final state.
+ *                  Called after each transition to check if the sequence should advance.
+ * @returns A new machine that wraps the sequence, delegating to the current machine
+ *          and automatically advancing when each machine reaches its final state.
+ *
+ * @example
+ * ```typescript
+ * // Define form machines with final states
+ * class NameForm extends MachineBase<{ name: string; valid: boolean }> {
+ *   submit = (name: string) => new NameForm({ name, valid: name.length > 0 });
+ * }
+ *
+ * class EmailForm extends MachineBase<{ email: string; valid: boolean }> {
+ *   submit = (email: string) => new EmailForm({ email, valid: email.includes('@') });
+ * }
+ *
+ * class PasswordForm extends MachineBase<{ password: string; valid: boolean }> {
+ *   submit = (password: string) => new PasswordForm({ password, valid: password.length >= 8 });
+ * }
+ *
+ * // Create sequence that advances when each form becomes valid
+ * const wizard = sequence(
+ *   [new NameForm({ name: '', valid: false }),
+ *    new EmailForm({ email: '', valid: false }),
+ *    new PasswordForm({ password: '', valid: false })],
+ *   (machine) => machine.context.valid // Advance when valid becomes true
+ * );
+ *
+ * // Usage - automatically advances through forms
+ * let current = wizard;
+ * current = current.submit('John');     // Still on NameForm (not valid yet)
+ * current = current.submit('John Doe'); // Advances to EmailForm (name is valid)
+ * current = current.submit('john@');    // Still on EmailForm (not valid yet)
+ * current = current.submit('john@example.com'); // Advances to PasswordForm
+ * current = current.submit('12345678'); // Advances to end of sequence
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Async sequence with API calls
+ * const authSequence = sequence(
+ *   [new LoginForm(), new TwoFactorForm(), new Dashboard()],
+ *   (machine) => machine.context.authenticated === true
+ * );
+ *
+ * // The sequence handles async transitions automatically
+ * const finalState = await authSequence.login('user@example.com', 'password');
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Complex predicate - advance based on multiple conditions
+ * const complexSequence = sequence(
+ *   [step1Machine, step2Machine, step3Machine],
+ *   (machine) => {
+ *     // Advance when all required fields are filled AND validated
+ *     return machine.context.requiredFields.every(f => f.filled) &&
+ *            machine.context.validationErrors.length === 0;
+ *   }
+ * );
+ * ```
+ *
+ * @remarks
+ * - The sequence maintains the union type of all machines in the sequence
+ * - Transitions are delegated to the current machine in the sequence
+ * - When a machine reaches a final state, the sequence automatically advances
+ * - If the sequence reaches the end, further transitions return the final machine
+ * - The isFinal predicate is called after every transition to check advancement
+ * - Works with both sync and async machines (returns MaybePromise)
+ */
+export function sequence<
+  M extends readonly [Machine<any>, ...Machine<any>[]]
+>(
+  machines: M,
+  isFinal: (machine: M[number]) => boolean
+): M[number] {
+  return createSequenceMachine(machines, isFinal);
+}
+
+/**
+ * Convenience overload for sequencing exactly 2 machines.
+ * Provides better type inference and IntelliSense for common 2-step flows.
+ *
+ * @example
+ * ```typescript
+ * const flow = sequence2(
+ *   new LoginForm(),
+ *   new Dashboard(),
+ *   (machine) => machine.context.authenticated
+ * );
+ * ```
+ */
+export function sequence2<
+  M1 extends Machine<any>,
+  M2 extends Machine<any>
+>(
+  machine1: M1,
+  machine2: M2,
+  isFinal: (machine: M1 | M2) => boolean
+): M1 | M2 {
+  return sequence([machine1, machine2], isFinal);
+}
+
+/**
+ * Convenience overload for sequencing exactly 3 machines.
+ * Provides better type inference and IntelliSense for common 3-step flows.
+ *
+ * @example
+ * ```typescript
+ * const wizard = sequence3(
+ *   new NameForm({ name: '', valid: false }),
+ *   new EmailForm({ email: '', valid: false }),
+ *   new PasswordForm({ password: '', valid: false }),
+ *   (machine) => machine.context.valid
+ * );
+ * ```
+ */
+export function sequence3<
+  M1 extends Machine<any>,
+  M2 extends Machine<any>,
+  M3 extends Machine<any>
+>(
+  machine1: M1,
+  machine2: M2,
+  machine3: M3,
+  isFinal: (machine: M1 | M2 | M3) => boolean
+): M1 | M2 | M3 {
+  return sequence([machine1, machine2, machine3], isFinal);
 }

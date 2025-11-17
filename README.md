@@ -8,6 +8,8 @@ A minimal, type-safe state machine library for TypeScript.
 
 > **Philosophy**: Provide minimal primitives that capture the essence of finite state machines, with maximum type safety and flexibility. **Type-State Programming** is our core paradigm—we use TypeScript's type system itself to represent finite states, making illegal states unrepresentable and invalid transitions impossible to write. The compiler becomes your safety net, catching state-related bugs before your code ever runs.
 
+> **Middleware System**: For production-ready state machines, we provide a comprehensive middleware system for cross-cutting concerns like logging, analytics, validation, error handling, and debugging. **📖 [Read the Middleware Guide](./docs/middleware.md)**
+
 ## Installation
 
 ```bash
@@ -58,6 +60,10 @@ type Machine<C extends object> = {
 **Flexibility**: Unlike rigid FSM implementations, you can choose your level of immutability. Want to mutate? You can. Want pure functions? You can. Want compile-time state validation? Type-State Programming gives you that.
 
 **Read more about our core principles:** [ 📖 Core Principles Guide ](./docs/principles.md)
+
+## Choosing the Right Pattern
+
+The library offers multiple patterns for different use cases. **📖 [Pattern Decision Guide](./docs/patterns.md)** - A comprehensive guide to help you choose between Basic Machines, Runner, Ensemble, Generators, Classes, and more.
 
 ## Quick Start
 
@@ -656,6 +662,41 @@ const alice = buildUser({ id: 1, name: "Alice" });
 const bob = buildUser({ id: 2, name: "Bob" });
 ```
 
+### Middleware System
+
+For production-ready state machines with logging, analytics, validation, error handling, and debugging capabilities:
+
+```typescript
+import { createMiddleware, withLogging, withValidation, withAnalytics } from "@doeixd/machine";
+
+// Wrap machines with middleware
+const instrumented = createMiddleware(machine, {
+  before: ({ transitionName, context, args }) => {
+    console.log(`→ ${transitionName}`, args);
+  },
+  after: ({ transitionName, prevContext, nextContext }) => {
+    console.log(`✓ ${transitionName}`);
+  },
+  error: ({ transitionName, error }) => {
+    console.error(`✗ ${transitionName}:`, error);
+  }
+});
+
+// Or use pre-built middleware
+const logged = withLogging(machine);
+const validated = withValidation(machine, validateFn);
+const tracked = withAnalytics(machine, trackEvent);
+```
+
+**Features:**
+- Type-safe interception layer
+- Pre-built middleware for common use cases
+- History tracking and time-travel debugging
+- Performance monitoring and error reporting
+- Composable and configurable
+
+**📖 [Complete Middleware Documentation](./docs/middleware.md)**
+
 ### Type Utilities
 
 #### Type Extraction
@@ -711,7 +752,7 @@ For advanced use cases, the library provides optional patterns that offer better
 
 **Runner (createRunner):** A stateful controller that wraps a single machine. It provides a stable actions object (runner.actions.increment()) to eliminate the need for manual state reassignment, which is ideal for complex local state.
 
-**Ensemble (createEnsemble / createMultiMachine):** An orchestration engine that decouples state logic from state storage. It plugs into external stores (like React or Solid state) to create framework-agnostic, global state machines.
+**Ensemble (createEnsemble / createMultiMachine):** Coordinates multiple independent state machines that share the same context store, like musicians in an orchestra following a shared conductor. Each machine handles its domain (auth, data, UI) while operating on the same global state.
 
 ### Managed State with Runner & Ensemble
 
@@ -749,312 +790,129 @@ if (runner.state.context.status === 'loggedIn') {
 - Perfect for React hooks, component state, or form handling
 - Type-safe state narrowing still works
 
-#### Ensemble: Framework-Agnostic Global State Orchestration
+#### Ensemble: Coordinating Multiple Machines with Shared Context
 
-The `Ensemble` decouples state logic (the machine) from state storage, plugging into any state management solution (React hooks, Solid stores, Zustand, Redux, etc.) via a simple `StateStore` interface.
+The `Ensemble` coordinates multiple independent state machines that all operate on the same shared context store, like musicians in an orchestra following a shared conductor. Each machine handles its own domain while reading/writing to the same global state.
 
 ```typescript
 import { createEnsemble } from "@doeixd/machine/multi";
 
-// 1. Define your state store interface
-const store = {
-  getContext: () => sharedContext,
-  setContext: (newCtx) => { sharedContext = newCtx; }
+// Shared application state
+type AppState = {
+  auth: { status: 'loggedIn' | 'loggedOut'; user?: string };
+  data: { status: 'idle' | 'loading' | 'success'; items?: any[] };
+  ui: { modal: 'open' | 'closed'; theme: 'light' | 'dark' };
 };
 
-// 2. Define machine factories for each state
-const factories = {
-  idle: (ctx) => createMachine(ctx, {
-    fetch: () => store.setContext({ ...ctx, status: 'loading' })
+const globalStore = {
+  getContext: () => appState,
+  setContext: (newState) => setAppState(newState)
+};
+
+// Auth ensemble - manages auth slice
+const authEnsemble = createEnsemble(globalStore, {
+  loggedOut: (ctx) => createMachine(ctx, {
+    login: (user) => ({ ...ctx, auth: { status: 'loggedIn', user } })
   }),
-  loading: (ctx) => createMachine(ctx, {
-    succeed: (data) => store.setContext({ ...ctx, status: 'success', data }),
-    fail: (error) => store.setContext({ ...ctx, status: 'error', error })
-  }),
-  success: (ctx) => createMachine(ctx, {
-    refetch: () => store.setContext({ ...ctx, status: 'loading' })
+  loggedIn: (ctx) => createMachine(ctx, {
+    logout: () => ({ ...ctx, auth: { status: 'loggedOut' } })
   })
-};
+}, (ctx) => ctx.auth.status);
 
-// 3. Create the Ensemble with an accessor function for refactoring safety
-const ensemble = createEnsemble(store, factories, (ctx) => ctx.status);
+// Data ensemble - manages data slice
+const dataEnsemble = createEnsemble(globalStore, {
+  idle: (ctx) => createMachine(ctx, {
+    fetch: async () => {
+      const items = await api.fetch();
+      return { ...ctx, data: { status: 'success', items } };
+    }
+  }),
+  loading: (ctx) => createMachine(ctx, { /* ... */ }),
+  success: (ctx) => createMachine(ctx, { /* ... */ })
+}, (ctx) => ctx.data.status);
 
-// 4. Use it with type-safe dispatch
-ensemble.actions.fetch();      // Transitions to loading
-console.log(ensemble.context.status); // 'loading'
+// UI ensemble - manages UI slice
+const uiEnsemble = createEnsemble(globalStore, {
+  closed: (ctx) => createMachine(ctx, {
+    open: () => ({ ...ctx, ui: { ...ctx.ui, modal: 'open' } })
+  }),
+  open: (ctx) => createMachine(ctx, {
+    close: () => ({ ...ctx, ui: { ...ctx.ui, modal: 'closed' } })
+  })
+}, (ctx) => ctx.ui.modal);
 
-// Type narrowing
-if (ensemble.state.context.status === 'success') {
-  console.log(ensemble.state.context.data); // TypeScript knows data exists
-}
+// They coordinate through shared state
+authEnsemble.actions.login('alice');  // Updates global auth status
+dataEnsemble.actions.fetch();         // Reads from same global state
+uiEnsemble.actions.showModal();       // Also uses same global state
 ```
 
 **Perfect for:**
-- Global application state orchestration
-- Decoupling business logic from framework-specific state management
+- Coordinating multiple state machines that share context
+- Complex applications with independent domains (auth, data, UI, etc.)
+- Framework-agnostic state logic that works with React, Solid, Vue, etc.
+- Global state orchestration across your entire application
+- **Syncing to external libraries/stores** - easy integration with Zustand, Redux, databases, APIs, etc.
 - Testing (swap the store for a test stub)
-- Multiple framework support (same machine logic for React, Solid, Vue, etc.)
 
-**Workflow Pattern:**
-```typescript
-// React example
-function MyComponent() {
-  const [context, setContext] = useState(initialContext);
-  
-  const store = { 
-    getContext: () => context,
-    setContext: setContext
-  };
-  
-  const ensemble = useMemo(() => 
-    createEnsemble(store, factories, (ctx) => ctx.status),
-    [context]
-  );
-  
-  return (
-    <div>
-      <p>Status: {ensemble.context.status}</p>
-      <button onClick={() => ensemble.actions.fetch()}>Load Data</button>
-    </div>
-  );
-}
-```
+**Analogy**: A musical ensemble. Each musician (machine) plays their part following the same conductor (shared store). Together they create coordinated harmony, where one instrument's change can influence the others.
 
-#### Generator-Based Workflows with Runner & Ensemble
-
-Run complex, multi-step workflows imperatively using generators:
+**Great for External Integration:**
+The `StateStore` interface makes it trivial to sync with external systems:
 
 ```typescript
-import { runWithRunner, runWithEnsemble } from "@doeixd/machine/multi";
+// Zustand store integration
+import { create } from 'zustand';
 
-// With Runner (local state)
-const result = runWithRunner(function* (runner) {
-  yield runner.actions.increment();
-  yield runner.actions.add(10);
-  if (runner.context.count > 5) {
-    yield runner.actions.reset();
-  }
-  return runner.context;
-}, createCounterMachine());
+const useAppStore = create<AppState>((set, get) => ({
+  // ... your Zustand store
+}));
 
-// With Ensemble (global state)
-const result = runWithEnsemble(function* (ensemble) {
-  yield ensemble.actions.fetch();
-  yield ensemble.actions.process();
-  if (ensemble.context.status === 'success') {
-    yield ensemble.actions.commit();
-  }
-  return ensemble.context.data;
-}, ensemble);
-```
-
-#### Mutable Machine (Experimental)
-
-For non-UI environments where a stable object reference is critical, `createMutableMachine` provides a highly imperative API with direct in-place mutations.
-
-**Key Characteristics:**
-- **Stable Object Reference**: The machine is a single object whose properties mutate in place
-- **Direct Imperative API**: Call transitions like methods (`machine.login('user')`) with immediate updates
-- **No State History**: Previous states are not preserved (no time-travel debugging)
-- **Not for Reactive UIs**: Won't trigger component re-renders in React, Solid, Vue, etc.
-
-**Best for:**
-- Backend services and game loops
-- Complex synchronous scripts and data pipelines
-- Non-UI environments where a stable state object is essential
-
-**Example: Authentication State**
-
-```typescript
-import { createMutableMachine } from "@doeixd/machine/multi";
-
-type AuthContext =
-  | { status: 'loggedOut'; error?: string }
-  | { status: 'loggedIn'; username: string };
-
-const authFactories = {
-  loggedOut: (ctx: AuthContext) => ({
-    context: ctx,
-    login: (username: string) => ({ status: 'loggedIn', username }),
-  }),
-  loggedIn: (ctx: AuthContext) => ({
-    context: ctx,
-    logout: () => ({ status: 'loggedOut' }),
-  }),
+const zustandStore = {
+  getContext: () => useAppStore.getState(),
+  setContext: (newState) => useAppStore.setState(newState)
 };
 
-const auth = createMutableMachine(
-  { status: 'loggedOut' } as AuthContext,
-  authFactories,
-  (ctx) => ctx.status  // Accessor function - refactor-safe
-);
+const ensemble = createEnsemble(zustandStore, factories, (ctx) => ctx.status);
 
-// Stable reference - keep this, the object will mutate
-const userRef = auth;
+// Redux integration
+import { store } from './reduxStore';
 
-console.log(auth.status); // 'loggedOut'
-
-auth.login('alice'); // Mutates in place
-
-console.log(auth.status); // 'loggedIn'
-console.log(auth.username); // 'alice'
-console.log(userRef === auth); // true - same object reference
-```
-
-**Example: Game State Loop**
-
-```typescript
-type PlayerContext = {
-  state: 'idle' | 'walking' | 'attacking';
-  hp: number;
-  position: { x: number; y: number };
+const reduxStore = {
+  getContext: () => store.getState(),
+  setContext: (newState) => store.dispatch(setAppState(newState))
 };
 
-const player = createMutableMachine(
-  { state: 'idle', hp: 100, position: { x: 0, y: 0 } },
-  {
-    idle: (ctx) => ({
-      context: ctx,
-      walk: (dx: number, dy: number) => ({
-        ...ctx,
-        state: 'walking',
-        position: { x: ctx.position.x + dx, y: ctx.position.y + dy }
-      }),
-      attack: () => ({ ...ctx, state: 'attacking' }),
-    }),
-    walking: (ctx) => ({
-      context: ctx,
-      stop: () => ({ ...ctx, state: 'idle' }),
-    }),
-    attacking: (ctx) => ({
-      context: ctx,
-      finishAttack: () => ({ ...ctx, state: 'idle' }),
-    }),
+const ensemble = createEnsemble(reduxStore, factories, (ctx) => ctx.status);
+
+// Database/API integration
+const apiStore = {
+  getContext: async () => await api.getAppState(),
+  setContext: async (newState) => {
+    await api.saveAppState(newState);
+    // Trigger real-time updates to other clients
+    socket.emit('state-changed', newState);
+  }
+};
+
+const ensemble = createEnsemble(apiStore, factories, (ctx) => ctx.status);
+
+// LocalStorage persistence
+const persistentStore = {
+  getContext: () => {
+    const saved = localStorage.getItem('app-state');
+    return saved ? JSON.parse(saved) : defaultState;
   },
-  (ctx) => ctx.state  // Accessor function - refactor-safe
-);
-
-// Game loop
-player.walk(1, 0);
-console.log(player.position); // { x: 1, y: 0 }
-console.log(player.state); // 'walking'
-
-player.stop();
-console.log(player.state); // 'idle'
-```
-
-⚠️ **Trade-offs**: Breaks immutability principle. Only use when:
-- Working in non-UI environments (backend, CLI, game logic)
-- Stable object reference is critical
-- You accept no reactive UI updates or state history
-
-**Not suitable for**: React, Solid, Vue, or any reactive framework.
-
-#### Comparison: Runner vs Ensemble vs Mutable Machine
-
-| Feature | Runner | Ensemble | Mutable Machine |
-|---------|--------|----------|-----------------|
-| **State Philosophy** | Immutable core with ergonomic wrapper | External immutable state store integration | Mutable in-place context |
-| **Primary Use Case** | Complex local/component state | Global state with framework integration | Backend, game loops, non-UI |
-| **API Style** | `runner.actions.increment()` | `ensemble.actions.increment()` | `machine.increment()` |
-| **UI Frameworks** | ✅ Excellent (React, Solid, Vue) | ✅ Designed for frameworks | ❌ Won't trigger re-renders |
-| **State History** | ✅ Preserved (immutable snapshots) | ✅ Preserved (by external store) | ❌ Lost (mutated in place) |
-| **Object Stability** | Runner reference stable, internal machine changes | Ensemble reference stable, reconstructed per access | ✅ Single object reference |
-| **Time-Travel Debugging** | ✅ Possible | ✅ Possible | ❌ Not possible |
-| **Performance** | Standard | Standard | ✅ Optimal (no allocations) |
-
-**Quick Decision Tree:**
-
-1. **Do you need a UI framework** (React, Solid, Vue)?
-   - **Yes** → Use **Ensemble** if global/shared state, or **Runner** if local/component state
-   - **No** (Backend, game, CLI) → Use **Mutable Machine**
-
-2. **Is state global/shared across your app?**
-   - **Yes** → Use **Ensemble** (hooks into your framework's state manager)
-   - **No** → Use **Runner** (simpler, still immutable)
-
-3. **Do you need immutability for debugging/testing?**
-   - **Yes** → Use **Runner** or **Ensemble**
-   - **No** (performance critical) → Use **Mutable Machine**
-
-##### Deep Dive: Runner (createRunner)
-
-**The Pattern**: A stateful wrapper that handles internal reassignments for you.
-
-```typescript
-// Without Runner (verbose reassignment chain)
-let machine = createCounterMachine();
-machine = machine.increment();
-machine = machine.add(5);
-machine = machine.reset();
-
-// With Runner (stable reference, less boilerplate)
-const runner = createRunner(createCounterMachine());
-runner.actions.increment();
-runner.actions.add(5);
-runner.actions.reset();
-console.log(runner.context); // Access state directly
-```
-
-**How it Works:**
-- Holds a private `currentMachine` variable
-- Wraps each transition method to update `currentMachine` before returning
-- Provides stable `runner.actions` and `runner.context` references
-- The underlying immutable machine is still pure; the Runner just manages the reassignments
-
-**When to Use:**
-- Complex local state (forms, multi-step wizards, component logic)
-- Generator-based workflows (cleaner syntax with `yield runner.actions.xxx()`)
-- You want immutability's safety without constant `machine = machine.xxx()` chains
-- Perfect for React component state or Solid signals
-
-**Analogy**: An automatic transmission. The immutable engine is still doing powerful, pure work. The Runner just handles the "gear shifting" automatically.
-
-##### Deep Dive: Ensemble (createEnsemble)
-
-**The Pattern**: Decouples machine logic from framework-specific state management.
-
-```typescript
-// Your pure machine logic
-const factories = {
-  idle: (ctx) => createMachine(ctx, { fetch: () => { /* ... */ } }),
-  loading: (ctx) => createMachine(ctx, { succeed: (data) => { /* ... */ } }),
+  setContext: (newState) => {
+    localStorage.setItem('app-state', JSON.stringify(newState));
+    return newState;
+  }
 };
 
-// Your framework's state (React example)
-const [context, setContext] = useState(initialContext);
-
-// The Ensemble bridges them - use an accessor function for refactoring safety
-const ensemble = useMemo(() => 
-  createEnsemble(
-    { getContext: () => context, setContext },
-    factories,
-    (ctx) => ctx.status  // Accessor function - fully refactor-safe!
-  ),
-  [context]
-);
-
-// Type-safe dispatch from any part of your app
-ensemble.actions.fetch();
+const ensemble = createEnsemble(persistentStore, factories, (ctx) => ctx.status);
 ```
 
-**How it Works:**
-- Takes a `StateStore` (get/set functions) that communicate with your state manager
-- Takes a set of factory functions that create machines for each state
-- When you call `ensemble.actions.fetch()`:
-  1. Gets current context from the store
-  2. Determines the active machine based on discriminant key
-  3. Executes the transition (which calls `store.setContext()` internally)
-  4. Reconstructs the machine with updated context on next access
-
-**When to Use:**
-- Global/application state that multiple components need
-- You want machine logic completely decoupled from your UI framework
-- Testing (swap the store for a test stub)
-- Portable state logic (same machine works with React, Solid, Vue, etc.)
-- Complex state that's read/updated from multiple places in your app
-
-**Analogy**: A custom car build. The machine provides expert logic on "how a car behaves," but you provide the engine (your framework's state manager). Perfect integration, total flexibility.
+**Your machine logic stays pure** - just swap the store implementation to change how state is persisted, synchronized, or shared.
 
 ##### Deep Dive: Mutable Machine (createMutableMachine)
 

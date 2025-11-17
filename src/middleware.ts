@@ -3,7 +3,7 @@
  * @description Provides composable middleware for logging, analytics, validation, and more.
  */
 
-import type { Machine, AsyncMachine, Context, BaseMachine, MaybePromise } from './index';
+import type { Context, BaseMachine } from './index';
 
 // =============================================================================
 // SECTION: MIDDLEWARE TYPES
@@ -57,12 +57,28 @@ export interface MiddlewareError<C extends object> {
  * All hooks are optional - provide only the ones you need.
  * @template C - The context object type
  */
+/**
+ * Strongly typed middleware hooks with precise context and return types.
+ * All hooks are optional - provide only the ones you need.
+ *
+ * @template C - The machine context type for precise type inference
+ */
 export interface MiddlewareHooks<C extends object> {
   /**
    * Called before a transition executes.
    * Can be used for validation, logging, analytics, etc.
-   * If this hook throws, the transition will not execute.
-   * If this hook returns CANCEL symbol, the transition is aborted without error.
+   *
+   * @param ctx - Transition context with machine state and transition details
+   * @returns void to continue, CANCEL to abort silently, or Promise for async validation
+   *
+   * @example
+   * ```typescript
+   * before: ({ transitionName, args, context }) => {
+   *   if (transitionName === 'withdraw' && context.balance < args[0]) {
+   *     throw new Error('Insufficient funds');
+   *   }
+   * }
+   * ```
    */
   before?: (ctx: MiddlewareContext<C>) => void | typeof CANCEL | Promise<void | typeof CANCEL>;
 
@@ -70,16 +86,40 @@ export interface MiddlewareHooks<C extends object> {
    * Called after a transition successfully executes.
    * Receives both the previous and next context.
    * Cannot prevent the transition (it already happened).
+   *
+   * @param result - Transition result with before/after contexts and transition details
+   *
+   * @example
+   * ```typescript
+   * after: ({ transitionName, before, after }) => {
+   *   console.log(`${transitionName}: ${before.count} -> ${after.count}`);
+   * }
+   * ```
    */
   after?: (result: MiddlewareResult<C>) => void | Promise<void>;
 
   /**
    * Called if a transition throws an error.
-   * Can be used for error logging, Sentry reporting, etc.
-   * Return behavior:
+   * Can be used for error logging, Sentry reporting, fallback states, etc.
+   *
+   * @param error - Error context with transition details and the thrown error
+   * @returns
    * - void/undefined/null: Re-throw the original error (default)
    * - BaseMachine: Use this as fallback state instead of throwing
    * - throw new Error: Transform the error
+   *
+   * @example
+   * ```typescript
+   * error: ({ transitionName, error, context }) => {
+   *   // Log to error reporting service
+   *   reportError(error, { transitionName, context });
+   *
+   *   // Return fallback state for recoverable errors
+   *   if (error.message.includes('network')) {
+   *     return createMachine({ ...context, error: 'offline' }, transitions);
+   *   }
+   * }
+   * ```
    */
   error?: (error: MiddlewareError<C>) => void | null | BaseMachine<C> | Promise<void | null | BaseMachine<C>>;
 }
@@ -136,9 +176,9 @@ export const CANCEL = Symbol('CANCEL');
  * @template M - The base machine type
  * @template C - The context type
  */
-export type WithHistory<M extends BaseMachine<any>, C extends object = Context<M>> = M & {
+export type WithHistory<M extends BaseMachine<any>> = M & {
   /** Array of recorded transition history entries */
-  history: HistoryEntry<C>[];
+  history: HistoryEntry[];
   /** Clear all history entries */
   clearHistory: () => void;
 };
@@ -165,7 +205,7 @@ export type WithSnapshot<M extends BaseMachine<any>, C extends object = Context<
  */
 export type WithTimeTravel<M extends BaseMachine<any>, C extends object = Context<M>> = M & {
   /** Array of recorded transition history entries */
-  history: HistoryEntry<C>[];
+  history: HistoryEntry[];
   /** Array of recorded context snapshots */
   snapshots: ContextSnapshot<C>[];
   /** Clear all history and snapshots */
@@ -584,11 +624,13 @@ export function withValidation<M extends BaseMachine<any>>(
           if (r === false) {
             throw new Error(`Validation failed for transition: ${ctx.transitionName}`);
           }
+          return undefined;
         });
       }
       if (result === false) {
         throw new Error(`Validation failed for transition: ${ctx.transitionName}`);
       }
+      return undefined;
     }
   }, { mode: 'auto', ...options });
 }
@@ -623,11 +665,13 @@ export function withPermissions<M extends BaseMachine<any>>(
           if (!allowed) {
             throw new Error(`Unauthorized transition: ${ctx.transitionName}`);
           }
+          return undefined;
         });
       }
       if (!result) {
         throw new Error(`Unauthorized transition: ${ctx.transitionName}`);
       }
+      return undefined;
     }
   }, { mode: 'auto', ...options });
 }
@@ -709,6 +753,7 @@ export function withPerformanceMonitoring<M extends BaseMachine<any>>(
   return createMiddleware(machine, {
     before: ({ transitionName }) => {
       timings.set(transitionName, performance.now());
+      return undefined;
     },
     after: ({ transitionName, nextContext }) => {
       const startTime = timings.get(transitionName);
@@ -720,6 +765,7 @@ export function withPerformanceMonitoring<M extends BaseMachine<any>>(
           return result;
         }
       }
+      return undefined;
     }
   }, { mode: 'auto' });
 }
@@ -880,7 +926,7 @@ export function withGuards<M extends BaseMachine<any>>(
     before: async (ctx) => {
       const guardConfig = guards[ctx.transitionName];
       if (!guardConfig) {
-        return; // No guard for this transition
+        return undefined; // No guard for this transition
       }
 
       // Handle shorthand: function directly instead of config object
@@ -898,6 +944,7 @@ export function withGuards<M extends BaseMachine<any>>(
           throw new Error(`Guard failed for transition: ${ctx.transitionName}`);
         }
       }
+      return undefined;
     }
   }, { mode: 'async', ...options });
 }
@@ -1053,9 +1100,8 @@ export function createStateMiddleware<M extends BaseMachine<any>>(
 
 /**
  * Represents a recorded transition call in the history.
- * @template C - The context type
  */
-export interface HistoryEntry<C extends object = any> {
+export interface HistoryEntry {
   /** Unique ID for this history entry */
   id: string;
   /** The transition that was called */
@@ -1116,11 +1162,11 @@ export function withHistory<M extends BaseMachine<any>>(
     /** Filter function to exclude certain transitions from history */
     filter?: (transitionName: string, args: any[]) => boolean;
     /** Callback when new entry is added */
-    onEntry?: (entry: HistoryEntry<Context<M>>) => void;
+    onEntry?: (entry: HistoryEntry) => void;
     /** Internal flag to prevent rewrapping */
     _isRewrap?: boolean;
   } = {}
-): WithHistory<M, Context<M>> {
+): WithHistory<M> {
   const {
     maxSize,
     serializer,
@@ -1129,7 +1175,7 @@ export function withHistory<M extends BaseMachine<any>>(
     _isRewrap = false
   } = options;
 
-  const history: HistoryEntry<Context<M>>[] = [];
+  const history: HistoryEntry[] = [];
   let entryId = 0;
 
   const instrumentedMachine = createMiddleware(machine, {
@@ -1140,7 +1186,7 @@ export function withHistory<M extends BaseMachine<any>>(
       }
 
       // Create entry
-      const entry: HistoryEntry<Context<M>> = {
+      const entry: HistoryEntry = {
         id: `entry-${entryId++}`,
         transitionName,
         args: [...args], // Shallow clone args (fast, works with any type)
@@ -1189,7 +1235,7 @@ export function withHistory<M extends BaseMachine<any>>(
                 }
 
                 // Create entry
-                const entry: HistoryEntry<Context<M>> = {
+                const entry: HistoryEntry = {
                   id: `entry-${entryId++}`,
                   transitionName,
                   args: [...transArgs],
@@ -1403,11 +1449,7 @@ export function withSnapshot<M extends BaseMachine<any>>(
             // Manually handle snapshot tracking without calling createMiddleware again
             // to avoid infinite recursion and complex wrapping issues
             
-            // First, record the snapshot
-            const beforeContext = result.context;
-            
             // Create a proxy that intercepts transition calls to record snapshots
-            const snapshotsToAdd: Array<{ transitionName: string; before: any; after: any }> = [];
             
             // Wrap each transition to record snapshots
             for (const transProp in result) {
@@ -1561,14 +1603,14 @@ export function withTimeTravel<M extends BaseMachine<any>>(
 ): WithTimeTravel<M, Context<M>> {
   const { maxSize, serializer, onRecord } = options;
 
-  const history: HistoryEntry<Context<M>>[] = [];
+  const history: HistoryEntry[] = [];
   const snapshots: ContextSnapshot<Context<M>>[] = [];
   let entryId = 0;
   let snapshotId = 0;
 
   // Middleware hooks that record to shared arrays
   const recordHistory = (transitionName: string, args: any[]) => {
-    const entry: HistoryEntry<Context<M>> = {
+    const entry: HistoryEntry = {
       id: `entry-${entryId++}`,
       transitionName,
       args: [...args],
@@ -1769,6 +1811,11 @@ export function createCustomMiddleware<M extends BaseMachine<any>>(
  * @template M - The input machine type
  * @template R - The output machine type (usually extends M)
  */
+/**
+ * A middleware function that transforms a machine.
+ * @template M - Input machine type
+ * @template R - Output machine type (defaults to same as input if no augmentation)
+ */
 export type MiddlewareFn<M extends BaseMachine<any>, R extends BaseMachine<any> = M> = (machine: M) => R;
 
 /**
@@ -1839,20 +1886,120 @@ export interface PipelineResult<M extends BaseMachine<any>> {
  *   withTimeTravel()
  * );
  */
+/**
+ * Recursively applies middlewares to infer the final machine type.
+ * Provides precise type inference for middleware composition chains.
+ */
+type ComposeResult<
+  M extends BaseMachine<any>,
+  Ms extends readonly MiddlewareFn<any, any>[]
+> = Ms extends readonly []
+  ? M
+  : Ms extends readonly [infer First, ...infer Rest]
+    ? First extends MiddlewareFn<any, infer Output>
+      ? Rest extends readonly MiddlewareFn<any, any>[]
+        ? ComposeResult<Output, Rest>
+        : Output
+      : M
+    : M;
+
+/**
+ * Type-safe middleware composition with perfect inference.
+ * Composes multiple middlewares into a single transformation chain.
+ *
+ * @template M - The input machine type
+ * @template Ms - Array of middleware functions
+ * @param machine - The machine to enhance
+ * @param middlewares - Middleware functions to apply in order
+ * @returns The machine with all middlewares applied, with precise type inference
+ *
+ * @example
+ * ```typescript
+ * const enhanced = composeTyped(
+ *   counter,
+ *   withHistory(),
+ *   withSnapshot(),
+ *   withTimeTravel()
+ * );
+ * // enhanced: WithTimeTravel<WithSnapshot<WithHistory<Counter>>>
+ * // Perfect IntelliSense for all methods and properties
+ * ```
+ */
 export function composeTyped<
   M extends BaseMachine<any>,
-  Ms extends Array<MiddlewareFn<any, any>>
+  Ms extends readonly MiddlewareFn<any, any>[]
 >(
   machine: M,
   ...middlewares: Ms
-): Ms extends []
-  ? M
-  : Ms extends [MiddlewareFn<infer A, infer B>, ...infer Rest]
-  ? Rest extends Array<MiddlewareFn<any, any>>
-    ? composeTyped<B, Rest>
-    : B
-  : M {
-  return middlewares.reduce((acc, middleware) => middleware(acc), machine) as any;
+): ComposeResult<M, Ms> {
+  return middlewares.reduce((acc, middleware) => middleware(acc), machine) as ComposeResult<M, Ms>;
+}
+
+/**
+ * Type-safe middleware composition with fluent API.
+ * Allows building middleware chains with method chaining.
+ *
+ * @example
+ * ```typescript
+ * const enhanced = chain(counter)
+ *   .with(withHistory())
+ *   .with(withSnapshot())
+ *   .with(withTimeTravel())
+ *   .build();
+ * ```
+ */
+export function chain<M extends BaseMachine<any>>(machine: M) {
+  return new MiddlewareChainBuilder(machine);
+}
+
+/**
+ * Fluent middleware composer for building complex middleware chains.
+ * Provides excellent TypeScript inference and IntelliSense.
+ */
+class MiddlewareChainBuilder<M extends BaseMachine<any>> {
+  constructor(private machine: M) {}
+
+  /**
+   * Add a middleware to the composition chain.
+   * @param middleware - The middleware function to add
+   * @returns A new composer with the middleware applied
+   */
+  with<M2 extends MiddlewareFn<any, any>>(
+    middleware: M2
+  ): MiddlewareChainBuilder<ReturnType<M2> extends BaseMachine<any> ? ReturnType<M2> : M> {
+    const result = middleware(this.machine);
+    return new MiddlewareChainBuilder(result as any);
+  }
+
+  /**
+   * Build the final machine with all middlewares applied.
+   */
+  build(): M {
+    return this.machine;
+  }
+}
+
+/**
+ * Common middleware combination types for better DX.
+ * These types help with inference when using popular middleware combinations.
+ */
+export type WithDebugging<M extends BaseMachine<any>> = WithTimeTravel<WithSnapshot<WithHistory<M>>>;
+
+/**
+ * Convenience function for the most common debugging middleware stack.
+ * Combines history, snapshots, and time travel for full debugging capabilities.
+ *
+ * @example
+ * ```typescript
+ * const debugMachine = withDebugging(counter);
+ * debugMachine.increment();
+ * debugMachine.history; // Full transition history
+ * debugMachine.snapshots; // Context snapshots
+ * debugMachine.replayFrom(0); // Time travel
+ * ```
+ */
+export function withDebugging<M extends BaseMachine<any>>(machine: M): WithDebugging<M> {
+  return withTimeTravel(withSnapshot(withHistory(machine)));
 }
 
 /**

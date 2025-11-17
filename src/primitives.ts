@@ -16,6 +16,14 @@
 // =============================================================================
 
 /**
+ * Options passed to async transition functions, including cancellation support.
+ */
+export interface TransitionOptions {
+  /** AbortSignal for cancelling long-running async operations. */
+  signal: AbortSignal;
+}
+
+/**
  * A unique symbol used to "brand" a type with metadata.
  * This key allows the static analyzer to find the metadata within a complex type signature.
  */
@@ -23,10 +31,19 @@ export const META_KEY = Symbol("MachineMeta");
 
 /**
  * Runtime metadata symbol.
+/**
  * Non-enumerable property key for storing metadata on function objects at runtime.
  * @internal
  */
 export const RUNTIME_META = Symbol('__machine_runtime_meta__');
+
+/**
+ * Local definition of Machine type to avoid circular imports.
+ * @internal
+ */
+type Machine<C extends object> = {
+  readonly context: C;
+} & Record<string, (...args: any[]) => Machine<any>>;
 
 /**
  * Helper type representing a Class Constructor.
@@ -236,17 +253,20 @@ export function guarded<
  * Annotates a transition with an Invoked Service (asynchronous effect).
  *
  * @param service - configuration for the service (source, onDone target, onError target).
- * @param implementation - The async function implementation.
+ * @param implementation - The async function implementation that receives an AbortSignal.
  * @example
  * load = invoke(
  *   { src: "fetchData", onDone: LoadedMachine, onError: ErrorMachine },
- *   async () => { ... }
+ *   async ({ signal }) => {
+ *     const response = await fetch('/api/data', { signal });
+ *     return new LoadedMachine({ data: await response.json() });
+ *   }
  * );
  */
 export function invoke<
   D extends ClassConstructor,
   E extends ClassConstructor,
-  F extends (...args: any[]) => any
+  F extends (options: { signal: AbortSignal }) => any
 >(
   service: { src: string; onDone: D; onError: E; description?: string },
   implementation: F
@@ -287,6 +307,177 @@ export function action<
   });
 
   return transition as any;
+}
+
+// =============================================================================
+// SECTION: RUNTIME GUARDS
+// =============================================================================
+
+/**
+ * Configuration options for guard behavior when conditions fail.
+ */
+export interface GuardOptions<C extends object = any> {
+  /** What to do when guard fails */
+  onFail?: 'throw' | 'ignore' | GuardFallback<C>;
+
+  /** Custom error message for 'throw' mode */
+  errorMessage?: string;
+
+  /** Additional metadata for statechart extraction */
+  description?: string;
+}
+
+/**
+ * A fallback machine or function that returns a machine when guard fails.
+ */
+export type GuardFallback<C extends object> =
+  | ((this: Machine<C>, ...args: any[]) => Machine<C>)
+  | Machine<C>;
+
+/**
+ * A guarded transition that checks conditions at runtime before executing.
+ * Can be called with either machine or context as 'this' binding.
+ */
+export type GuardedTransition<C extends object, T extends Machine<any>> = {
+  (...args: any[]): T | Machine<C> | Promise<T | Machine<C>>;
+  readonly __guard: true;
+  readonly condition: (ctx: C, ...args: any[]) => boolean | Promise<boolean>;
+  readonly transition: (...args: any[]) => T;
+};
+
+/**
+ * Creates a runtime guard that checks conditions before executing transitions.
+ * This provides actual runtime protection, unlike the `guarded` primitive which only adds metadata.
+ *
+ * @template C - The context type
+ * @template T - The transition return type
+ * @param condition - Function that returns true if transition should proceed
+ * @param transition - The transition function to execute if condition passes
+ * @param options - Configuration for guard failure behavior
+ * @returns A guarded transition function
+ *
+ * @example
+ * ```typescript
+ * const machine = createMachine({ balance: 100 }, {
+ *   withdraw: guard(
+ *     (ctx, amount) => ctx.balance >= amount,
+ *     function(amount: number) {
+ *       return createMachine({ balance: this.balance - amount }, this);
+ *     },
+ *     { onFail: 'throw', errorMessage: 'Insufficient funds' }
+ *   )
+ * });
+ *
+ * machine.withdraw(50); // ✅ Works
+ * machine.withdraw(200); // ❌ Throws "Insufficient funds"
+ * ```
+ */
+export function guard<C extends object, T extends Machine<any>>(
+  condition: (ctx: C, ...args: any[]) => boolean | Promise<boolean>,
+  transition: (...args: any[]) => T,
+  options: GuardOptions<C> = {}
+): GuardedTransition<C, T> {
+  const { onFail = 'throw', errorMessage, description } = options;
+
+  // Merge defaults into options for the metadata
+  const fullOptions = { ...options, onFail, errorMessage, description };
+
+  // Create the guarded transition function
+  const guardedTransition = async function(this: C | Machine<C>, ...args: any[]): Promise<T | Machine<C>> {
+    // Detect if 'this' is a machine or just context
+    const isMachine = typeof this === 'object' && 'context' in this;
+    const ctx = isMachine ? (this as Machine<C>).context : (this as C);
+
+    // Evaluate the condition
+    const conditionResult = await Promise.resolve(condition(ctx, ...args));
+
+    if (conditionResult) {
+      // Condition passed, execute the transition
+      // Transition functions expect 'this' to be the context
+      const contextForTransition = isMachine ? (this as Machine<C>).context : (this as C);
+      return transition.apply(contextForTransition, args);
+    } else {
+      // Condition failed, handle according to options
+      if (onFail === 'throw') {
+        const message = errorMessage || 'Guard condition failed';
+        throw new Error(message);
+      } else if (onFail === 'ignore') {
+        if (isMachine) {
+          // Return the current machine unchanged
+          return this as Machine<C>;
+        } else {
+          // Cannot ignore when called with context binding
+          throw new Error('Cannot use "ignore" mode with context-only binding. Use full machine binding or provide fallback.');
+        }
+      } else if (typeof onFail === 'function') {
+        // Custom fallback function - call with machine as 'this'
+        if (isMachine) {
+          return onFail.apply(this as Machine<C>, args);
+        } else {
+          throw new Error('Cannot use function fallback with context-only binding. Use full machine binding.');
+        }
+      } else {
+        // Static fallback machine
+        return onFail;
+      }
+    }
+  };
+
+  // Attach metadata for type branding and statechart extraction
+  Object.defineProperty(guardedTransition, '__guard', { value: true, enumerable: false });
+  Object.defineProperty(guardedTransition, 'condition', { value: condition, enumerable: false });
+  Object.defineProperty(guardedTransition, 'transition', { value: transition, enumerable: false });
+  Object.defineProperty(guardedTransition, 'options', { value: fullOptions, enumerable: false });
+
+  // Attach runtime metadata for statechart extraction
+  attachRuntimeMeta(guardedTransition, {
+    description: description || 'Runtime guarded transition',
+    guards: [{ name: 'runtime_guard', description: description || 'Runtime condition check' }]
+  });
+
+  return guardedTransition as GuardedTransition<C, T>;
+}
+
+/**
+ * Fluent API for creating guarded transitions.
+ * Provides a more readable way to define conditional transitions.
+ *
+ * @template C - The context type
+ * @param condition - Function that returns true if transition should proceed
+ * @returns A fluent interface for defining the guarded transition
+ *
+ * @example
+ * ```typescript
+ * const machine = createMachine({ isAdmin: false }, {
+ *   deleteUser: whenGuard((ctx) => ctx.isAdmin)
+ *     .do(function(userId: string) {
+ *       return createMachine({ ...this.context, deleted: userId }, this);
+ *     })
+ *     .else(function() {
+ *       return createMachine({ ...this.context, error: 'Unauthorized' }, this);
+ *     })
+ * });
+ * ```
+ */
+export function whenGuard<C extends object>(
+  condition: (ctx: C, ...args: any[]) => boolean | Promise<boolean>
+) {
+  return {
+    /**
+     * Define the transition to execute when the condition passes.
+     * Returns a guarded transition that can optionally have an else clause.
+     */
+    do<T extends Machine<any>>(transition: (...args: any[]) => T) {
+      const guarded = guard(condition, transition);
+
+      // Add fluent else method to the guarded transition
+      (guarded as any).else = function<F extends Machine<any>>(fallback: (...args: any[]) => F) {
+        return guard(condition, transition, { onFail: fallback });
+      };
+
+      return guarded;
+    }
+  };
 }
 
 /**

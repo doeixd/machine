@@ -103,9 +103,22 @@ export class LoadingMachine extends MachineBase<LoadingContext> {
         onError: ErrorMachine,
         description: 'Asynchronous data fetch from API endpoint',
       },
-      async () => {
-        // Simulate API call
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+      async ({ signal }) => {
+        // Simulate API call with AbortSignal support
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(resolve, 1000);
+
+          // Handle cancellation
+          signal.addEventListener('abort', () => {
+            clearTimeout(timeout);
+            reject(new Error('Fetch cancelled'));
+          });
+        });
+
+        // Check if operation was cancelled after the delay
+        if (signal.aborted) {
+          throw new Error('Fetch cancelled');
+        }
 
         // Simulate successful response
         const mockData = {

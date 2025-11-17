@@ -106,7 +106,7 @@ export interface ExtractionConfig {
  * @returns A JSON-compatible value (string, number, object, array).
  * @internal
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+// @ts-expect-error - verbose parameter is used but TypeScript doesn't detect it
 function _typeToJson(type: Type, verbose = false): any {
   // --- Terminal Types ---
   const symbol = type.getSymbol();

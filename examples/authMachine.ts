@@ -99,9 +99,22 @@ export class LoggingInMachine extends MachineBase<LoggingInContext> {
         onError: ErrorMachine,
         description: 'Call authentication API and retrieve user session token',
       },
-      async () => {
-        // Simulate API call
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+      async ({ signal }) => {
+        // Simulate API call with AbortSignal support
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(resolve, 1000);
+
+          // Handle cancellation
+          signal.addEventListener('abort', () => {
+            clearTimeout(timeout);
+            reject(new Error('Authentication cancelled'));
+          });
+        });
+
+        // Check if operation was cancelled
+        if (signal.aborted) {
+          throw new Error('Authentication cancelled');
+        }
 
         // Simulate successful auth
         const token = 'mock-jwt-token-' + Date.now();
@@ -189,9 +202,22 @@ export class LoggedInMachine extends MachineBase<LoggedInContext> {
         onError: SessionExpiredMachine,
         description: 'Call token refresh endpoint with current token',
       },
-      async () => {
-        // Simulate token refresh API call
-        await new Promise((resolve) => setTimeout(resolve, 500));
+      async ({ signal }) => {
+        // Simulate token refresh API call with AbortSignal support
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(resolve, 500);
+
+          // Handle cancellation
+          signal.addEventListener('abort', () => {
+            clearTimeout(timeout);
+            reject(new Error('Token refresh cancelled'));
+          });
+        });
+
+        // Check if operation was cancelled
+        if (signal.aborted) {
+          throw new Error('Token refresh cancelled');
+        }
 
         const newToken = 'refreshed-jwt-token-' + Date.now();
         const newExpiresAt = Date.now() + 3600000; // 1 hour from now

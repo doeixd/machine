@@ -6,6 +6,7 @@ import {
   mergeContext,
   pipeTransitions,
   logState,
+  sequence,
 } from '../src/utils';
 import { MachineBase } from '../src/index';
 
@@ -298,5 +299,143 @@ describe('logState', () => {
     expect(result.context.count).toBe(2);
 
     consoleSpy.mockRestore();
+  });
+});
+
+describe('sequence', () => {
+  class NameForm extends MachineBase<{ name: string; valid: boolean }> {
+    submit(name: string) {
+      return new NameForm({ name, valid: name.length > 0 });
+    }
+  }
+
+  class EmailForm extends MachineBase<{ email: string; valid: boolean }> {
+    submit(email: string) {
+      return new EmailForm({ email, valid: email.includes('@') });
+    }
+  }
+
+  class PasswordForm extends MachineBase<{ password: string; valid: boolean }> {
+    submit(password: string) {
+      return new PasswordForm({ password, valid: password.length >= 8 });
+    }
+  }
+
+  it('should start with the first machine in sequence', () => {
+    const wizard = sequence(
+      [new NameForm({ name: '', valid: false }),
+       new EmailForm({ email: '', valid: false }),
+       new PasswordForm({ password: '', valid: false })],
+      (machine) => machine.context.valid
+    );
+
+    expect(wizard.context.name).toBe('');
+    expect(wizard.context.valid).toBe(false);
+  });
+
+  it('should advance to next machine when isFinal returns true', () => {
+    const wizard = sequence(
+      [new NameForm({ name: '', valid: false }),
+       new EmailForm({ email: '', valid: false }),
+       new PasswordForm({ password: '', valid: false })],
+      (machine) => machine.context.valid
+    );
+
+    // First machine - NameForm
+    expect(wizard.context.name).toBe('');
+    expect(wizard.context.valid).toBe(false);
+
+    // Submit invalid name - should stay on NameForm
+    const afterInvalid = wizard.submit('');
+    expect(afterInvalid.context.name).toBe('');
+    expect(afterInvalid.context.valid).toBe(false);
+
+    // Submit valid name - should advance to EmailForm
+    const afterValid = wizard.submit('John Doe');
+    expect(afterValid.context.name).toBeUndefined(); // Should be EmailForm context (no name property)
+    expect(afterValid.context.email).toBe(''); // EmailForm starts with empty email
+    expect(afterValid.context.valid).toBe(false);
+  });
+
+  it('should maintain sequence progression', () => {
+    const wizard = sequence(
+      [new NameForm({ name: '', valid: false }),
+       new EmailForm({ email: '', valid: false }),
+       new PasswordForm({ password: '', valid: false })],
+      (machine) => machine.context.valid
+    );
+
+    // Start with NameForm
+    expect(wizard.context.name).toBeDefined();
+
+    // Advance to EmailForm
+    const emailForm = wizard.submit('John Doe');
+    expect(emailForm.context.name).toBeUndefined(); // No longer on NameForm
+    expect(emailForm.context.email).toBe(''); // EmailForm context
+
+    // Advance to PasswordForm
+    const passwordForm = emailForm.submit('john@example.com');
+    expect(passwordForm.context.email).toBeUndefined(); // No longer on EmailForm
+    expect(passwordForm.context.password).toBe(''); // PasswordForm context
+
+    // Stay on PasswordForm until valid
+    const stillPassword = passwordForm.submit('123');
+    expect(stillPassword.context.password).toBeDefined();
+    expect(stillPassword.context.valid).toBe(false);
+
+    // Complete sequence
+    const final = passwordForm.submit('password123');
+    expect(final.context.password).toBe('password123');
+    expect(final.context.valid).toBe(true);
+  });
+
+  it('should handle async transitions', async () => {
+    class AsyncForm extends MachineBase<{ value: string; valid: boolean }> {
+      async submit(value: string) {
+        await new Promise(resolve => setTimeout(resolve, 10));
+        return new AsyncForm({ value, valid: value.length > 0 });
+      }
+    }
+
+    const wizard = sequence(
+      [new AsyncForm({ value: '', valid: false }),
+       new AsyncForm({ value: '', valid: false })],
+      (machine) => machine.context.valid
+    );
+
+    // First form - submit should advance to second form
+    const result = await wizard.submit('test');
+    expect(result.context.value).toBe(''); // Second form starts empty
+    expect(result.context.valid).toBe(false); // Second form not yet valid
+  });
+
+  it('should work with different final predicates', () => {
+    class Step extends MachineBase<{ step: number; complete: boolean }> {
+      next() {
+        return new Step({ step: this.context.step + 1, complete: this.context.step + 1 >= 3 });
+      }
+    }
+
+    const wizard = sequence(
+      [new Step({ step: 1, complete: false }),
+       new Step({ step: 2, complete: false }),
+       new Step({ step: 3, complete: true })],
+      (machine) => machine.context.complete
+    );
+
+    expect(wizard.context.step).toBe(1);
+
+    const step2 = wizard.next();
+    expect(step2.context.step).toBe(2);
+
+    const step3 = step2.next();
+    expect(step3.context.step).toBe(3);
+    expect(step3.context.complete).toBe(true);
+  });
+
+  it('should throw error for empty sequence', () => {
+    expect(() => {
+      sequence([], () => true);
+    }).toThrow('Sequence must contain at least one machine');
   });
 });

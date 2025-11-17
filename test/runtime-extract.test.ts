@@ -4,6 +4,7 @@ import {
   transitionTo,
   describe as desc,
   guarded,
+  guard,
   action,
   invoke,
   RUNTIME_META
@@ -95,6 +96,36 @@ describe('Runtime Metadata Extraction', () => {
       expect(meta?.invoke?.onDone).toBe('Success');
       expect(meta?.invoke?.onError).toBe('Error');
       expect(meta?.invoke?.description).toBe('Fetch user data');
+    });
+
+    it('should extract metadata from guard without description', () => {
+      const machine = createMachine({ count: 5 }, {});
+      const guardedFn = guard(
+        (ctx) => ctx.count > 0,
+        function() { return createMachine({ count: this.count - 1 }, this); }
+      );
+
+      const meta = extractFunctionMetadata(guardedFn);
+      expect(meta).not.toBeNull();
+      expect(meta?.guards).toHaveLength(1);
+      expect(meta?.guards?.[0].name).toBe('runtime_guard');
+      expect(meta?.description).toBe('Runtime guarded transition');
+    });
+
+    it('should extract metadata from guard with description', () => {
+      const machine = createMachine({ count: 5 }, {});
+      const guardedFn = guard(
+        (ctx) => ctx.count > 0,
+        function() { return createMachine({ count: this.count - 1 }, this); },
+        { description: 'Custom guard description' }
+      );
+
+      const meta = extractFunctionMetadata(guardedFn);
+      expect(meta).not.toBeNull();
+      expect(meta?.guards).toHaveLength(1);
+      expect(meta?.guards?.[0].name).toBe('runtime_guard');
+      expect(meta?.guards?.[0].description).toBe('Custom guard description');
+      expect(meta?.description).toBe('Custom guard description');
     });
 
     it('should compose nested metadata correctly', () => {
@@ -262,6 +293,24 @@ describe('Runtime Metadata Extraction', () => {
       const stateNode = extractStateNode(instance);
 
       expect(Object.keys(stateNode.on)).toEqual(['transition']);
+    });
+
+    it('should extract guarded transitions', () => {
+      class Source extends MachineBase<any> {
+        guardedTransition = guard(
+          (ctx) => ctx.count > 0,
+          function() { return createMachine({ count: this.count - 1 }, this); },
+          { description: 'Decrement only if positive' }
+        );
+      }
+
+      const instance = new Source({ count: 5 });
+      const stateNode = extractStateNode(instance);
+
+      expect(stateNode.on.guardedTransition).toBeDefined();
+      expect(stateNode.on.guardedTransition.target).toBe('GuardedTransition');
+      expect(stateNode.on.guardedTransition.cond).toBe('runtime_guard');
+      expect(stateNode.on.guardedTransition.description).toBe('Decrement only if positive');
     });
   });
 

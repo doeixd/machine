@@ -71,6 +71,21 @@ export function extractStateNode(stateInstance: any): any {
 
       stateNode.on[key] = transition;
     }
+    // If has guards but no target, it's a guarded transition (runtime guard)
+    else if (meta.guards && meta.guards.length > 0) {
+      // For runtime guards, we can't determine the target statically
+      // So we create a transition with a placeholder target and guard condition
+      const transition: any = {
+        target: 'GuardedTransition', // Placeholder - actual target determined at runtime
+        cond: meta.guards.map(g => g.name).join(' && ')
+      };
+
+      if (meta.description) {
+        transition.description = meta.description;
+      }
+
+      stateNode.on[key] = transition;
+    }
   }
 
   if (invoke.length > 0) {

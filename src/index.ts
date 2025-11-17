@@ -25,12 +25,32 @@ export type Machine<C extends object> = {
 
 /**
  * The shape of an asynchronous machine, where transitions can return Promises.
- * @template C - The context (state) object type.
+ * Async transitions receive an AbortSignal as the last parameter for cancellation support.
+ * @template C - The context object type.
  */
 export type AsyncMachine<C extends object> = {
   /** The readonly state of the machine. */
   readonly context: C;
 } & Record<string, (...args: any[]) => MaybePromise<AsyncMachine<any>>>;
+
+/**
+ * Utility type to extract the parameters of an async transition function,
+ * which includes TransitionOptions as the last parameter.
+ */
+export type AsyncTransitionArgs<M extends AsyncMachine<any>, K extends keyof M & string> =
+  M[K] extends (...args: infer A) => any
+    ? A extends [...infer Rest, TransitionOptions]
+      ? Rest
+      : A
+    : never;
+
+/**
+ * Options passed to async transition functions, including cancellation support.
+ */
+export interface TransitionOptions {
+  /** AbortSignal for cancelling long-running async operations. */
+  signal: AbortSignal;
+}
 
 
 // =============================================================================
@@ -130,7 +150,12 @@ export function createMachine<C extends object, T extends Record<string, (this: 
   context: C,
   fns: T
 ): { context: C } & T {
-  return Object.assign({ context }, fns);
+  // If fns is a machine (has context property), extract just the transition functions
+  const transitions = 'context' in fns ? Object.fromEntries(
+    Object.entries(fns).filter(([key]) => key !== 'context')
+  ) : fns;
+  const machine = Object.assign({ context }, transitions);
+  return machine as { context: C } & T;
 }
 
 /**
@@ -264,6 +289,79 @@ export function extendTransitions<
 }
 
 /**
+ * Combines two machine factories into a single factory that creates machines with merged context and transitions.
+ * This allows you to compose independent state machines that operate on different parts of the same context.
+ *
+ * The resulting factory takes the parameters of the first factory, while the second factory is called with no arguments.
+ * Context properties are merged (second factory's context takes precedence on conflicts).
+ * Transition names must not conflict between the two machines.
+ *
+ * @template F1 - The first factory function type.
+ * @template F2 - The second factory function type.
+ * @param factory1 - The first machine factory (provides parameters and primary context).
+ * @param factory2 - The second machine factory (provides additional context and transitions).
+ * @returns A new factory function that creates combined machines.
+ *
+ * @example
+ * ```typescript
+ * // Define two independent machines
+ * const createCounter = (initial: number) =>
+ *   createMachine({ count: initial }, {
+ *     increment: function() { return createMachine({ count: this.count + 1 }, this); },
+ *     decrement: function() { return createMachine({ count: this.count - 1 }, this); }
+ *   });
+ *
+ * const createLogger = () =>
+ *   createMachine({ logs: [] as string[] }, {
+ *     log: function(message: string) {
+ *       return createMachine({ logs: [...this.logs, message] }, this);
+ *     },
+ *     clear: function() {
+ *       return createMachine({ logs: [] }, this);
+ *     }
+ *   });
+ *
+ * // Combine them
+ * const createCounterWithLogging = combineFactories(createCounter, createLogger);
+ *
+ * // Use the combined factory
+ * const machine = createCounterWithLogging(5); // { count: 5, logs: [] }
+ * const incremented = machine.increment(); // { count: 6, logs: [] }
+ * const logged = incremented.log("Count incremented"); // { count: 6, logs: ["Count incremented"] }
+ * ```
+ */
+export function combineFactories<
+  F1 extends (...args: any[]) => Machine<any>,
+  F2 extends () => Machine<any>
+>(
+  factory1: F1,
+  factory2: F2
+): (
+  ...args: Parameters<F1>
+) => Machine<Context<ReturnType<F1>> & Context<ReturnType<F2>>> &
+     Omit<ReturnType<F1>, 'context'> &
+     Omit<ReturnType<F2>, 'context'> {
+  return (...args: Parameters<F1>) => {
+    // Create instances from both factories
+    const machine1 = factory1(...args);
+    const machine2 = factory2();
+
+    // Merge contexts (machine2 takes precedence on conflicts)
+    const combinedContext = { ...machine1.context, ...machine2.context };
+
+    // Extract transitions from both machines
+    const { context: _, ...transitions1 } = machine1;
+    const { context: __, ...transitions2 } = machine2;
+
+    // Combine transitions (TypeScript will catch conflicts at compile time)
+    const combinedTransitions = { ...transitions1, ...transitions2 };
+
+    // Create the combined machine
+    return createMachine(combinedContext, combinedTransitions) as any;
+  };
+}
+
+/**
  * Creates a builder function from a "template" machine instance.
  * This captures the behavior of a machine and returns a factory that can stamp out
  * new instances with different initial contexts. Excellent for class-based machines.
@@ -361,27 +459,61 @@ export function hasState<
 /**
  * Runs an asynchronous state machine with a managed lifecycle and event dispatch capability.
  * This is the "interpreter" for async machines, handling state updates and side effects.
+ * Provides automatic AbortController management to prevent async race conditions.
  *
  * @template M - The initial machine type.
  * @param initial - The initial machine state.
  * @param onChange - Optional callback invoked with the new machine state after every transition.
- * @returns An object with a `state` getter for the current context and an async `dispatch` function.
+ * @returns An object with a `state` getter for the current context, an async `dispatch` function, and a `stop` method.
  */
 export function runMachine<M extends AsyncMachine<any>>(
   initial: M,
   onChange?: (m: M) => void
 ) {
   let current = initial;
+  // Keep track of the controller for the currently-running async transition.
+  let activeController: AbortController | null = null;
 
   async function dispatch<E extends Event<typeof current>>(event: E): Promise<M> {
+    // 1. If an async transition is already in progress, cancel it.
+    if (activeController) {
+      activeController.abort();
+      activeController = null;
+    }
+
     const fn = (current as any)[event.type];
     if (typeof fn !== 'function') {
       throw new Error(`[Machine] Unknown event type '${String(event.type)}' on current state.`);
     }
-    const nextState = await fn.apply(current.context, event.args);
-    current = nextState;
-    onChange?.(current);
-    return current;
+
+    // 2. Create a new AbortController for this new transition.
+    const controller = new AbortController();
+    activeController = controller;
+
+    try {
+      // 3. Pass the signal to the transition function.
+      const nextStatePromise = fn.apply(current.context, [...event.args, { signal: controller.signal }]);
+
+      const nextState = await nextStatePromise;
+
+      // 4. If this promise resolved but has since been aborted, do not update state.
+      // This prevents the race condition.
+      if (controller.signal.aborted) {
+        // Return the *current* state, as if the transition never completed.
+        return current;
+      }
+
+      current = nextState;
+      onChange?.(current);
+      return current;
+
+    } finally {
+      // 5. Clean up the controller once the transition is complete (resolved or rejected).
+      // Only clear it if it's still the active one.
+      if (activeController === controller) {
+        activeController = null;
+      }
+    }
   }
 
   return {
@@ -391,6 +523,13 @@ export function runMachine<M extends AsyncMachine<any>>(
     },
     /** Dispatches a type-safe event to the machine, triggering a transition. */
     dispatch,
+    /** Stops any pending async operation and cleans up resources. */
+    stop: () => {
+      if (activeController) {
+        activeController.abort();
+        activeController = null;
+      }
+    },
   };
 }
 
@@ -535,6 +674,8 @@ export {
   transitionTo,
   describe,
   guarded,
+  guard,
+  whenGuard,
   invoke,
   action,
   metadata,
@@ -544,7 +685,10 @@ export {
   type InvokeMeta,
   type ActionMeta,
   type ClassConstructor,
-  type WithMeta
+  type WithMeta,
+  type GuardOptions,
+  type GuardFallback,
+  type GuardedTransition
 } from './primitives';
 
 // =============================================================================
@@ -618,7 +762,9 @@ export {
   type ConditionalMiddleware,
   type NamedMiddleware,
   type PipelineConfig,
-  type PipelineResult
+  type PipelineResult,
+  chain,
+  withDebugging
 } from './middleware';
 
 // =============================================================================
