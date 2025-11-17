@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.0.12](https://github.com/doeixd/machine/compare/v0.0.11...v0.0.12) (2025-11-17)
+
+
+### Features
+
+* combinators ([cb8b41b](https://github.com/doeixd/machine/commit/cb8b41b1d5a00e03fd4546f6c58b50ee1ccacbcf))
+
 ### [0.0.11](https://github.com/doeixd/machine/compare/v0.0.10...v0.0.11) (2025-11-17)
 
 ### [0.0.10](https://github.com/doeixd/machine/compare/v0.0.8...v0.0.10) (2025-11-17)
