@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.0.10](https://github.com/doeixd/machine/compare/v0.0.8...v0.0.10) (2025-11-17)
+
+
+### Features
+
+* extract command ([69edd38](https://github.com/doeixd/machine/commit/69edd38c655954dc616684237f3cae7e65cfe17d))
+
 ### [0.0.8](https://github.com/doeixd/machine/compare/v0.0.7...v0.0.8) (2025-11-17)
 
 ### [0.0.7](https://github.com/doeixd/machine/compare/v0.0.6...v0.0.7) (2025-11-14)
