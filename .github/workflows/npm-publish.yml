@@ -12,15 +12,15 @@ jobs:
       contents: write
       packages: write
     steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0 # This is important for getting all tags
+       - uses: actions/checkout@v4
+         with:
+           fetch-depth: 0 # This is important for getting all tags
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: "16"
-          registry-url: "https://registry.npmjs.org"
+       - name: Setup Node.js
+         uses: actions/setup-node@v4
+         with:
+           node-version: "18"
+           registry-url: "https://registry.npmjs.org"
 
       - name: Install dependencies
         run: npm ci
@@ -28,20 +28,20 @@ jobs:
       - name: Build Production
         run: npm run build
 
-      - name: Find built files
-        id: find_files
-        run: |
-          CJS_FILE=$(find dist -name "*.cjs.js" -or -name "index.js" -or -name "index.jsx" | grep "/cjs/" | head -n 1)
-          ESM_FILE=$(find dist -name "*.esm.js" -or -name "index.js" -or -name "index.jsx" | grep "/esm/" | head -n 1)
-          TYPES_FILE=$(find dist -name "index.d.ts" | head -n 1)
+       - name: Find built files
+         id: find_files
+         run: |
+           CJS_FILE=$(find dist -name "index.js" | grep "/cjs/production/" | head -n 1)
+           ESM_FILE=$(find dist -name "index.js" | grep "/esm/production/" | head -n 1)
+           TYPES_FILE=$(find dist -name "index.d.ts" | grep "/types/" | head -n 1)
 
-          echo "CJS file: $CJS_FILE"
-          echo "ESM file: $ESM_FILE"
-          echo "Types file: $TYPES_FILE"
+           echo "CJS file: $CJS_FILE"
+           echo "ESM file: $ESM_FILE"
+           echo "Types file: $TYPES_FILE"
 
-          echo "cjs_file=$CJS_FILE" >> $GITHUB_OUTPUT
-          echo "esm_file=$ESM_FILE" >> $GITHUB_OUTPUT
-          echo "types_file=$TYPES_FILE" >> $GITHUB_OUTPUT
+           echo "cjs_file=$CJS_FILE" >> $GITHUB_OUTPUT
+           echo "esm_file=$ESM_FILE" >> $GITHUB_OUTPUT
+           echo "types_file=$TYPES_FILE" >> $GITHUB_OUTPUT
 
       - name: Publish to npm
         run: npm publish

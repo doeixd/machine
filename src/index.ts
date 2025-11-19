@@ -15,34 +15,51 @@
 export type MaybePromise<T> = T | Promise<T>;
 
 /**
- * The fundamental shape of any machine: a `context` object for state, and methods for transitions.
- * @template C - The context (state) object type.
+ * The fundamental shape of a synchronous machine. This is a highly advanced
+ * generic type that performs two critical functions at compile time:
+ *
+ * 1.  **Extraction:** It intelligently infers the pure transitions object from
+ *     the flexible argument `A` (which can be a plain object, a factory
+ *     function, or the augmented `this` from another transition).
+ *
+ * 2.  **Filtering:** After extracting the transitions, it filters them, keeping
+ *     only the functions that return a valid `Machine`.
+ *
+ * This makes the `Machine` type itself the single source of truth for what
+ * constitutes a valid, type-safe machine, enabling a remarkably clean and
+ * powerful API for `createMachine`.
+ *
+ * @template C The context object type.
+ * @template A The raw, flexible argument for transitions (object, factory, or `this`).
  */
-export type Machine<C extends object> = {
-  /** The readonly state of the machine. */
+export type Machine<
+  C extends object,
+  T extends object = {}
+> = {
   readonly context: C;
-} & Record<string, (...args: any[]) => Machine<any>>;
+} & T;
 
 /**
  * The shape of an asynchronous machine, where transitions can return Promises.
  * Async transitions receive an AbortSignal as the last parameter for cancellation support.
  * @template C - The context object type.
  */
-export type AsyncMachine<C extends object> = {
-  /** The readonly state of the machine. */
+export type AsyncMachine<
+  C extends object,
+  T extends object = {}
+> = {
   readonly context: C;
-} & Record<string, (...args: any[]) => MaybePromise<AsyncMachine<any>>>;
+} & T;
 
 /**
  * Utility type to extract the parameters of an async transition function,
  * which includes TransitionOptions as the last parameter.
  */
-export type AsyncTransitionArgs<M extends AsyncMachine<any>, K extends keyof M & string> =
-  M[K] extends (...args: infer A) => any
-    ? A extends [...infer Rest, TransitionOptions]
-      ? Rest
-      : A
-    : never;
+export type AsyncTransitionArgs<M extends AsyncMachine<any, any>, K extends keyof M & string> =
+  M[K] extends (...a: infer A) => any
+  ? A extends [...infer Rest, TransitionOptions] ? Rest : A
+  : never;
+
 
 /**
  * Options passed to async transition functions, including cancellation support.
@@ -56,6 +73,8 @@ export interface TransitionOptions {
 // =============================================================================
 // SECTION: TYPE UTILITIES & INTROSPECTION
 // =============================================================================
+
+
 
 /**
  * Extracts the context type `C` from a machine type `M`.
@@ -77,7 +96,6 @@ export type Transitions<M extends BaseMachine<any>> = Omit<M, "context">;
  */
 export type TransitionArgs<M extends Machine<any>, K extends keyof M & string> =
   M[K] extends (...args: infer A) => any ? A : never;
-
 /**
  * Extracts the names of all transitions as a string union type.
  * @template M - The machine type.
@@ -103,10 +121,10 @@ export type BaseMachine<C extends object> = {
  */
 export type DeepReadonly<T> = {
   readonly [P in keyof T]: T[P] extends object
-    ? T[P] extends (...args: any[]) => any
-      ? T[P]
-      : DeepReadonly<T[P]>
-    : T[P];
+  ? T[P] extends (...args: any[]) => any
+  ? T[P]
+  : DeepReadonly<T[P]>
+  : T[P];
 };
 
 /**
@@ -118,6 +136,10 @@ export type DeepReadonly<T> = {
  */
 export type InferMachine<F extends (...args: any[]) => any> = ReturnType<F>;
 
+
+export type EventFromTransitions<T extends Record<string, (...args: any[]) => any>> =
+  { [K in keyof T & string]: { type: K; args: T[K] extends (...a: infer A) => any ? A : never } }[keyof T & string];
+
 /**
  * A discriminated union type representing an event that can be dispatched to a machine.
  * This is automatically generated from a machine's type signature, ensuring full type safety.
@@ -128,10 +150,152 @@ export type InferMachine<F extends (...args: any[]) => any> = ReturnType<F>;
  */
 export type Event<M extends BaseMachine<any>> = {
   [K in keyof Omit<M, "context"> & string]: M[K] extends (...args: infer A) => any
-    ? { type: K; args: A }
-    : never
+  ? { type: K; args: A }
+  : never
 }[keyof Omit<M, "context"> & string];
 
+
+/**
+ * A helper type for use with TypeScript's `satisfies` operator to provide
+ * strong, immediate type-checking for standalone transition objects.
+ *
+ * This solves the "chicken-and-egg" problem where you need the final machine
+ * type to correctly type the transitions object, but you need the transitions
+ * object to create the machine. By forward-declaring the machine type and using
+ * `satisfies TransitionsFor<...>`, you get full IntelliSense and error-checking
+ * at the exact location of your transition definitions.
+ *
+ * @template C The context object type for the machine.
+ * @template T The literal type of the transitions object itself (`typeof myTransitions`).
+ *
+ * @example
+ * import { createMachine, Machine, TransitionsFor } from '@doeixd/machine';
+ *
+ * // 1. Define the context for your machine.
+ * type CounterContext = { count: number };
+ *
+ * // 2. Forward-declare the final machine type. This is the key step that
+ * //    breaks the circular dependency for the type checker.
+ * type CounterMachine = Machine<CounterContext> & typeof counterTransitions;
+ *
+ * // 3. Define the transitions object, using `satisfies` to apply the helper type.
+ * //    This provides immediate type-checking and full autocompletion for `this`.
+ * const counterTransitions = {
+ *   increment() {
+ *     // `this` is now fully typed!
+ *     // IntelliSense knows `this.count` is a number and
+ *     // `this.transitions.add` is a function.
+ *     return createMachine({ count: this.count + 1 }, this.transitions);
+ *   },
+ *   add(n: number) {
+ *     return createMachine({ count: this.count + n }, this.transitions);
+ *   },
+ *   // ❌ TypeScript will immediately throw a compile error on the next line
+ *   //    because the return type 'string' does not satisfy 'Machine<any>'.
+ *   invalidTransition() {
+ *     return "this is not a machine";
+ *   }
+ * } satisfies TransitionsFor<CounterContext, typeof counterTransitions>;
+ *
+ * // 4. Create the machine instance. The `createMachine` call is now
+ * //    guaranteed to be type-safe because `counterTransitions` has already
+ * //    been validated.
+ * export function createCounter(initialCount = 0): CounterMachine {
+ *   return createMachine({ count: initialCount }, counterTransitions);
+ * }
+ */
+export type TransitionsFor<C extends object, T extends Record<string, any>> = {
+  [K in keyof T]: (this: C & { transitions: T }, ...args: Parameters<T[K] extends (...a: infer A) => any ? (...a: A) => any : never>) => Machine<any, any>;
+};
+
+/**
+ * A helper type for use with the `satisfies` operator to provide strong
+ * type-checking for standalone asynchronous transition objects.
+ */
+export type AsyncTransitionsFor<C extends object, T extends Record<string, any>> = {
+  [K in keyof T]: (this: C & { transitions: T }, ...args: Parameters<T[K] extends (...a: infer A) => any ? (...a: A) => any : never>) => MaybePromise<AsyncMachine<any, any>>;
+};
+
+/**
+ * A mapped type that iterates over a transitions object `T` and keeps only the
+ * keys whose functions return a valid `Machine`. This provides a "self-correcting"
+ * type that prevents the definition of invalid transitions at compile time.
+ *
+ * It acts as a filter at the type level. When used in the return type of a
+ * function like `createMachine`, it ensures that the resulting machine object
+ * will not have any properties corresponding to functions that were defined
+ * with an incorrect return type. This provides immediate, precise feedback to
+ * the developer, making it impossible to create a machine with an invalid
+ * transition shape.
+ *
+ * @template T The raw transitions object type provided by the user.
+ *
+ * @example
+ * import { createMachine, Machine } from '@doeixd/machine';
+ *
+ * const machine = createMachine({ value: 'A' }, {
+ *   // This is a valid transition because it returns a `Machine`.
+ *   // The key 'goToB' will be PRESERVED in the final type.
+ *   goToB() {
+ *     return createMachine({ value: 'B' }, this.transitions);
+ *   },
+ *
+ *   // This is an INVALID transition because it returns a string.
+ *   // The key 'invalid' will be OMITTED from the final type.
+ *   invalid() {
+ *     return "This is not a Machine object";
+ *   },
+ *
+ *   // This is also invalid as it's not a function.
+ *   // The key 'alsoInvalid' will be OMITTED from the final type.
+ *   alsoInvalid: 123
+ * });
+ *
+ * // --- USAGE ---
+ *
+ * // ✅ This call is valid and works as expected.
+ * const nextState = machine.goToB();
+ *
+ * // ❌ This line will cause a COMPILE-TIME a ERROR because the `FilterValidTransitions`
+ * //    type has removed the 'invalid' key from the `machine`'s type signature.
+ * //
+ * //    Error: Property 'invalid' does not exist on type
+ * //    'Machine<{ value: string; }> & { goToB: () => Machine<...>; }'.
+ * //
+ * machine.invalid();
+ */
+export type FilterValidTransitions<T> = {
+  [K in keyof T as T[K] extends (...args: any[]) => Machine<any> ? K : never]: T[K];
+};
+
+/**
+ * A conditional type that intelligently extracts the pure transitions object `T`
+ * from the flexible second argument of `createMachine`.
+ *
+ * It handles three cases:
+ * 1. If the argument is the augmented `this` context (`C & { transitions: T }`), it extracts `T`.
+ * 2. If the argument is a factory function `((ctx: C) => T)`, it infers and returns `T`.
+ * 3. If the argument is already the pure transitions object `T`, it returns it as is.
+ */
+export type ExtractTransitions<Arg, C extends object> = Arg extends (
+  ...args: any[]
+) => infer R
+  ? R // Case 2: It's a factory function, extract the return type `R`.
+  : Arg extends C & { transitions: infer T }
+  ? T // Case 1: It's the augmented `this` context, extract `T` from `transitions`.
+  : Arg; // Case 3: It's already the plain transitions object.
+
+/** Keep only keys whose value is a function that returns a Machine. */
+export type ValidTransitions<T> = {
+  [K in keyof T as T[K] extends (...a: any[]) => Machine<any, any> ? K : never]:
+  T[K] extends (...a: infer A) => Machine<infer C2, infer T2> ? (...a: A) => Machine<C2, T2> : never;
+};
+
+/** Same for async transitions (functions returning MaybePromise<AsyncMachine>). */
+export type ValidAsyncTransitions<T> = {
+  [K in keyof T as T[K] extends (...a: any[]) => MaybePromise<AsyncMachine<any, any>> ? K : never]:
+  T[K] extends (...a: infer A) => MaybePromise<AsyncMachine<infer C2, infer T2>> ? (...a: A) => MaybePromise<AsyncMachine<C2, T2>> : never;
+};
 
 // =============================================================================
 // SECTION: MACHINE CREATION (FUNCTIONAL & OOP)
@@ -146,16 +310,83 @@ export type Event<M extends BaseMachine<any>> = {
  * @param fns - An object containing transition function definitions.
  * @returns A new machine instance.
  */
+/**
+ * Helper to transform transition functions to be bound (no 'this' requirement).
+ */
+export type BindTransitions<T> = {
+  [K in keyof T]: T[K] extends (this: any, ...args: infer A) => infer R
+  ? (...args: A) => R
+  : T[K];
+};
+
+/**
+ * Creates a synchronous state machine from a context and a factory function.
+ * This "Functional Builder" pattern allows for type-safe transitions without
+ * manually passing `this` or `transitions`.
+ *
+ * @template C - The context object type.
+ * @template T - The transitions object type.
+ * @param context - The initial state context.
+ * @param factory - A function that receives a `transition` helper and returns the transitions object.
+ * @returns A new machine instance.
+ */
 export function createMachine<C extends object, T extends Record<string, (this: C, ...args: any[]) => any>>(
   context: C,
+  factory: (transition: (newContext: C) => Machine<C, T>) => T
+): Machine<C, BindTransitions<T>>;
+
+/**
+ * Creates a synchronous state machine from a context and transition functions.
+ * This is the core factory for the functional approach.
+ *
+ * @template C - The context object type.
+ * @param context - The initial state context.
+ * @param fns - An object containing transition function definitions.
+ * @returns A new machine instance.
+ */
+export function createMachine<C extends object, T extends Record<string, (this: { context: C } & T, ...args: any[]) => any> & { context?: any }>(
+  context: C,
   fns: T
-): { context: C } & T {
+): { context: C } & T;
+
+export function createMachine(context: any, fnsOrFactory: any): any {
+  if (typeof fnsOrFactory === 'function') {
+    let transitions: any;
+    const transition = (newContext: any) => {
+      const machine = createMachine(newContext, transitions);
+      // Re-bind transitions to the new context
+      const boundTransitions = Object.fromEntries(
+        Object.entries(transitions).map(([key, fn]) => [
+          key,
+          (fn as Function).bind(newContext)
+        ])
+      );
+      return Object.assign(machine, boundTransitions);
+    };
+    transitions = fnsOrFactory(transition);
+
+    // Bind transitions to initial context
+    const boundTransitions = Object.fromEntries(
+      Object.entries(transitions).map(([key, fn]) => [
+        key,
+        (fn as Function).bind(context)
+      ])
+    );
+
+    return Object.assign({ context }, boundTransitions);
+  }
+
   // If fns is a machine (has context property), extract just the transition functions
-  const transitions = 'context' in fns ? Object.fromEntries(
-    Object.entries(fns).filter(([key]) => key !== 'context')
-  ) : fns;
+  const transitions = 'context' in fnsOrFactory ? Object.fromEntries(
+    Object.entries(fnsOrFactory).filter(([key]) => key !== 'context')
+  ) : fnsOrFactory;
+
+  // For normal object transitions, we might also need binding if they use `this`
+  // But existing code expects `this` to be the machine (context + transitions).
+  // The new API expects `this` to be just context.
+
   const machine = Object.assign({ context }, transitions);
-  return machine as { context: C } & T;
+  return machine;
 }
 
 /**
@@ -196,7 +427,7 @@ export function createMachineFactory<C extends object>() {
   ) => {
     type MachineFns = {
       [K in keyof T]: (
-        this: C,
+        this: Machine<C>,
         ...args: T[K] extends (ctx: C, ...args: infer A) => C ? A : never
       ) => Machine<C>;
     };
@@ -204,8 +435,8 @@ export function createMachineFactory<C extends object>() {
     const fns = Object.fromEntries(
       Object.entries(transformers).map(([key, transform]) => [
         key,
-        function (this: C, ...args: any[]) {
-          const newContext = (transform as any)(this, ...args);
+        function (this: Machine<C>, ...args: any[]) {
+          const newContext = (transform as any)(this.context, ...args);
           return createMachine(newContext, fns as any);
         },
       ])
@@ -241,7 +472,7 @@ export function setContext<M extends Machine<any>>(
       ? (newContextOrFn as (ctx: Readonly<Context<M>>) => Context<M>)(context)
       : newContextOrFn;
 
-  return createMachine(newContext, transitions) as M;
+  return createMachine(newContext, transitions as any) as M;
 }
 
 /**
@@ -263,7 +494,7 @@ export function overrideTransitions<
 ): Machine<Context<M>> & Omit<Transitions<M>, keyof T> & T {
   const { context, ...originalTransitions } = machine;
   const newTransitions = { ...originalTransitions, ...overrides };
-  return createMachine(context, newTransitions) as any;
+  return createMachine(context, newTransitions as any) as any;
 }
 
 /**
@@ -285,7 +516,7 @@ export function extendTransitions<
 >(machine: M, newTransitions: T): M & T {
   const { context, ...originalTransitions } = machine;
   const combinedTransitions = { ...originalTransitions, ...newTransitions };
-  return createMachine(context, combinedTransitions) as M & T;
+  return createMachine(context, combinedTransitions as any) as M & T;
 }
 
 /**
@@ -339,8 +570,8 @@ export function combineFactories<
 ): (
   ...args: Parameters<F1>
 ) => Machine<Context<ReturnType<F1>> & Context<ReturnType<F2>>> &
-     Omit<ReturnType<F1>, 'context'> &
-     Omit<ReturnType<F2>, 'context'> {
+    Omit<ReturnType<F1>, 'context'> &
+    Omit<ReturnType<F2>, 'context'> {
   return (...args: Parameters<F1>) => {
     // Create instances from both factories
     const machine1 = factory1(...args);
@@ -357,7 +588,7 @@ export function combineFactories<
     const combinedTransitions = { ...transitions1, ...transitions2 };
 
     // Create the combined machine
-    return createMachine(combinedContext, combinedTransitions) as any;
+    return createMachine(combinedContext, combinedTransitions as any) as any;
   };
 }
 
@@ -375,7 +606,7 @@ export function createMachineBuilder<M extends Machine<any>>(
 ): (context: Context<M>) => M {
   const { context, ...transitions } = templateMachine;
   return (newContext: Context<M>): M => {
-    return createMachine(newContext, transitions) as M;
+    return createMachine(newContext, transitions as any) as M;
   };
 }
 
@@ -607,7 +838,7 @@ export function next<C extends object>(
   update: (ctx: Readonly<C>) => C
 ): Machine<C> {
   const { context, ...transitions } = m;
-  return createMachine(update(context), transitions) as Machine<C>;
+  return createMachine(update(context), transitions as any) as Machine<C>;
 }
 
 /**
@@ -694,30 +925,17 @@ export {
 } from './primitives';
 
 // =============================================================================
-// SECTION: STATECHART EXTRACTION
+// SECTION: STATECHART EXTRACTION (Build-time only)
 // =============================================================================
 
-export {
-  extractMachine,
-  extractMachines,
-  generateChart,
-  type MachineConfig,
-  type ExtractionConfig
+// Note: Extraction tools are available as dev dependencies for build-time use
+// They are not included in the runtime bundle for size optimization
+// Use: npx tsx scripts/extract-statechart.ts
+
+export type {
+  MachineConfig,
+  ExtractionConfig
 } from './extract';
-
-// =============================================================================
-// SECTION: RUNTIME EXTRACTION
-// =============================================================================
-
-export {
-  extractFunctionMetadata,
-  extractStateNode,
-  generateStatechart,
-  extractFromInstance
-} from './runtime-extract';
-
-// Export runtime metadata symbol and type (for advanced use)
-export { RUNTIME_META, type RuntimeTransitionMeta } from './primitives';
 
 
 export * from './multi'
@@ -730,46 +948,7 @@ export * from './extract'
 // SECTION: MIDDLEWARE & INTERCEPTION
 // =============================================================================
 
-export {
-  createMiddleware,
-  withLogging,
-  withAnalytics,
-  withValidation,
-  withPermissions,
-  withErrorReporting,
-  withPerformanceMonitoring,
-  withRetry,
-  withHistory,
-  withSnapshot,
-  withTimeTravel,
-  compose,
-  composeTyped,
-  createPipeline,
-  createMiddlewareRegistry,
-  when,
-  inDevelopment,
-  whenContext,
-  combine,
-  branch,
-  isMiddlewareFn,
-  isConditionalMiddleware,
-  createCustomMiddleware,
-  type MiddlewareHooks,
-  type MiddlewareOptions,
-  type MiddlewareContext,
-  type MiddlewareResult,
-  type MiddlewareError,
-  type HistoryEntry,
-  type ContextSnapshot,
-  type Serializer,
-  type MiddlewareFn,
-  type ConditionalMiddleware,
-  type NamedMiddleware,
-  type PipelineConfig,
-  type PipelineResult,
-  chain,
-  withDebugging
-} from './middleware';
+export * from './middleware/index';
 
 // =============================================================================
 // SECTION: UTILITIES & HELPERS

@@ -428,6 +428,22 @@ const machine = createMachine(
 );
 ```
 
+#### `createMachine<C, T>(context, factory)`
+
+Creates a synchronous state machine using the **Functional Builder** pattern. This is the recommended approach for type safety and ergonomics, as it automatically infers `this` context and binds transitions.
+
+```typescript
+const machine = createMachine({ count: 0 }, (transition) => ({
+  increment() {
+    // `this` is correctly inferred as Context
+    return transition({ count: this.count + 1 });
+  },
+  add(n: number) {
+    return transition({ count: this.count + n });
+  }
+}));
+```
+
 #### `createAsyncMachine<C, T>(context, transitions)`
 
 Creates an async state machine (for side effects, API calls, etc.).

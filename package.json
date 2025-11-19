@@ -46,10 +46,7 @@
       "optional": true
     }
   },
-  "dependencies": {
-    "ts-morph": "^27.0.2",
-    "tsx": "^4.20.6"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@types/node": "^22.10.2",
     "@types/react": "^19.2.4",
@@ -57,6 +54,8 @@
     "chalk": "^5.6.2",
     "chokidar": "^4.0.3",
     "commander": "^14.0.2",
+    "ts-morph": "^27.0.2",
+    "tsx": "^4.20.6",
     "pridepack": "2.6.4",
     "react": "^19.2.0",
     "solid-js": "^1.8.22",
@@ -97,6 +96,7 @@
   "types": "./dist/types/index.d.ts",
   "main": "./dist/cjs/production/index.js",
   "module": "./dist/esm/production/index.js",
+  "sideEffects": false,
   "exports": {
     ".": {
       "types": "./dist/types/index.d.ts",
@@ -106,10 +106,23 @@
       },
       "require": "./dist/cjs/production/index.js",
       "import": "./dist/esm/production/index.js"
+    },
+    "./core": {
+      "types": "./dist/types/core.d.ts",
+      "development": {
+        "require": "./dist/cjs/development/core.js",
+        "import": "./dist/esm/development/core.js"
+      },
+      "require": "./dist/cjs/production/core.js",
+      "import": "./dist/esm/production/core.js"
     }
   },
   "typesVersions": {
-    "*": {}
+    "*": {
+      "core": [
+        "./dist/types/core.d.ts"
+      ]
+    }
   },
   "bin": {
     "extract": "./scripts/extract-statechart.ts"

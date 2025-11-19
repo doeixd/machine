@@ -481,7 +481,7 @@ describe('withRetry', () => {
     const resilient = withRetry(machine, { maxRetries: 3, delay: 10, onRetry });
     await resilient.flaky.call(resilient.context);
 
-    expect(onRetry).toHaveBeenCalledWith(1, expect.any(Error));
+    expect(onRetry).toHaveBeenCalledWith(expect.any(Error), 1);
   });
 
   it('should not retry if shouldRetry returns false', async () => {

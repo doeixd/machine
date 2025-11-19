@@ -13,6 +13,7 @@ import {
   MachineBase,
   type Machine,
   type Context,
+  TransitionsFor,
 } from '../src/index';
 
 describe('createMachine', () => {
@@ -48,7 +49,7 @@ describe('createMachine', () => {
       { count: 0 },
       {
         increment() {
-          return createMachine({ count: this.count + 1 }, this);
+          return createMachine({ count: this.context.count + 1 }, this);
         },
       }
     );
@@ -62,13 +63,13 @@ describe('createMachine', () => {
 
   it('should handle multiple transitions', () => {
     const transitions = {
-      increment() {
+      increment(this: {count: number}) {
         return createMachine({ count: this.count + 1 }, transitions);
       },
-      decrement() {
+      decrement(this: {count: number}) {
         return createMachine({ count: this.count - 1 }, transitions);
       },
-      reset() {
+      reset(this: {count: number}) {
         return createMachine({ count: 0 }, transitions);
       },
     };
