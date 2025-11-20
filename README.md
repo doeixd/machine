@@ -67,24 +67,24 @@ The library offers multiple patterns for different use cases. **📖 [Pattern De
 
 ## Quick Start
 
-### Basic Counter (Simple State)
+### Basic Counter (Functional Builder Pattern)
 
-**Immutable approach (recommended):**
+**Recommended approach (type-safe and ergonomic):**
 
 ```typescript
 import { createMachine } from "@doeixd/machine";
 
 const counter = createMachine(
   { count: 0 }, // Initial state (s₀)
-  {
-    // Transitions (δ)
-    increment: function() {
-      return createMachine({ count: this.count + 1 }, this);
+  (next) => ({
+    // Transitions (δ) - `this` is automatically typed
+    increment() {
+      return next({ count: this.count + 1 });
     },
-    add: function(n: number) {
-      return createMachine({ count: this.count + n }, this);
+    add(n: number) {
+      return next({ count: this.count + n });
     }
-  }
+  })
 );
 
 const next = counter.increment();
@@ -92,6 +92,26 @@ console.log(next.context.count); // 1
 
 // Original is untouched (immutability by default)
 console.log(counter.context.count); // 0
+```
+
+**Benefits:**
+- **Type-safe**: Full TypeScript inference for `this` context
+- **Ergonomic**: No need to manually pass transition objects
+- **Clean**: Automatic binding and context inference
+- **Composable**: Transitions are automatically available on all returned machines
+
+**Traditional approach (also supported):**
+
+```typescript
+const transitions = {
+  increment: function() {
+    return createMachine({ count: this.count + 1 }, transitions);
+  },
+  add: function(n: number) {
+    return createMachine({ count: this.count + n }, transitions);
+  }
+};
+const counter = createMachine({ count: 0 }, transitions);
 ```
 
 **Mutable approach (also supported):**
@@ -413,9 +433,25 @@ This is the essence of Type-State Programming: **Make illegal states unrepresent
 
 ### Machine Creation
 
-#### `createMachine<C, T>(context, transitions)`
+#### `createMachine<C, T>(context, factory)`
 
-Creates a synchronous state machine.
+Creates a synchronous state machine using the **Functional Builder** pattern. This is the recommended approach for type safety and ergonomics, as it automatically infers `this` context and binds transitions.
+
+```typescript
+const machine = createMachine({ count: 0 }, (next) => ({
+  increment() {
+    // `this` is correctly inferred as Context
+    return next({ count: this.count + 1 });
+  },
+  add(n: number) {
+    return next({ count: this.count + n });
+  }
+}));
+```
+
+#### `createMachine<C, T>(context, transitions)` (Traditional)
+
+Creates a synchronous state machine from a context and transition functions.
 
 ```typescript
 const machine = createMachine(

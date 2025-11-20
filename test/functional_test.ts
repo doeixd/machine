@@ -2,15 +2,15 @@ import { createMachine } from '../src/index';
 
 type Context = { count: number };
 
-const machine = createMachine({ count: 0 }, (transition) => ({
+const machine = createMachine({ count: 0 }, (next) => ({
   increment() {
     // `this` is inferred as Context
     console.log('Current count:', this.count);
-    // `transition` is a helper that returns a Machine with the same transitions
-    return transition({ count: this.count + 1 });
+    // `next` is a helper that returns a Machine with the same transitions
+    return next({ count: this.count + 1 });
   },
   add(n: number) {
-    return transition({ count: this.count + n });
+    return next({ count: this.count + n });
   }
 }));
 

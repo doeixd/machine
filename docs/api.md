@@ -126,11 +126,11 @@ Creates a synchronous state machine.
     -   `fns`: An object of transition functions. `this` inside each function is the `context`.
 -   **Returns:** A new, immutable machine instance.
 -   **Example:**
-    ```typescript
-    const counter = createMachine({ count: 0 }, {
-      increment() { return createMachine({ count: this.count + 1 }, this); }
-    });
-    ```
+```typescript
+const counter = createMachine({ count: 0 }, (next) => ({
+  increment() { return next({ count: this.count + 1 }); }
+}));
+```
 ---
 ### `createAsyncMachine()`
 Creates an asynchronous state machine.
@@ -165,12 +165,50 @@ A higher-order function that creates a factory from pure context transformers.
 
 -   **Use Case:** Ideal for single-state machines where transitions only modify data.
 -   **Example:**
-    ```typescript
-    const createCounter = createMachineFactory<{ count: number }>()({
-      increment: (ctx) => ({ count: ctx.count + 1 }),
-    });
-    const counter = createCounter({ count: 0 });
-    ```
+```typescript
+const createCounter = createMachineFactory<{ count: number }>()({
+  increment: (ctx) => ({ count: ctx.count + 1 }),
+  add: (ctx, n: number) => ({ count: ctx.count + n })
+});
+
+const counter = createCounter({ count: 0 });
+const result = counter.add(5); // Returns new machine with count: 5
+```
+
+#### `createMachine<C, T>(context, factory)`
+
+Creates a synchronous state machine using the **Functional Builder** pattern. This is the recommended approach for type safety and ergonomics.
+
+```typescript
+const machine = createMachine({ count: 0 }, (next) => ({
+  increment() {
+    // `this` is correctly inferred as Context
+    return next({ count: this.count + 1 });
+  },
+  add(n: number) {
+    return next({ count: this.count + n });
+  }
+}));
+```
+
+#### `createMachine<C, T>(context, transitions)` (Traditional)
+
+Creates a synchronous state machine from a context and transition functions.
+
+**Recommended (better type inference):**
+```typescript
+const machine = createMachine({ count: 0 }, (next) => ({
+  increment() { return next({ count: this.count + 1 }); }
+}));
+```
+
+**Traditional (requires explicit `this` typing):**
+```typescript
+const transitions = {
+  increment(this: { count: number }) { return createMachine({ count: this.count + 1 }, transitions); }
+};
+const machine = createMachine({ count: 0 }, transitions);
+```
 ---
 ### `createMachineBuilder()`
 Creates a factory function from a template class instance.

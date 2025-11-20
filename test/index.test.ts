@@ -14,72 +14,64 @@ import {
   type Machine,
   type Context,
   TransitionsFor,
+  state,
 } from '../src/index';
 
-describe('createMachine', () => {
-  it('should create a machine with context and transitions', () => {
+describe('createMachine - Functional Builder', () => {
+  it('should create a machine with functional builder pattern', () => {
     const machine = createMachine(
       { count: 0 },
-      {
+      (next) => ({
         increment() {
-          return createMachine({ count: this.count + 1 }, this);
+          return next({ count: this.count + 1 });
         },
-      }
+        add(n: number) {
+          return next({ count: this.count + n });
+        }
+      })
     );
 
     expect(machine.context).toEqual({ count: 0 });
     expect(typeof machine.increment).toBe('function');
+    expect(typeof machine.add).toBe('function');
   });
 
-  it('should bind context as this in transition functions', () => {
-    const machine = createMachine(
-      { count: 5 },
-      {
-        getValue() {
-          return this.count;
-        },
-      }
-    );
 
-    expect((machine.getValue as any).call(machine.context)).toBe(5);
-  });
 
-  it('should preserve immutability - transitions return new machines', () => {
+  it('should preserve immutability with functional builder', () => {
     const machine = createMachine(
       { count: 0 },
-      {
+      (next) => ({
         increment() {
-          return createMachine({ count: this.context.count + 1 }, this);
+          return next({ count: this.count + 1 });
         },
-      }
+      })
     );
 
-    const nextMachine = machine.increment.call(machine.context);
+    const nextMachine = machine.increment();
 
     expect(machine.context.count).toBe(0);
     expect(nextMachine.context.count).toBe(1);
     expect(machine).not.toBe(nextMachine);
   });
 
-  it('should handle multiple transitions', () => {
-    const transitions = {
-      increment(this: {count: number}) {
-        return createMachine({ count: this.count + 1 }, transitions);
+  it('should handle multiple transitions with functional builder', () => {
+    const machine = createMachine({ count: 0 }, (next) => ({
+      increment() {
+        return next({ count: this.count + 1 });
       },
-      decrement(this: {count: number}) {
-        return createMachine({ count: this.count - 1 }, transitions);
+      decrement() {
+        return next({ count: this.count - 1 });
       },
-      reset(this: {count: number}) {
-        return createMachine({ count: 0 }, transitions);
+      reset() {
+        return next({ count: 0 });
       },
-    };
-
-    const machine = createMachine({ count: 0 }, transitions);
+    }));
 
     let current = machine;
-    current = current.increment.call(current.context);
-    current = current.increment.call(current.context);
-    current = current.decrement.call(current.context);
+    current = current.increment();
+    current = current.increment();
+    current = current.decrement();
 
     expect(current.context.count).toBe(1);
   });
@@ -96,6 +88,42 @@ describe('createMachine', () => {
 
     const nextMachine = machine.add.call(machine.context, 5);
     expect(nextMachine.context.count).toBe(5);
+  });
+});
+
+describe('createMachine - Traditional API', () => {
+  it('should create a machine with traditional object transitions', () => {
+    const transitions = {
+      increment(this: {count: number}) {
+        return createMachine({ count: this.count + 1 }, transitions);
+      },
+      add(this: {count: number}, n: number) {
+        return createMachine({ count: this.count + n }, transitions);
+      }
+    };
+
+    const machine = createMachine({ count: 0 }, transitions);
+
+    expect(machine.context).toEqual({ count: 0 });
+    expect(typeof machine.increment).toBe('function');
+    expect(typeof machine.add).toBe('function');
+  });
+
+
+
+  it('should preserve immutability with traditional API', () => {
+    const transitions = {
+      increment(this: {count: number}) {
+        return createMachine({ count: this.count + 1 }, transitions);
+      }
+    };
+
+    const machine = createMachine({ count: 0 }, transitions);
+    const nextMachine = machine.increment.call(machine.context);
+
+    expect(machine.context.count).toBe(0);
+    expect(nextMachine.context.count).toBe(1);
+    expect(machine).not.toBe(nextMachine);
   });
 });
 
@@ -452,7 +480,7 @@ describe('createMachineFactory', () => {
     });
 
     const counter = counterFactory({ count: 0 });
-    const next = counter.increment.call(counter.context);
+    const next = counter.increment();
 
     expect(counter.context.count).toBe(0);
     expect(next.context.count).toBe(1);
@@ -465,10 +493,12 @@ describe('createMachineFactory', () => {
     });
 
     const counter = counterFactory({ count: 5 });
-    const added = counter.add.call(counter.context, 10);
-    const multiplied = added.multiply.call(added.context, 2);
+    const added = counter.add(3);
+    const multiplied = counter.multiply(2);
 
-    expect(multiplied.context.count).toBe(30);
+    expect(counter.context.count).toBe(5);
+    expect(added.context.count).toBe(8);
+    expect(multiplied.context.count).toBe(10);
   });
 });
 

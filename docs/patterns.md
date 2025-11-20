@@ -54,9 +54,9 @@ What are you building?
 
 **Example:**
 ```typescript
-const counter = createMachine({ count: 0 }, {
-  increment: function() { return createMachine({ count: this.count + 1 }, this); }
-});
+const counter = createMachine({ count: 0 }, (next) => ({
+  increment() { return next({ count: this.count + 1 }); }
+}));
 
 const next = counter.increment(); // New machine instance
 ```

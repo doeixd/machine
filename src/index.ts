@@ -349,6 +349,35 @@ export function createMachine<C extends object, T extends Record<string, (this: 
   fns: T
 ): { context: C } & T;
 
+/**
+ * Creates a synchronous state machine by copying context and transitions from an existing machine.
+ * This is useful for creating a new machine with updated context but the same transitions.
+ *
+ * @template C - The context object type.
+ * @template M - The machine type to copy transitions from.
+ * @param context - The new context.
+ * @param machine - The machine to copy transitions from.
+ * @returns A new machine instance with the given context and copied transitions.
+ */
+export function createMachine<C extends object, M extends BaseMachine<C>>(
+  context: C,
+  machine: M
+): Machine<C, Transitions<M>>;
+
+/**
+ * Creates a synchronous state machine from a context and transition functions that expect `this` to be the context object.
+ * This is used internally by utilities that need to bind transitions to context objects.
+ *
+ * @template C - The context object type.
+ * @param context - The initial state context.
+ * @param fns - An object containing transition function definitions that expect `this` to be the context.
+ * @returns A new machine instance.
+ */
+export function createMachine<C extends object, T extends Record<string, (this: C, ...args: any[]) => any>>(
+  context: C,
+  fns: T
+): Machine<C, T>;
+
 export function createMachine(context: any, fnsOrFactory: any): any {
   if (typeof fnsOrFactory === 'function') {
     let transitions: any;

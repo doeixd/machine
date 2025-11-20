@@ -20,11 +20,11 @@ In `@doeixd/machine`, transition functions use JavaScript's `this` keyword to ac
 ### Key Concept
 
 ```typescript
-const machine = createMachine({ count: 0 }, (ctx) => ({
+const machine = createMachine({ count: 0 }, (next) => ({
   increment: function() {
     // `this` is bound to the current context: { count: 0 }
     // NOT the machine itself, but the context object
-    return createMachine({ count: this.count + 1 }, this);
+    return next({ count: this.count + 1 });
   }
 }));
 ```
@@ -38,11 +38,11 @@ const machine = createMachine({ count: 0 }, (ctx) => ({
 When you call a transition method on a machine, the library automatically binds `this` to the context:
 
 ```typescript
-const counter = createMachine({ count: 0 }, (ctx) => ({
+const counter = createMachine({ count: 0 }, (next) => ({
   increment: function() {
     console.log(this); // { count: 0 }
     console.log(this.count); // 0
-    return createMachine({ count: this.count + 1 }, this);
+    return next({ count: this.count + 1 });
   }
 }));
 
@@ -59,7 +59,7 @@ Binding `this` to the context (not the full machine) keeps your code concise:
 ```typescript
 // ✅ Clean: `this` bound to context
 increment: function() {
-  return createMachine({ count: this.count + 1 }, this);
+  return next({ count: this.count + 1 });
 }
 
 // ❌ Would be verbose if `this` was the whole machine
@@ -125,7 +125,7 @@ const counter = createMachine<Context>(
       increment: function() {
         // `this` gives you the CURRENT state at runtime
         const newCount = Math.min(this.count + 1, maxCount);
-        return createMachine({ count: newCount, max: this.max }, this);
+        return next({ count: newCount, max: this.max });
       }
     };
   }
@@ -160,10 +160,10 @@ const counter = createMachine({ count: 0 }, (ctx) => ({
 
 **✅ CORRECT:**
 ```typescript
-const counter = createMachine({ count: 0 }, (ctx) => ({
+const counter = createMachine({ count: 0 }, (next) => ({
   increment: function() {
     // Regular function allows proper `this` binding
-    return createMachine({ count: this.count + 1 }, this);
+    return next({ count: this.count + 1 });
   }
 }));
 ```
@@ -217,10 +217,10 @@ counter.increment(); // count is STILL 1! (Bug!)
 
 **✅ CORRECT:**
 ```typescript
-const counter = createMachine({ count: 0 }, (ctx) => ({
+const counter = createMachine({ count: 0 }, (next) => ({
   increment: function() {
     // ✅ Use `this` to access current state
-    return createMachine({ count: this.count + 1 }, this);
+    return next({ count: this.count + 1 });
   }
 }));
 ```
@@ -230,19 +230,19 @@ const counter = createMachine({ count: 0 }, (ctx) => ({
 When creating a new machine, the second argument should be `this` (the transitions object):
 
 ```typescript
-const counter = createMachine({ count: 0 }, (ctx) => ({
+const counter = createMachine({ count: 0 }, (next) => ({
   increment: function() {
-    // ✅ Pass `this` to preserve all transitions
-    return createMachine({ count: this.count + 1 }, this);
+    // ✅ Use `next` helper to create new machine with updated context
+    return next({ count: this.count + 1 });
   },
   decrement: function() {
-    return createMachine({ count: this.count - 1 }, this);
+    return next({ count: this.count - 1 });
   }
 }));
 ```
 
 **What `this` refers to here:**
-In the expression `return createMachine(newContext, this)`, `this` refers to the **transitions object** (the object containing `increment` and `decrement`), which is what `createMachine` expects as its second parameter.
+In the functional builder pattern, `this` refers to the **context object** (e.g., `{ count: 0 }`). The `next` function automatically handles passing the transitions object to `createMachine`.
 
 This is why it works:
 1. The factory function returns a transitions object: `{ increment: fn, decrement: fn }`
@@ -286,11 +286,11 @@ The functional pattern:
 
 ### Comparison
 
-**Traditional (uses `this`):**
+**Functional Builder (uses `next`):**
 ```typescript
-const counter = createMachine({ count: 0 }, (ctx) => ({
+const counter = createMachine({ count: 0 }, (next) => ({
   increment: function() {
-    return createMachine({ count: this.count + 1 }, this);
+    return next({ count: this.count + 1 });
   }
 }));
 ```
@@ -320,11 +320,11 @@ const counter = createCounter({
 
 ### 1. Choose Your Pattern and Stick With It
 
-**Option A: Traditional with `this` (recommended for simple machines)**
+**Option A: Functional with `next` (recommended for simple machines)**
 ```typescript
-const machine = createMachine({ count: 0 }, (ctx) => ({
+const machine = createMachine({ count: 0 }, (next) => ({
   increment: function() {
-    return createMachine({ count: this.count + 1 }, this);
+    return next({ count: this.count + 1 });
   }
 }));
 ```
@@ -342,7 +342,7 @@ const machine = createMachine({
 ```typescript
 // ✅ Good
 {
-  increment: function() { return createMachine({ count: this.count + 1 }, this); }
+  increment: function() { return next({ count: this.count + 1 }); }
 }
 
 // ❌ Bad (arrow function)
@@ -365,7 +365,7 @@ const machine = createMachine(
       increment: function() {
         // Use `this` for accessing current state
         const newCount = Math.min(this.count + step, maxValue);
-        return createMachine({ count: newCount, max: this.max }, this);
+        return next({ count: newCount, max: this.max });
       }
     };
   }
@@ -384,7 +384,7 @@ const createCounter = (initialMax: number) => {
       increment: function() {
         // `this.max` could change, but `maxValue` is fixed
         const newCount = Math.min(this.count + 1, maxValue);
-        return createMachine({ count: newCount, max: this.max }, this);
+        return next({ count: newCount, max: this.max });
       }
     };
   });
@@ -404,7 +404,7 @@ const counter = createMachine<CounterContext>(
   (ctx) => ({
     increment: function(): Machine<CounterContext> {
       // TypeScript knows `this` is CounterContext
-      return createMachine({ count: this.count + 1, max: this.max }, this);
+      return next({ count: this.count + 1, max: this.max });
     }
   })
 );

@@ -1,4 +1,4 @@
-import { createMachine, Machine, extendTransitions } from './index';
+import { createMachine, Machine, BaseMachine, extendTransitions } from './index';
 
 /**
  * Creates a factory for building type-safe transitions for a specific machine.
@@ -75,7 +75,7 @@ export function createTransitionFactory<C extends object>() {
   return function createTransition<TArgs extends any[]>(
     transformer: (ctx: C, ...args: TArgs) => C
   ) {
-    return function (this: Machine<C>, ...args: TArgs): Machine<C> {
+    return function (this: BaseMachine<C>, ...args: TArgs): Machine<C> {
       const nextContext = transformer(this.context, ...args);
       // Use `this` as the transitions object, which includes all current transitions
       return createMachine(nextContext, this);

@@ -167,11 +167,12 @@ const machine = createMachine({
 **Direct method calls on machine objects:**
 
 ```typescript
-const counter = createMachine({ count: 0 }, {
+const transitions = {
   increment: function() {
-    return createMachine({ count: this.count + 1 }, this);
+    return createMachine({ count: this.count + 1 }, transitions);
   }
-});
+};
+const counter = createMachine({ count: 0 }, transitions);
 
 // Direct, imperative calls
 const next = counter.increment();
@@ -342,13 +343,13 @@ XState provides everything; `@doeixd/machine` provides primitives to build what 
 
 ```typescript
 // ✅ No magic strings - everything is a typed reference
-const counter = createMachine({ count: 0 }, {
-  increment: function() {
-    // 'this' is typed as { count: number }
-    // 'increment' is a typed method reference
-    return createMachine({ count: this.count + 1 }, this);
+// Functional builder pattern provides best type inference
+const counter = createMachine({ count: 0 }, (next) => ({
+  increment() {
+    // 'this' is automatically typed without explicit annotations!
+    return next({ count: this.count + 1 });
   }
-});
+}));
 
 // Type-safe method call (no strings)
 counter.increment();

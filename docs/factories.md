@@ -26,13 +26,13 @@ Imagine you're building a UI with several counter components. Without a factory,
 // Don't do this!
 import { createMachine } from '@doeixd/machine';
 
-const counter1 = createMachine({ count: 0 }, {
-  increment(this: { count: number }) { return createMachine({ count: this.count + 1 }, this); }
-});
+const counter1 = createMachine({ count: 0 }, (next) => ({
+  increment() { return next({ count: this.count + 1 }); }
+}));
 
-const counter2 = createMachine({ count: 10 }, {
-  increment(this: { count: number }) { return createMachine({ count: this.count + 1 }, this); }
-});
+const counter2 = createMachine({ count: 10 }, (next) => ({
+  increment() { return next({ count: this.count + 1 }); }
+}));
 ```
 
 You've just duplicated the transition logic. This is not maintainable. A **factory** solves this by abstracting the creation logic into a reusable function, just like a cookie cutter lets you make many cookies from the same design.
@@ -47,16 +47,8 @@ At its heart, a factory is just a function that returns a machine. Let's fix the
 First, define the behavior of your machine. Since this logic will be reused, we can define it once.
 
 ```typescript
-const counterTransitions = {
-  increment(this: { count: number }) {
-    // Note: Instead of `this`, we call the factory again to create the next state.
-    // This ensures the next state also has all the correct transitions.
-    return createCounterMachine({ count: this.count + 1 });
-  },
-  add(this: { count: number }, n: number) {
-    return createCounterMachine({ count: this.count + n });
-  }
-};
+// With functional builder, transitions are defined inline
+// The factory pattern handles the reusable logic
 ```
 
 #### Step 2: Create the Factory Function
@@ -67,7 +59,14 @@ import { createMachine } from '@doeixd/machine';
 
 export function createCounterMachine(initialContext: { count: number } = { count: 0 }) {
   // createMachine combines the initial state with the shared behavior.
-  return createMachine(initialContext, counterTransitions);
+  return createMachine(initialContext, (next) => ({
+    increment() {
+      return createCounterMachine({ count: this.count + 1 });
+    },
+    add(n: number) {
+      return createCounterMachine({ count: this.count + n });
+    }
+  }));
 }
 ```
 
@@ -78,10 +77,10 @@ Now you have a clean, reusable, and configurable way to create counters.
 const counterA = createCounterMachine();        // Starts with { count: 0 }
 const counterB = createCounterMachine({ count: 100 }); // Starts with { count: 100 }
 
-const nextA = counterA.increment.call(counterA.context);
+const nextA = counterA.increment();
 console.log(nextA.context.count); // 1
 
-const nextB = counterB.add.call(counterB.context, 50);
+const nextB = counterB.add(50);
 console.log(nextB.context.count); // 150
 ```
 **The key benefits here are:**
@@ -174,12 +173,12 @@ This is your go-to tool for simple, single-state machines where transitions are 
 // Before: Repetitive boilerplate
 function createManualCounter(ctx) {
   return createMachine(ctx, {
-    increment(this: { count: number }) {
-      return createMachine({ count: this.count + 1 }, this);
-    },
-    add(this: { count: number }, n: number) {
-      return createMachine({ count: this.count + n }, this);
-    }
+  increment(this: { count: number }) {
+    return createMachine({ count: this.count + 1 }, transitions);
+  },
+  add(this: { count: number }, n: number) {
+    return createMachine({ count: this.count + n }, transitions);
+  }
   });
 }
 ```
