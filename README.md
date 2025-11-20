@@ -487,16 +487,16 @@ Creates an async state machine (for side effects, API calls, etc.).
 ```typescript
 const machine = createAsyncMachine(
   { status: "idle", data: null },
-  {
+  (next) => ({
     async fetch() {
       try {
         const data = await api.getData();
-        return createAsyncMachine({ status: "success", data }, this);
+        return next({ status: "success", data });
       } catch (error) {
-        return createAsyncMachine({ status: "error", data: null }, this);
+        return next({ status: "error", data: null });
       }
     }
-  }
+  })
 );
 ```
 

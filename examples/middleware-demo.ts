@@ -166,7 +166,7 @@ console.log('\n=== EXAMPLE 4: Retry Middleware ===\n');
 
 let attemptCount = 0;
 
-const flakyMachine = createAsyncMachine({ status: 'idle' }, {
+const flakyMachine = createAsyncMachine({ status: 'idle' }, (next) => ({
   fetchData: async function() {
     attemptCount++;
     console.log(`Attempt #${attemptCount}`);
@@ -175,9 +175,9 @@ const flakyMachine = createAsyncMachine({ status: 'idle' }, {
       throw new Error('Network timeout');
     }
 
-    return createAsyncMachine({ status: 'success' }, this);
+    return next({ status: 'success' });
   }
-});
+}));
 
 const resilient = withRetry(flakyMachine, {
   maxRetries: 3,

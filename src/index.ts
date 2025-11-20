@@ -419,6 +419,37 @@ export function createMachine(context: any, fnsOrFactory: any): any {
 }
 
 /**
+ * Creates an asynchronous state machine from a context and a factory function.
+ * This "Functional Builder" pattern allows for type-safe transitions without
+ * manually passing `this` or `transitions`.
+ *
+ * @template C - The context object type.
+ * @template T - The transitions object type.
+ * @param context - The initial state context.
+ * @param factory - A function that receives a `transition` helper and returns the transitions object.
+ * @returns A new async machine instance.
+ */
+export function createAsyncMachine<C extends object, T extends Record<string, (this: C, ...args: any[]) => any>>(
+  context: C,
+  factory: (transition: (newContext: C) => AsyncMachine<C, T>) => T
+): AsyncMachine<C, BindTransitions<T>>;
+
+/**
+ * Creates an asynchronous state machine by copying context and transitions from an existing machine.
+ * This is useful for creating a new machine with updated context but the same transitions.
+ *
+ * @template C - The context object type.
+ * @template M - The machine type to copy transitions from.
+ * @param context - The new context.
+ * @param machine - The machine to copy transitions from.
+ * @returns A new async machine instance with the given context and copied transitions.
+ */
+export function createAsyncMachine<C extends object, M extends BaseMachine<C>>(
+  context: C,
+  machine: M
+): AsyncMachine<C, Transitions<M>>;
+
+/**
  * Creates an asynchronous state machine from a context and async transition functions.
  *
  * @template C - The context object type.
@@ -429,8 +460,42 @@ export function createMachine(context: any, fnsOrFactory: any): any {
 export function createAsyncMachine<C extends object, T extends Record<string, (this: C, ...args: any[]) => any>>(
   context: C,
   fns: T
-): { context: C } & T {
-  return Object.assign({ context }, fns);
+): AsyncMachine<C, T>;
+
+export function createAsyncMachine(context: any, fnsOrFactory: any): any {
+  if (typeof fnsOrFactory === 'function') {
+    let transitions: any;
+    const transition = (newContext: any) => {
+      const machine = createAsyncMachine(newContext, transitions);
+      // Re-bind transitions to the new context
+      const boundTransitions = Object.fromEntries(
+        Object.entries(transitions).map(([key, fn]) => [
+          key,
+          (fn as Function).bind(newContext)
+        ])
+      );
+      return Object.assign(machine, boundTransitions);
+    };
+    transitions = fnsOrFactory(transition);
+
+    // Bind transitions to initial context
+    const boundTransitions = Object.fromEntries(
+      Object.entries(transitions).map(([key, fn]) => [
+        key,
+        (fn as Function).bind(context)
+      ])
+    );
+
+    return Object.assign({ context }, boundTransitions);
+  }
+
+  // If fns is a machine (has context property), extract just the transition functions
+  const transitions = 'context' in fnsOrFactory ? Object.fromEntries(
+    Object.entries(fnsOrFactory).filter(([key]) => key !== 'context')
+  ) : fnsOrFactory;
+
+  const machine = Object.assign({ context }, transitions);
+  return machine;
 }
 
 /**
@@ -458,7 +523,7 @@ export function createMachineFactory<C extends object>() {
       [K in keyof T]: (
         this: Machine<C>,
         ...args: T[K] extends (ctx: C, ...args: infer A) => C ? A : never
-      ) => Machine<C>;
+      ) => MaybePromise<Machine<C>>;
     };
 
     const fns = Object.fromEntries(

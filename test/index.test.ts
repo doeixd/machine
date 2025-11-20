@@ -157,6 +157,42 @@ describe('createAsyncMachine', () => {
     const nextMachine = await machine.increment.call(machine.context);
     expect(nextMachine.context.value).toBe(1);
   });
+
+  it('should create an async machine with functional builder pattern', () => {
+    const machine = createAsyncMachine(
+      { count: 0 },
+      (next) => ({
+        async increment() {
+          await new Promise(resolve => setTimeout(resolve, 10));
+          return next({ count: this.count + 1 });
+        },
+        async add(n: number) {
+          await new Promise(resolve => setTimeout(resolve, 10));
+          return next({ count: this.count + n });
+        }
+      })
+    );
+
+    expect(machine.context).toEqual({ count: 0 });
+    expect(typeof machine.increment).toBe('function');
+    expect(typeof machine.add).toBe('function');
+  });
+
+  it('should copy transitions from existing async machine', () => {
+    const sourceMachine = createAsyncMachine(
+      { count: 0 },
+      {
+        async increment() {
+          return createAsyncMachine({ count: this.count + 1 }, this);
+        }
+      }
+    );
+
+    const copiedMachine = createAsyncMachine({ count: 5 }, sourceMachine);
+
+    expect(copiedMachine.context).toEqual({ count: 5 });
+    expect(typeof copiedMachine.increment).toBe('function');
+  });
 });
 
 describe('setContext', () => {
@@ -499,6 +535,25 @@ describe('createMachineFactory', () => {
     expect(counter.context.count).toBe(5);
     expect(added.context.count).toBe(8);
     expect(multiplied.context.count).toBe(10);
+  });
+
+  it('should support async transitions', async () => {
+    const asyncCounterFactory = createMachineFactory<{ count: number }>()({
+      increment: (ctx) => ({ count: ctx.count + 1 }),
+    });
+
+    const counter = asyncCounterFactory({ count: 0 });
+
+    // Simulate async transition
+    const incrementAsync = async () => {
+      await new Promise(resolve => setTimeout(resolve, 10));
+      return counter.increment();
+    };
+
+    const next = await incrementAsync();
+
+    expect(counter.context.count).toBe(0);
+    expect(next.context.count).toBe(1);
   });
 });
 

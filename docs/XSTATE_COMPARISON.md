@@ -167,12 +167,11 @@ const machine = createMachine({
 **Direct method calls on machine objects:**
 
 ```typescript
-const transitions = {
-  increment: function() {
-    return createMachine({ count: this.count + 1 }, transitions);
+const counter = createMachine({ count: 0 }, (next) => ({
+  increment() {
+    return next({ count: this.count + 1 });
   }
-};
-const counter = createMachine({ count: 0 }, transitions);
+}));
 
 // Direct, imperative calls
 const next = counter.increment();
@@ -686,7 +685,7 @@ type Idle = Machine<{ status: "idle" }> & {
   fetch: () => Promise<Loading | Success | Error>;
 };
 
-const createIdle = (): Idle => createAsyncMachine({ status: "idle" }, {
+const createIdle = (): Idle => createAsyncMachine({ status: "idle" }, (next) => ({
   async fetch() {
     try {
       const data = await fetchData();
@@ -695,7 +694,7 @@ const createIdle = (): Idle => createAsyncMachine({ status: "idle" }, {
       return createError(err);
     }
   }
-});
+}));
 ```
 
 **XState:**

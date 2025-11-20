@@ -154,14 +154,14 @@ const guarded = createMiddleware(machine, {
 ```typescript
 import { createMiddleware, createMachine } from '@doeixd/machine';
 
-const counter = createMachine({ count: 0 }, {
-  increment: function() {
-    return createMachine({ count: this.count + 1 }, this);
+const counter = createMachine({ count: 0 }, (next) => ({
+  increment() {
+    return next({ count: this.count + 1 });
   },
-  decrement: function() {
-    return createMachine({ count: this.count - 1 }, this);
+  decrement() {
+    return next({ count: this.count - 1 });
   }
-});
+}));
 
 // Add logging middleware
 const loggedCounter = createMiddleware(counter, {
@@ -570,33 +570,33 @@ const cart = createMachine({
   items: [],
   total: 0,
   user: null
-}, {
-  addItem: function(item) {
-    return createMachine({
+}, (next) => ({
+  addItem(item) {
+    return next({
       items: [...this.items, item],
       total: this.total + item.price,
       user: this.user
-    }, this);
+    });
   },
-  removeItem: function(itemId) {
+  removeItem(itemId) {
     const item = this.items.find(i => i.id === itemId);
-    return createMachine({
+    return next({
       items: this.items.filter(i => i.id !== itemId),
       total: this.total - (item?.price || 0),
       user: this.user
-    }, this);
+    });
   },
-  checkout: function() {
+  checkout() {
     if (this.items.length === 0) {
       throw new Error('Cart is empty');
     }
     // Process payment...
-    return createMachine({
+    return next({
       items: [],
       total: 0,
       user: this.user,
       lastOrder: { items: this.items, total: this.total }
-    }, this);
+    });
   }
 });
 
@@ -625,23 +625,22 @@ const apiClient = createAsyncMachine({
   status: 'idle',
   data: null,
   error: null
-}, {
+}, (next) => ({
   async fetchData: async function(endpoint) {
-    this.status = 'loading';
     try {
       const response = await fetch(endpoint);
       const data = await response.json();
-      return createAsyncMachine({
+      return next({
         status: 'success',
         data,
         error: null
-      }, this);
+      });
     } catch (error) {
-      return createAsyncMachine({
+      return next({
         status: 'error',
         data: null,
         error: error.message
-      }, this);
+      });
     }
   }
 });
@@ -671,15 +670,15 @@ const form = createMachine({
   values: { email: '', password: '' },
   errors: {},
   submitted: false
-}, {
-  updateField: function(field, value) {
-    return createMachine({
+}, (next) => ({
+  updateField(field, value) {
+    return next({
       values: { ...this.values, [field]: value },
       errors: { ...this.errors, [field]: undefined },
       submitted: false
-    }, this);
+    });
   },
-  validate: function() {
+  validate() {
     const errors = {};
     if (!this.values.email.includes('@')) {
       errors.email = 'Invalid email';
@@ -687,20 +686,20 @@ const form = createMachine({
     if (this.values.password.length < 8) {
       errors.password = 'Password too short';
     }
-    return createMachine({
+    return next({
       values: this.values,
       errors,
       submitted: false
-    }, this);
+    });
   },
-  submit: function() {
-    return createMachine({
+  submit() {
+    return next({
       values: this.values,
       errors: {},
       submitted: true
-    }, this);
+    });
   }
-});
+}));
 
 const validatedForm = compose(
   form,
