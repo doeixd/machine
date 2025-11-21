@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.0.17](https://github.com/doeixd/machine/compare/v0.0.16...v0.0.17) (2025-11-21)
+
+
+### Features
+
+* add GitHub Actions workflow for npm publish and release, and a functional test for createMachine. ([871d39a](https://github.com/doeixd/machine/commit/871d39a9f7559548f994247dd529b5c6894ef48e))
+
 ### [0.0.16](https://github.com/doeixd/machine/compare/v0.0.15...v0.0.16) (2025-11-21)
 
 ### [0.0.15](https://github.com/doeixd/machine/compare/v0.0.14...v0.0.15) (2025-11-20)
