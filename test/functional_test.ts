@@ -2,7 +2,7 @@ import { createMachine } from '../src/index';
 
 type Context = { count: number };
 
-const machine = createMachine({ count: 0 }, (next) => ({
+const machine = createMachine({ count: 0 }, (next: (newContext: Context) => Machine<Context, Record<string, (this: Context, ...args: any[]) => any>>) => ({
   increment() {
     // `this` is inferred as Context
     console.log('Current count:', this.count);
