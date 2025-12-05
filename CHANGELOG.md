@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.0.18](https://github.com/doeixd/machine/compare/v0.0.17...v0.0.18) (2025-12-05)
+
+
+### Features
+
+* Introduce generator-based utilities for imperative state machine composition and control flow. ([32bcd9f](https://github.com/doeixd/machine/commit/32bcd9f91d62d996c26d162fe109293dceb57804))
+
 ### [0.0.17](https://github.com/doeixd/machine/compare/v0.0.16...v0.0.17) (2025-11-21)
 
 
