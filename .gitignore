@@ -110,3 +110,10 @@ dist
 test-*js
 
 debug-*.js
+
+dist/
+dist_test/*
+dist_test
+dist_test/
+
+dist_test/src/extract.js

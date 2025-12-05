@@ -106,8 +106,8 @@ export interface ExtractionConfig {
  * @returns A JSON-compatible value (string, number, object, array).
  * @internal
  */
-// @ts-expect-error - verbose parameter is used but TypeScript doesn't detect it
-function _typeToJson(type: Type, verbose = false): any {
+
+export function _typeToJson(type: Type, verbose = false): any {
   // --- Terminal Types ---
   const symbol = type.getSymbol();
   if (symbol && symbol.getDeclarations().some(Node.isClassDeclaration)) {
@@ -324,65 +324,65 @@ function extractFromCallExpression(call: Node, verbose = false): any | null {
       break;
 
     case 'action':
-       // Args: (action, transition)
-       if (args[0]) {
-         const actionMeta = parseObjectLiteral(args[0]);
-         if (Object.keys(actionMeta).length > 0) {
-           metadata.actions = [actionMeta];
-         }
-       }
-       // Recurse into wrapped transition
-       if (args[1] && Node.isCallExpression(args[1])) {
-         const nested = extractFromCallExpression(args[1], verbose);
-         if (nested) {
-           Object.assign(metadata, nested);
-         }
-       }
-       break;
+      // Args: (action, transition)
+      if (args[0]) {
+        const actionMeta = parseObjectLiteral(args[0]);
+        if (Object.keys(actionMeta).length > 0) {
+          metadata.actions = [actionMeta];
+        }
+      }
+      // Recurse into wrapped transition
+      if (args[1] && Node.isCallExpression(args[1])) {
+        const nested = extractFromCallExpression(args[1], verbose);
+        if (nested) {
+          Object.assign(metadata, nested);
+        }
+      }
+      break;
 
-     case 'guard':
-       // Args: (condition, transition, options?)
-       // Extract description from options object (third argument)
-       if (args[2]) {
-         const options = parseObjectLiteral(args[2]);
-         if (options.description) {
-           metadata.description = options.description;
-         }
-       }
-       // Add a generic guard condition for static analysis
-       metadata.guards = [{ name: 'runtime_guard', description: metadata.description || 'Synchronous condition check' }];
-       // Recurse into the transition (second argument)
-       if (args[1] && Node.isCallExpression(args[1])) {
-         const nested = extractFromCallExpression(args[1], verbose);
-         if (nested) {
-           Object.assign(metadata, nested);
-         }
-       }
-       break;
+    case 'guard':
+      // Args: (condition, transition, options?)
+      // Extract description from options object (third argument)
+      if (args[2]) {
+        const options = parseObjectLiteral(args[2]);
+        if (options.description) {
+          metadata.description = options.description;
+        }
+      }
+      // Add a generic guard condition for static analysis
+      metadata.guards = [{ name: 'runtime_guard', description: metadata.description || 'Synchronous condition check' }];
+      // Recurse into the transition (second argument)
+      if (args[1] && Node.isCallExpression(args[1])) {
+        const nested = extractFromCallExpression(args[1], verbose);
+        if (nested) {
+          Object.assign(metadata, nested);
+        }
+      }
+      break;
 
-     case 'guardAsync':
-       // Args: (condition, transition, options?)
-       // Extract description from options object (third argument)
-       if (args[2]) {
-         const options = parseObjectLiteral(args[2]);
-         if (options.description) {
-           metadata.description = options.description;
-         }
-       }
-       // Add a generic guard condition for static analysis
-       metadata.guards = [{ name: 'runtime_guard_async', description: metadata.description || 'Asynchronous condition check' }];
-       // Recurse into the transition (second argument)
-       if (args[1] && Node.isCallExpression(args[1])) {
-         const nested = extractFromCallExpression(args[1], verbose);
-         if (nested) {
-           Object.assign(metadata, nested);
-         }
-       }
-       break;
+    case 'guardAsync':
+      // Args: (condition, transition, options?)
+      // Extract description from options object (third argument)
+      if (args[2]) {
+        const options = parseObjectLiteral(args[2]);
+        if (options.description) {
+          metadata.description = options.description;
+        }
+      }
+      // Add a generic guard condition for static analysis
+      metadata.guards = [{ name: 'runtime_guard_async', description: metadata.description || 'Asynchronous condition check' }];
+      // Recurse into the transition (second argument)
+      if (args[1] && Node.isCallExpression(args[1])) {
+        const nested = extractFromCallExpression(args[1], verbose);
+        if (nested) {
+          Object.assign(metadata, nested);
+        }
+      }
+      break;
 
-     default:
-       // Not a DSL primitive we recognize
-       return null;
+    default:
+      // Not a DSL primitive we recognize
+      return null;
   }
 
   return Object.keys(metadata).length > 0 ? metadata : null;

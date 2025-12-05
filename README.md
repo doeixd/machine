@@ -165,11 +165,11 @@ The most powerful pattern: different machine types represent different states.
 import { createMachine, Machine } from "@doeixd/machine";
 
 // Define distinct machine types for each state
-type LoggedOut = Machine<{ status: "loggedOut" }> & {
+type LoggedOut = Machine<{ status: "loggedOut" }, {
   login: (username: string) => LoggedIn;
 };
 
-type LoggedIn = Machine<{ status: "loggedIn"; username: string }> & {
+type LoggedIn = Machine<{ status: "loggedIn"; username: string }, {
   logout: () => LoggedOut;
   viewProfile: () => LoggedIn;
 };
@@ -236,12 +236,12 @@ logout(state); // Runtime error!
 **Type-State Approach (Compile-Time Enforcement):**
 ```typescript
 // ✅ States are distinct types - compiler enforces validity
-type LoggedOut = Machine<{ status: "loggedOut" }> & {
+type LoggedOut = Machine<{ status: "loggedOut" }, {
   login: (user: string) => LoggedIn;
   // No logout method - impossible to call
 };
 
-type LoggedIn = Machine<{ status: "loggedIn"; username: string }> & {
+type LoggedIn = Machine<{ status: "loggedIn"; username: string }, {
   logout: () => LoggedOut;
   // No login method - impossible to call
 };
@@ -308,7 +308,7 @@ if (hasState(machine, "status", "success")) {
 
 #### 5. Event Type Safety
 ```typescript
-type FetchMachine = AsyncMachine<{ status: string }> & {
+type FetchMachine = AsyncMachine<{ status: string }, {
   fetch: (id: number) => Promise<FetchMachine>;
   retry: () => Promise<FetchMachine>;
 };
@@ -370,22 +370,22 @@ This shows the full power of Type-State Programming:
 
 ```typescript
 // Define the states as distinct types
-type IdleState = Machine<{ status: "idle" }> & {
+type IdleState = Machine<{ status: "idle" }, {
   fetch: (url: string) => LoadingState;
 };
 
-type LoadingState = Machine<{ status: "loading"; url: string }> & {
+type LoadingState = Machine<{ status: "loading"; url: string }, {
   cancel: () => IdleState;
   // Note: No fetch - can't start new request while loading
 };
 
-type SuccessState = Machine<{ status: "success"; data: any }> & {
+type SuccessState = Machine<{ status: "success"; data: any }, {
   refetch: () => LoadingState;
   clear: () => IdleState;
   // Note: No cancel - nothing to cancel
 };
 
-type ErrorState = Machine<{ status: "error"; error: string }> & {
+type ErrorState = Machine<{ status: "error"; error: string }, {
   retry: () => LoadingState;
   clear: () => IdleState;
 };
@@ -779,7 +779,7 @@ const tracked = withAnalytics(machine, trackEvent);
 ```typescript
 import { Context, Transitions, Event, TransitionArgs } from "@doeixd/machine";
 
-type MyMachine = Machine<{ count: number }> & {
+type MyMachine = Machine<{ count: number }, {
   add: (n: number) => MyMachine;
 };
 

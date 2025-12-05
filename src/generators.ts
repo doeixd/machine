@@ -135,12 +135,12 @@ export function run<C extends any = any, M extends { context: C } & Record<strin
 
     // If the generator has returned (done), we have our final value
     if (done) {
-      return value;
+      return value as T;
     }
 
     // Otherwise, the yielded value becomes our new current state
     // This state will be sent back into the generator on the next iteration
-    current = value;
+    current = value as M;
   }
 }
 
@@ -346,10 +346,10 @@ export function runWithDebug<C extends any = any, M extends { context: C } & Rec
 
     if (done) {
       console.log('Final:', value);
-      return value;
+      return value as T;
     }
 
-    current = value;
+    current = value as M;
     stepCount++;
     logger(stepCount, current);
   }
@@ -391,10 +391,10 @@ export async function runAsync<C extends any = any, M extends { context: C } & R
     const { value, done } = await generator.next(current);
 
     if (done) {
-      return value;
+      return value as T;
     }
 
-    current = value;
+    current = value as M;
   }
 }
 

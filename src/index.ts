@@ -60,6 +60,21 @@ export type AsyncTransitionArgs<M extends AsyncMachine<any, any>, K extends keyo
   ? A extends [...infer Rest, TransitionOptions] ? Rest : A
   : never;
 
+/**
+ * A helper type to define a distinct state in a state machine (a "typestate").
+ * Allows defining the context and transitions in a single generic type.
+ * @template C - The context specific to this state.
+ * @template T - The transitions available in this state.
+ */
+export type TypeState<C extends object, T extends object = {}> = Machine<C, T>;
+
+/**
+ * A helper type to define a distinct async state in a state machine.
+ * @template C - The context specific to this state.
+ * @template T - The transitions available in this state.
+ */
+export type AsyncTypeState<C extends object, T extends object = {}> = AsyncMachine<C, T>;
+
 
 /**
  * Options passed to async transition functions, including cancellation support.
@@ -332,7 +347,7 @@ export type BindTransitions<T> = {
  */
 export function createMachine<C extends object, T extends Record<string, (this: C, ...args: any[]) => any>>(
   context: C,
-  factory: (transition: (newContext: C) => Machine<C, T>) => T
+  factory: (transition: (newContext: C) => Machine<C, any>) => T
 ): Machine<C, BindTransitions<T>>;
 
 /**
