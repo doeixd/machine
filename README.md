@@ -40,7 +40,7 @@ An FSM is a 5-tuple: **M = (S, Σ, δ, s₀, F)** where:
 3. **Finite States**: Only a limited number of discrete configurations exist
 
 ### How `@doeixd/machine` Implements These Tenets
-
+A smiplified version of the core type / primitive:
 ```typescript
 type Machine<C extends object> = {
   context: C;  // Encodes the current state (s ∈ S)
