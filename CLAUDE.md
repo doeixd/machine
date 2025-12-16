@@ -642,6 +642,10 @@ Use `overrideTransitions()` to mock transitions in tests.
 - `hasState<M, K, V>(machine, key, value)` - Type guard for state checking with type narrowing
 
 - `createMachineFactory<C>()` - Higher-order function for creating machines with pure context transformers
+- `MachineUnion(...classes)` - Mixin to combine multiple machine classes
+- `MachineExclude(Source, Excluded)` - Mixin to exclude methods from a machine class
+- `machineUnion(...instances)` - Functional helper to combine machine instances
+- `machineExclude(source, ...excluded)` - Functional helper to restrict machine instances
 
 ### Functional Combinators (`src/functional-combinators.ts`)
 - `createTransitionFactory<C>()` - Curried factory for building type-safe transitions from pure context transformers

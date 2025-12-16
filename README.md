@@ -807,6 +807,25 @@ const alice = buildUser({ id: 1, name: "Alice" });
 const bob = buildUser({ id: 2, name: "Bob" });
 ```
 
+#### `MachineUnion(...classes)`
+
+Combines multiple `MachineBase` classes into a single class with merged context and methods. Provides true multiple inheritance for state machines.
+
+```typescript
+class Combined extends MachineUnion(Machine1, Machine2) {}
+// Or use instances: const combined = machineUnion(inst1, inst2);
+```
+
+#### `MachineExclude(Source, Excluded)`
+
+Creates a new machine class by excluding methods from a source machine.
+
+```typescript
+// Create a machine that has all Source features EXCEPT those in Excluded
+class Restricted extends MachineExclude(Source, Excluded) {}
+// Or use instances: const restricted = machineExclude(sourceInst, excludedInst);
+```
+
 ### Middleware System
 
 For production-ready state machines with logging, analytics, validation, error handling, and debugging capabilities:
