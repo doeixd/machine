@@ -477,7 +477,7 @@ describe('hasState', () => {
     expect(hasState(machine, 'status', 'idle' as any)).toBe(false);
   });
 
-  it('should narrow types with type guard', () => {
+  it('should narrow types with discriminated union', () => {
     type Context =
       | { status: 'idle' }
       | { status: 'loading' }
@@ -489,8 +489,168 @@ describe('hasState', () => {
     );
 
     if (hasState(machine, 'status', 'success')) {
-      // Type should be narrowed here
+      // Type should be narrowed - data property should be accessible
       expect(machine.context.data).toBe('test');
+      // TypeScript should know this is the success state
+      const data: string = machine.context.data; // Should compile
+      expect(data).toBe('test');
+    }
+  });
+
+  it('should narrow complex discriminated unions', () => {
+    type FetchContext =
+      | { state: 'idle' }
+      | { state: 'loading'; startTime: number }
+      | { state: 'success'; data: string; duration: number }
+      | { state: 'error'; error: Error };
+
+    const machine = createMachine(
+      { state: 'success' as const, data: 'result', duration: 100 },
+      {}
+    );
+
+    // Test success state narrowing
+    if (hasState(machine, 'state', 'success')) {
+      expect(machine.context.data).toBe('result');
+      expect(machine.context.duration).toBe(100);
+      // Both properties should be typed correctly
+      const data: string = machine.context.data;
+      const duration: number = machine.context.duration;
+      expect(data).toBe('result');
+      expect(duration).toBe(100);
+    } else {
+      throw new Error('Should have matched success state');
+    }
+  });
+
+  it('should narrow with error state', () => {
+    type FetchContext =
+      | { state: 'idle' }
+      | { state: 'loading' }
+      | { state: 'success'; data: string }
+      | { state: 'error'; error: Error };
+
+    const testError = new Error('Test error');
+    const machine = createMachine(
+      { state: 'error' as const, error: testError },
+      {}
+    );
+
+    if (hasState(machine, 'state', 'error')) {
+      expect(machine.context.error).toBe(testError);
+      // Error property should be typed as Error
+      const error: Error = machine.context.error;
+      expect(error.message).toBe('Test error');
+    } else {
+      throw new Error('Should have matched error state');
+    }
+  });
+
+  it('should work with nested discriminated unions', () => {
+    type AuthContext =
+      | { auth: 'loggedOut' }
+      | { auth: 'loggedIn'; user: { id: number; name: string } }
+      | { auth: 'loading'; attempt: number };
+
+    const machine = createMachine(
+      { auth: 'loggedIn' as const, user: { id: 1, name: 'Alice' } },
+      {}
+    );
+
+    if (hasState(machine, 'auth', 'loggedIn')) {
+      expect(machine.context.user.id).toBe(1);
+      expect(machine.context.user.name).toBe('Alice');
+      // Nested object should be properly typed
+      const userName: string = machine.context.user.name;
+      expect(userName).toBe('Alice');
+    } else {
+      throw new Error('Should have matched loggedIn state');
+    }
+  });
+
+  it('should work in if-else chains', () => {
+    type Context =
+      | { status: 'idle' }
+      | { status: 'loading' }
+      | { status: 'success'; data: number };
+
+    const machine = createMachine<Context>(
+      { status: 'success', data: 42 },
+      {}
+    );
+
+    let result: string;
+    if (hasState(machine, 'status', 'idle')) {
+      result = 'idle';
+    } else if (hasState(machine, 'status', 'loading')) {
+      result = 'loading';
+    } else if (hasState(machine, 'status', 'success')) {
+      result = `success: ${machine.context.data}`;
+    } else {
+      result = 'unknown';
+    }
+
+    expect(result).toBe('success: 42');
+  });
+
+  it('should handle multiple discriminant values', () => {
+    type Context =
+      | { status: 'idle'; mode: 'manual' }
+      | { status: 'loading'; mode: 'auto' }
+      | { status: 'success'; mode: 'auto'; result: string };
+
+    const machine = createMachine<Context>(
+      { status: 'success', mode: 'auto', result: 'done' },
+      {}
+    );
+
+    // First check status
+    if (hasState(machine, 'status', 'success')) {
+      expect(machine.context.result).toBe('done');
+
+      // Then check mode within narrowed context
+      if (hasState(machine, 'mode', 'auto')) {
+        // Both discriminants should be narrowed
+        expect(machine.context.status).toBe('success');
+        expect(machine.context.mode).toBe('auto');
+        const result: string = machine.context.result;
+        expect(result).toBe('done');
+      }
+    }
+  });
+
+  it('should work with literal types', () => {
+    type Context = { count: 0 | 1 | 2 | 3 };
+    const machine = createMachine({ count: 2 as const }, {});
+
+    if (hasState(machine, 'count', 2)) {
+      // Should narrow to exactly 2
+      const count: 2 = machine.context.count;
+      expect(count).toBe(2);
+    }
+  });
+
+  it('should preserve transitions while narrowing', () => {
+    const machine = createMachine(
+      { status: 'success' as const, data: 'test', count: 5 },
+      {
+        incrementCount: function() {
+          return setContext(this, (ctx) => ({ ...ctx, count: ctx.count + 1 }));
+        }
+      }
+    );
+
+    if (hasState(machine, 'status', 'success')) {
+      // Should still have transitions available after narrowing
+      expect(typeof machine.incrementCount).toBe('function');
+      // Should be able to access narrowed properties
+      expect(machine.context.data).toBe('test');
+      expect(machine.context.status).toBe('success');
+
+      // Should be able to call transitions on narrowed machine
+      const newMachine = machine.incrementCount();
+      expect(newMachine.context.count).toBe(6);
+      expect(newMachine.context.status).toBe('success');
     }
   });
 });

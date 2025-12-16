@@ -115,12 +115,24 @@
       },
       "require": "./dist/cjs/production/core.js",
       "import": "./dist/esm/production/core.js"
+    },
+    "./extract": {
+      "types": "./dist/types/extract.d.ts",
+      "development": {
+        "require": "./dist/cjs/development/extract.js",
+        "import": "./dist/esm/development/extract.js"
+      },
+      "require": "./dist/cjs/production/extract.js",
+      "import": "./dist/esm/production/extract.js"
     }
   },
   "typesVersions": {
     "*": {
       "core": [
         "./dist/types/core.d.ts"
+      ],
+      "extract": [
+        "./dist/types/extract.d.ts"
       ]
     }
   },

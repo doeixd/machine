@@ -35,6 +35,47 @@ npm test
 npm run clean
 ```
 
+## Common Pitfalls and Testing Patterns
+
+### Creating Test Fixtures
+
+**DON'T** use `createMachine(context, {})` - the empty object causes TypeScript errors:
+```typescript
+// ❌ WRONG - causes type errors
+const machine = createMachine({ status: 'idle' }, {});
+```
+
+**DO** use one of these approaches:
+
+1. **Use `createContext()` helper** (recommended for simple test fixtures):
+```typescript
+// ✅ CORRECT - type-safe and clean
+const machine = createContext({ status: 'idle' });
+```
+
+2. **Use plain objects** when you need specific structure:
+```typescript
+// ✅ CORRECT - explicit structure
+const machine = { context: { status: 'idle' as const } };
+```
+
+3. **Use `createMachine()` with actual transitions**:
+```typescript
+// ✅ CORRECT - for real machines
+const machine = createMachine({ count: 0 }, {
+  increment() { return createMachine({ count: this.count + 1 }, this); }
+});
+```
+
+### Why This Matters
+
+The `createMachine` function has multiple overloads that expect either:
+- A factory function: `(transition) => Record<string, Function>`
+- Transition functions: `Record<string, Function>`
+- Another machine to copy transitions from
+
+An empty object `{}` doesn't satisfy any of these overloads, causing type errors. The `createContext()` helper provides a clean, type-safe way to create minimal machine-like objects for testing.
+
 ## Architecture
 
 ### Core Module Structure
@@ -62,7 +103,9 @@ The codebase is organized into focused, single-purpose modules:
    - Uses `ts-morph` to perform static analysis on machine source code
    - Reads type-level metadata from primitives to generate JSON statecharts
    - Compatible with Stately Viz and XState tooling
-   - Run with: `npx ts-node src/extract.ts > chart.json`
+   - Available as separate entry point: `import { extractMachine } from '@doeixd/machine/extract'`
+   - NOT included in main bundle (tree-shakeable, ~8 kB separate chunk)
+   - CLI tool: `npx tsx scripts/extract-statechart.ts --config .statechart.config.ts`
 
 4. **`src/utils.ts`** - High-level utilities
    - `isState()` - type-safe state checking guard
@@ -528,6 +571,18 @@ Uses **pridepack** as the build tool, which is a zero-config bundler for TypeScr
 - ESM modules
 - Type declarations (`.d.ts`)
 - Source maps
+
+**Entry Points** (configured in `pridepack.json`):
+- `.` (`./src/index.ts`) - Main entry point with core library
+- `./core` (`./src/core.ts`) - Core functionality subset
+- `./extract` (`./src/extract.ts`) - **Separate bundle** for statechart extraction tools
+
+**Tree-Shaking**:
+- The extraction tools (`extractMachine`, `extractMachines`, etc.) are **NOT exported from the main entry point**
+- They are available via `@doeixd/machine/extract` for programmatic use
+- The heavy `ts-morph` dependency is marked as external and won't be bundled with the main library
+- Configuration types (`MachineConfig`, `ExtractionConfig`) are exported as type-only from the main entry
+- This keeps the production bundle small (~26 kB) while extraction tools are ~8 kB in a separate chunk
 
 ## Common Patterns
 

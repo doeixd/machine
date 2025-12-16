@@ -345,7 +345,7 @@ export type BindTransitions<T> = {
  * @param factory - A function that receives a `transition` helper and returns the transitions object.
  * @returns A new machine instance.
  */
-export function createMachine<C extends object, T extends Record<string, (this: C, ...args: any[]) => any>>(
+export function createMachine<C extends object, T extends Record<string, (this: C, ...args: any[]) => any> = Record<string, (this: C, ...args: any[]) => any>>(
   context: C,
   factory: (transition: (newContext: C) => Machine<C, any>) => T
 ): Machine<C, BindTransitions<T>>;
@@ -585,6 +585,41 @@ export function setContext<M extends Machine<any>>(
 }
 
 /**
+ * Creates a minimal machine-like object with just a context property.
+ * Useful for creating test fixtures and working with pattern matching utilities.
+ *
+ * @template C - The context type
+ * @param context - The context object
+ * @returns An object with a readonly context property
+ *
+ * @example
+ * ```typescript
+ * // For testing with discriminated unions
+ * type FetchContext =
+ *   | { status: 'idle' }
+ *   | { status: 'success'; data: string };
+ *
+ * const idleMachine = createContext<FetchContext>({ status: 'idle' });
+ * const successMachine = createContext<FetchContext>({ status: 'success', data: 'result' });
+ *
+ * // Works with pattern matching
+ * const match = createMatcher(
+ *   discriminantCase('idle', 'status', 'idle'),
+ *   discriminantCase('success', 'status', 'success')
+ * );
+ *
+ * if (match.is.success(successMachine)) {
+ *   console.log(successMachine.context.data); // TypeScript knows data exists
+ * }
+ * ```
+ */
+export function createContext<C extends object>(
+  context: C
+): { readonly context: C } {
+  return { context };
+}
+
+/**
  * Creates a new machine by overriding or adding transition functions to an existing machine.
  * Ideal for mocking in tests or decorating functionality. The original machine is unchanged.
  *
@@ -764,7 +799,8 @@ export function matchMachine<
 
 /**
  * Type-safe helper to assert that a machine's context has a specific discriminant value.
- * This narrows the type of the context based on the discriminant.
+ * This narrows the type of the context based on the discriminant, properly handling
+ * discriminated unions.
  *
  * @template M - The machine type.
  * @template K - The discriminant key.
@@ -775,8 +811,12 @@ export function matchMachine<
  * @returns True if the discriminant matches, with type narrowing.
  *
  * @example
- * if (hasState(machine, 'status', 'loading')) {
- *   // machine.context.status is narrowed to 'loading'
+ * type Context = { status: 'idle' } | { status: 'loading' } | { status: 'success'; data: string };
+ * const machine = createMachine<Context>({ status: 'success', data: 'test' }, {});
+ *
+ * if (hasState(machine, 'status', 'success')) {
+ *   // machine.context is narrowed to { status: 'success'; data: string }
+ *   console.log(machine.context.data); // ✓ TypeScript knows about 'data'
  * }
  */
 export function hasState<
@@ -787,7 +827,7 @@ export function hasState<
   machine: M,
   key: K,
   value: V
-): machine is M & { context: Context<M> & { [P in K]: V } } {
+): machine is M & { context: Extract<Context<M>, { [P in K]: V }> } {
   return machine.context[key] === value;
 }
 
@@ -1043,15 +1083,18 @@ export {
 
 export type {
   MachineConfig,
-  ExtractionConfig
+  ExtractionConfig,
+  ParallelRegionConfig,
+  ChildStatesConfig
 } from './extract';
 
+// Note: Extraction functions (extractMachine, extractMachines, generateChart) are NOT exported
+// to keep them out of the runtime bundle. Use the CLI tool or import directly from the source
+// file for build-time statechart generation.
 
 export * from './multi'
 
 export * from './higher-order'
-
-export * from './extract'
 
 // =============================================================================
 // SECTION: MIDDLEWARE & INTERCEPTION
@@ -1085,3 +1128,24 @@ export {
   createFunctionalMachine,
   state
 } from './functional-combinators';
+
+// =============================================================================
+// SECTION: PATTERN MATCHING
+// =============================================================================
+
+export {
+  createMatcher,
+  classCase,
+  discriminantCase,
+  customCase,
+  forContext,
+  type MatcherCase,
+  type CasesToMapping,
+  type MatcherUnion,
+  type CaseNames,
+  type CaseHandler,
+  type ExhaustivenessMarker,
+  type IsExhaustive,
+  type WhenBuilder,
+  type Matcher
+} from './matcher';

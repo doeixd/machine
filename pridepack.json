@@ -2,9 +2,10 @@
   "target": "es2018",
   "entrypoints": {
     ".": "./src/index.ts",
-    "./core": "./src/core.ts"
+    "./core": "./src/core.ts",
+    "./extract": "./src/extract.ts"
   },
-  "external": ["react", "solid-js"],
+  "external": ["react", "solid-js", "ts-morph"],
   "minify": true,
   "sourcemap": true
 }

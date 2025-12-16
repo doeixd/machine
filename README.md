@@ -819,6 +819,160 @@ function enterState(): MachineResult<{ timer: number }> {
 }
 ```
 
+### Pattern Matching
+
+**NEW**: Advanced pattern matching utilities for type-safe discrimination between machine states.
+
+The `createMatcher` function provides three complementary APIs for matching and narrowing machine types:
+
+#### Quick Example
+
+```typescript
+import { createMatcher, classCase, MachineBase } from "@doeixd/machine";
+
+// Define state machines
+class IdleMachine extends MachineBase<{ status: 'idle' }> {
+  start() { return new LoadingMachine(); }
+}
+
+class LoadingMachine extends MachineBase<{ status: 'loading' }> {
+  success(data: string) { return new SuccessMachine(data); }
+  error(err: Error) { return new ErrorMachine(err); }
+}
+
+class SuccessMachine extends MachineBase<{ status: 'success'; data: string }> {
+  reset() { return new IdleMachine(); }
+}
+
+class ErrorMachine extends MachineBase<{ status: 'error'; error: Error }> {
+  retry() { return new LoadingMachine(); }
+}
+
+// Create reusable matcher
+const match = createMatcher(
+  classCase('idle', IdleMachine),
+  classCase('loading', LoadingMachine),
+  classCase('success', SuccessMachine),
+  classCase('error', ErrorMachine)
+);
+
+type FetchMachine = IdleMachine | LoadingMachine | SuccessMachine | ErrorMachine;
+
+const machine: FetchMachine = new LoadingMachine();
+```
+
+#### API 1: Type Guards
+
+Use `match.is.<case>()` for type narrowing in conditionals:
+
+```typescript
+if (match.is.loading(machine)) {
+  // ✓ machine is narrowed to LoadingMachine
+  console.log(machine.context.startTime);
+}
+
+if (match.is.success(machine)) {
+  // ✓ machine is narrowed to SuccessMachine
+  console.log(machine.context.data);
+}
+```
+
+#### API 2: Exhaustive Pattern Matching
+
+Use `match.when(...).is(...)` for complex branching with compile-time exhaustiveness checking:
+
+```typescript
+const message = match.when(machine).is<string>(
+  match.case.idle(() => 'Ready to start'),
+  match.case.loading(() => 'Loading...'),
+  match.case.success(m => `Done: ${m.context.data}`),
+  match.case.error(m => `Error: ${m.context.error.message}`),
+  match.exhaustive // ← TypeScript error if any case is missing
+);
+```
+
+**Benefits:**
+- **Compile-time exhaustiveness** - TypeScript catches missing cases
+- **Type narrowing** - Each handler receives the narrowed machine type
+- **Reusable** - Define matcher once, use everywhere
+
+#### API 3: Simple Match
+
+Use `match(machine)` to get the matched case name:
+
+```typescript
+const stateName = match(machine); // 'idle' | 'loading' | 'success' | 'error' | null
+
+switch (stateName) {
+  case 'idle': return 'Ready';
+  case 'loading': return 'In progress';
+  case 'success': return 'Complete';
+  case 'error': return 'Failed';
+  default: return 'Unknown';
+}
+```
+
+#### Helper Functions
+
+**`classCase`** - For class-based machines (most common):
+
+```typescript
+createMatcher(
+  classCase('idle', IdleMachine),
+  classCase('loading', LoadingMachine)
+);
+```
+
+**`discriminantCase`** - For discriminated unions:
+
+```typescript
+type Context =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'success'; data: string };
+
+const match = createMatcher(
+  discriminantCase<'idle', Machine<Context>, 'status', 'idle'>('idle', 'status', 'idle'),
+  discriminantCase<'loading', Machine<Context>, 'status', 'loading'>('loading', 'status', 'loading'),
+  discriminantCase<'success', Machine<Context>, 'status', 'success'>('success', 'status', 'success')
+);
+
+const machine = createMachine<Context>({ status: 'success', data: 'test' }, {});
+
+if (match.is.success(machine)) {
+  console.log(machine.context.data); // ✓ TypeScript knows data exists
+}
+```
+
+**`customCase`** - For custom predicates:
+
+```typescript
+createMatcher(
+  customCase('complex', (m): m is ComplexMachine => {
+    return m.context.value > 10 && m.context.status === 'active';
+  })
+);
+```
+
+#### Comparison with Existing Utilities
+
+| Utility | Use Case | Type Narrowing | Reusable |
+|---------|----------|----------------|----------|
+| `hasState(m, key, value)` | Single discriminant check | ✅ | ❌ |
+| `isState(m, Class)` | Single class check | ✅ | ❌ |
+| `matchMachine(m, key, handlers)` | Exhaustive matching | ✅ | ❌ |
+| `createMatcher(...)` | All of the above | ✅ | ✅ |
+
+**When to use `createMatcher`:**
+- You need to match the same states in multiple places
+- You want exhaustive pattern matching with compile-time checking
+- You're working with union types of multiple machine classes
+- You need flexible type guards for conditionals
+
+**When to use simpler utilities:**
+- One-off checks: Use `hasState` or `isState`
+- Single location matching: Use `matchMachine`
+
 ## Advanced Features
 
 ### Ergonomic & Integration Patterns
@@ -1641,8 +1795,16 @@ The extraction system uses **AST-based static analysis**:
 
 ### Static Extraction API (Build-Time)
 
+> **Tree-Shaking**: Extraction tools are in a separate entry point (`@doeixd/machine/extract`) and are NOT included in your production bundle when you import from the main package. The heavy `ts-morph` dependency (used for AST parsing) will only be included if you explicitly import from `/extract`.
+>
+> **Type Imports**: Configuration types (`MachineConfig`, `ExtractionConfig`, etc.) are available from the main package for type safety without bundle impact:
+> ```typescript
+> import type { MachineConfig, ExtractionConfig } from '@doeixd/machine';
+> ```
+
 ```typescript
-import { extractMachine, extractMachines } from '@doeixd/machine';
+// Import from the separate extract entry point (NOT included in main bundle)
+import { extractMachine, extractMachines } from '@doeixd/machine/extract';
 import { Project } from 'ts-morph';
 
 // Extract single machine
