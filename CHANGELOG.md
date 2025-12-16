@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.0.21](https://github.com/doeixd/machine/compare/v0.0.20...v0.0.21) (2025-12-16)
+
+
+### Features
+
+* Implement a new type-safe state machine library with actor model and React bindings. ([ca89e72](https://github.com/doeixd/machine/commit/ca89e7237b66919f53718afbfa377f4bf99b4864))
+
 ### [0.0.20](https://github.com/doeixd/machine/compare/v0.0.19...v0.0.20) (2025-12-16)
 
 
