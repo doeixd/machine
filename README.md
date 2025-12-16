@@ -826,6 +826,8 @@ class Restricted extends MachineExclude(Source, Excluded) {}
 // Or use instances: const restricted = machineExclude(sourceInst, excludedInst);
 ```
 
+**📖 [Complete Mixins Documentation](./docs/mixins.md)**
+
 ### Middleware System
 
 For production-ready state machines with logging, analytics, validation, error handling, and debugging capabilities:
