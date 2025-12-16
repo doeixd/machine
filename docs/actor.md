@@ -188,6 +188,68 @@ function CountDisplay({ actor }) {
 }
 ```
 
+## Actor vs. Runner (`runMachine`)
+
+You might notice a utility called `runMachine` in the core library. It is important to understand the difference between running a machine via an Actor versus a Runner.
+
+| Feature | Actor (`createActor`) | Runner (`runMachine`) |
+|---|---|---|
+| **Async Strategy** | **Mailbox (Queue)**. Events are buffered while an async transition is running. No data is lost; operations complete sequentially. | **Switch (Cancellation)**. If a new event arrives, the current async operation is **aborted** immediately. |
+| **Best For** | **Business Logic**. Critical processes where order matters (e.g., payments, user flows, database writes). | **UI Interactions**. "Latest wins" scenarios (e.g., type-ahead search, rapid toggles, tab switching). |
+| **API** | Full feature set: `subscribe`, `select`, `transient` refs, inspection. | Minimal: `dispatch` and `state`. |
+
+
+**Rule of Thumb**: Default to `Actor`. Use `runMachine` only when you specifically want the cancellation behavior for transient UI states.
+
+## The Runner (`runMachine`)
+
+The `runMachine` utility is a lower-level primitive often used internally by UI hooks (like `useMachine`). It provides "Switch Map" semantics for async transitions.
+
+### API
+
+```typescript
+import { runMachine } from '@doeixd/machine';
+
+const runner = runMachine(initialMachine, (state) => {
+  console.log('State changed:', state);
+});
+
+// 1. Dispatch an event
+runner.dispatch({ type: 'fetchData', args: [] });
+
+// 2. Get current state synchronously
+const state = runner.state;
+
+// 3. Stop (aborts any pending async transition)
+runner.stop();
+```
+
+### Cancellation Behavior
+
+When you dispatch an event to a runner while an async transition is already in progress, the runner **aborts** the previous transition. It does this by triggering the `AbortSignal` passed to the async function.
+
+```typescript
+const searchMachine = createAsyncMachine({ results: [] }, (next) => ({
+  async search(query: string, { signal }: TransitionOptions) {
+    const response = await fetch(\'/api/search?q=\${query}\', { signal });
+    const data = await response.json();
+    return next({ results: data });
+  }
+}));
+
+const runner = runMachine(searchMachine);
+
+// User types "A"
+runner.dispatch({ type: 'search', args: ['A'] }); 
+// -> Fetch for 'A' starts...
+
+// User types "B" immediately
+runner.dispatch({ type: 'search', args: ['B'] });
+// -> Fetch for 'A' is ABORTED. Fetch for 'B' starts.
+```
+
+This makes `runMachine` ideal for "latest wins" UI patterns like search autocompletion, tab switching, or rapid toggles where old requests should be discarded.
+
 ## Gotchas & Philosophy
 
 - **Hot Start**: Actors are "hot" immediately upon creation; you generally don't *need* to call `start()`, though it's provided for lifecycle symmetry.
