@@ -3,9 +3,14 @@
   "entrypoints": {
     ".": "./src/index.ts",
     "./core": "./src/core.ts",
-    "./extract": "./src/extract.ts"
+    "./extract": "./src/extract.ts",
+    "./react": "./src/entry-react.ts"
   },
-  "external": ["react", "solid-js", "ts-morph"],
+  "external": [
+    "react",
+    "solid-js",
+    "ts-morph"
+  ],
   "minify": true,
   "sourcemap": true
 }

@@ -124,6 +124,15 @@
       },
       "require": "./dist/cjs/production/extract.js",
       "import": "./dist/esm/production/extract.js"
+    },
+    "./react": {
+      "types": "./dist/types/react.d.ts",
+      "development": {
+        "require": "./dist/cjs/development/react.js",
+        "import": "./dist/esm/development/react.js"
+      },
+      "require": "./dist/cjs/production/react.js",
+      "import": "./dist/esm/production/react.js"
     }
   },
   "typesVersions": {
@@ -133,6 +142,9 @@
       ],
       "extract": [
         "./dist/types/extract.d.ts"
+      ],
+      "react": [
+        "./dist/types/react.d.ts"
       ]
     }
   },
