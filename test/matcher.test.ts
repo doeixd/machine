@@ -146,7 +146,7 @@ describe('createMatcher - API 1: Type Guards', () => {
 
   describe('type narrowing in if-else chains', () => {
     it('should narrow correctly through multiple conditions', () => {
-      const machine: FetchMachine = new SuccessMachine('result');
+      const machine = new SuccessMachine('result') as unknown as FetchMachine;
 
       let message: string;
       if (match.is.idle(machine)) {
@@ -367,7 +367,7 @@ describe('Helper Functions', () => {
     });
 
     it('should work with abstract classes', () => {
-      abstract class AbstractMachine extends MachineBase<{ value: number }> {}
+      abstract class AbstractMachine extends MachineBase<{ value: number }> { }
 
       class ConcreteMachine extends AbstractMachine {
         constructor() {
@@ -528,14 +528,14 @@ describe('Helper Functions', () => {
           'empty',
           (m): m is ComplexMachine => {
             return m instanceof ComplexMachine &&
-                   m.context.items.length === 0;
+              m.context.items.length === 0;
           }
         ),
         customCase(
           'full',
           (m): m is ComplexMachine => {
             return m instanceof ComplexMachine &&
-                   m.context.items.length >= m.context.count;
+              m.context.items.length >= m.context.count;
           }
         ),
         customCase(

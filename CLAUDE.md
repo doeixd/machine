@@ -638,7 +638,9 @@ Use `overrideTransitions()` to mock transitions in tests.
 ### Core Functions
 - `next<C>(machine, update)` - Simpler version of setContext
 - `matchMachine<M, K, R>(machine, key, handlers)` - Type-safe pattern matching on discriminated unions
+- `createMatcher(...cases)` - Advanced pattern matching builder with type guards and exhaustiveness checking
 - `hasState<M, K, V>(machine, key, value)` - Type guard for state checking with type narrowing
+
 - `createMachineFactory<C>()` - Higher-order function for creating machines with pure context transformers
 
 ### Functional Combinators (`src/functional-combinators.ts`)

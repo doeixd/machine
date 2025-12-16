@@ -69,7 +69,7 @@ type CaseToName<C> = C extends MatcherCase<infer Name, any, any> ? Name : never;
  * Builds a mapping from case names to their machine types.
  */
 export type CasesToMapping<Cases extends readonly MatcherCase<any, any, any>[]> = {
-  [C in Cases[number] as CaseToName<C>]: CaseToMachine<C>;
+  [C in Cases[number]as CaseToName<C>]: CaseToMachine<C>;
 };
 
 /**
@@ -106,10 +106,16 @@ export type ExhaustivenessMarker = {
 /**
  * Extracts machine types from an array of case handlers.
  */
-type HandledMachines<Handlers extends readonly any[]> =
-  Handlers extends readonly [infer H, ...infer Rest]
-    ? (H extends CaseHandler<any, infer M, any> ? M : never) | HandledMachines<Rest>
-    : never;
+type ExtractHandledMachines<H extends readonly any[]> =
+  H extends readonly [infer First, ...infer Rest]
+  ? (First extends CaseHandler<any, infer M, any> ? M : never) | ExtractHandledMachines<Rest>
+  : never;
+
+/**
+ * Extracts return types from an array of case handlers.
+ */
+type ExtractHandlerReturn<H extends readonly any[]> =
+  H extends readonly CaseHandler<any, any, infer R>[] ? R : never;
 
 /**
  * Checks if all machine types in Union have been handled.
@@ -117,11 +123,11 @@ type HandledMachines<Handlers extends readonly any[]> =
  */
 export type IsExhaustive<Union, Handled> =
   Exclude<Union, Handled> extends never
-    ? true
-    : {
-        readonly __error: 'Non-exhaustive match - missing cases';
-        readonly __missing: Exclude<Union, Handled>;
-      };
+  ? true
+  : {
+    readonly __error: 'Non-exhaustive match - missing cases';
+    readonly __missing: Exclude<Union, Handled>;
+  };
 
 /**
  * Pattern matching builder returned by matcher.when().
@@ -146,11 +152,21 @@ export interface WhenBuilder<
    * );
    * ```
    */
+  /**
+   * Overload 1: Infer return type from handlers (Enables exhaustiveness checking).
+   */
+  is<H extends readonly CaseHandler<CaseNames<_Cases>, any, any>[]>(
+    ...handlers: [...H, ExhaustivenessMarker]
+  ): IsExhaustive<M, ExtractHandledMachines<H>> extends true
+    ? ExtractHandlerReturn<H>
+    : IsExhaustive<M, ExtractHandledMachines<H>>;
+
+  /**
+   * Overload 2: Explicit return type (No exhaustiveness checking).
+   */
   is<R>(
-    ...handlers: [...any[], ExhaustivenessMarker]
-  ): IsExhaustive<M, HandledMachines<typeof handlers>> extends true
-    ? R
-    : IsExhaustive<M, HandledMachines<typeof handlers>>;
+    ...handlers: [...CaseHandler<CaseNames<_Cases>, any, R>[], ExhaustivenessMarker]
+  ): R;
 }
 
 /**
@@ -168,9 +184,9 @@ export interface Matcher<Cases extends readonly MatcherCase<any, any, any>[]> {
    * ```
    */
   readonly is: {
-    [Name in CaseNames<Cases>]: <M>(
-      machine: M
-    ) => machine is Extract<M, CasesToMapping<Cases>[Name]>;
+    [Name in CaseNames<Cases>]: (
+      machine: any
+    ) => machine is CasesToMapping<Cases>[Name];
   };
 
   /**
@@ -265,7 +281,7 @@ export function createMatcher<
   // API 1: Type Guards (using Proxy for dynamic property access)
   const isProxy = new Proxy({} as any, {
     get(_target, prop: string) {
-      return function isGuard<M>(machine: M): machine is any {
+      return function isGuard(machine: any): machine is any {
         const caseConfig = nameToCase.get(prop);
         if (!caseConfig) {
           const available = Array.from(nameToCase.keys()).join(', ');
@@ -515,7 +531,7 @@ export function customCase<
  * ```
  */
 export function forContext<C extends object>() {
-  type MachineWithContext = { readonly context: C };
+
 
   return {
     /**
@@ -531,8 +547,8 @@ export function forContext<C extends object>() {
       value: V
     ): MatcherCase<
       Name,
-      MachineWithContext & { context: Extract<C, { [P in K]: V }> },
-      (m: MachineWithContext) => m is MachineWithContext & { context: Extract<C, { [P in K]: V }> }
+      { readonly context: Extract<C, { [P in K]: V }> },
+      (m: { readonly context: C }) => m is { readonly context: Extract<C, { [P in K]: V }> }
     > {
       return [
         name,

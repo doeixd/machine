@@ -658,6 +658,77 @@ const message = matchMachine(machine, "status", {
 
 TypeScript enforces exhaustive checking - you must handle all cases!
 
+#### `createMatcher(...cases)`
+
+The `createMatcher` utility provides a more advanced, reusable way to define pattern matching logic for your state machines. It creates a single object that provides type guards, exhaustive pattern matching, and simple state checking all in one.
+
+```typescript
+import { createMatcher, classCase, discriminantCase, forContext } from "@doeixd/machine";
+
+// 1. Define the matcher
+const match = createMatcher(
+  classCase('idle', IdleMachine),
+  classCase('loading', LoadingMachine),
+  classCase('success', SuccessMachine)
+);
+
+// 2. Use it for Type Guards
+if (match.is.loading(machine)) {
+  // machine is narrowed to LoadingMachine
+  console.log(machine.context.url);
+}
+
+// 3. Use it for Exhaustive Pattern Matching
+const result = match.when(machine).is(
+  match.case.idle(() => "Ready"),
+  match.case.loading(() => "Loading..."),
+  match.case.success((m) => `Data: ${m.context.data}`),
+  match.exhaustive
+);
+
+// 4. Use it for Simple Matching
+const state = match(machine); // 'idle' | 'loading' | 'success' | null
+```
+
+**Advanced Context Matching:**
+
+For discriminated unions in context, use the `forContext` helper for maximum type safety:
+
+```typescript
+type FetchContext =
+  | { status: 'idle' }
+  | { status: 'success'; data: string };
+
+const builder = forContext<FetchContext>();
+
+const match = createMatcher(
+  builder.case('idle', 'status', 'idle'),
+  builder.case('success', 'status', 'success')
+);
+
+if (match.is.success(machine)) {
+  // machine.context is narrowed to { status: 'success'; data: string }
+  console.log(machine.context.data);
+}
+```
+
+**Explicit vs. Inferred Return Types:**
+
+```typescript
+// Implicit: helper infers return type union and enforces exhaustiveness
+const res1 = match.when(machine).is(
+  match.case.idle(() => 1),
+  match.case.success(() => 2),
+  match.exhaustive
+); // number - Exhaustive check ENABLED
+
+// Explicit generic: You specify return type, exhaustiveness check is optional (but recommended)
+const res2 = match.when(machine).is<string>(
+  match.case.idle(() => "Idle")
+); // string - Exhaustive check DISABLED (useful for partial matching)
+```
+
+
 #### `hasState<M, K, V>(machine, key, value)`
 
 Type guard for state checking with type narrowing.
