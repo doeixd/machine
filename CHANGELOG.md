@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.0.23](https://github.com/doeixd/machine/compare/v0.0.22...v0.0.23) (2025-12-16)
+
+
+### Features
+
+* add Actor Model documentation and React integration entry point ([5069cca](https://github.com/doeixd/machine/commit/5069cca403652270e2a55d57669ed7dcfe1bba8f))
+
 ### [0.0.22](https://github.com/doeixd/machine/compare/v0.0.21...v0.0.22) (2025-12-16)
 
 
