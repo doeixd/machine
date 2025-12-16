@@ -127,7 +127,7 @@ export type TransitionNames<M extends BaseMachine<any>> = keyof Omit<M, "context
 export type BaseMachine<C extends object> = {
   /** The readonly state of the machine. */
   readonly context: C;
-} & Record<string, (...args: any[]) => any>;
+};
 
 /**
  * Helper to make a type deeply readonly (freezes nested objects).
@@ -1149,3 +1149,17 @@ export {
   type WhenBuilder,
   type Matcher
 } from './matcher';
+
+// =============================================================================
+// SECTION: ACTOR MODEL
+// =============================================================================
+
+export {
+  Actor,
+  createActor,
+  spawn,
+  fromPromise,
+  fromObservable,
+  type ActorRef,
+  type InspectionEvent
+} from './actor';

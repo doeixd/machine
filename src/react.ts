@@ -33,6 +33,10 @@
  *     - **Returns:** A `Provider` and consumer hooks (`useContext`, `useSelector`, etc.).
  *     - A utility to provide a machine created with `useMachine` or `useEnsemble` to
  *       the entire component tree below it.
+ * 
+ * 5.  **`useActor(actor)`**:
+ *     - **Best for:** Using the Actor model.
+ *     - **Returns:** The current machine snapshot.
  */
 
 import {
@@ -43,17 +47,21 @@ import {
   createContext,
   useContext,
   createElement,
+  useSyncExternalStore,
   type ReactNode,
 } from 'react';
 
 import {
   Machine,
-  createRunner,
+  runMachine, // Was createRunner
   createEnsemble,
-  type Runner,
   type Ensemble,
   type StateStore,
+  type Actor,
+  BaseMachine
 } from './index';
+
+export type Runner<M extends Machine<any>> = ReturnType<typeof runMachine<M>>;
 
 // =============================================================================
 // HOOK 1: useMachine (Ergonomic local state)
@@ -62,7 +70,7 @@ import {
 /**
  * A React hook for using a self-contained, immutable state machine within a component.
  * It provides a more ergonomic API than a raw dispatcher by returning a stable `actions`
- * object, similar to the `createRunner` primitive.
+ * object, similar to the `runMachine` primitive.
  *
  * This is the ideal hook for managing component-level state.
  *
@@ -75,57 +83,33 @@ import {
  *     for type-narrowing.
  *   - `actions`: A stable object containing all possible transition methods,
  *     pre-bound to update the machine's state.
- *
- * @example
- * ```tsx
- * const [machine, actions] = useMachine(() => createCounterMachine({ count: 0 }));
- *
- * return (
- *   <div>
- *     <p>Count: {machine.context.count}</p>
- *     <button onClick={() => actions.increment()}>Increment</button>
- *     <button onClick={() => actions.add(5)}>Add 5</button>
- *   </div>
- * );
- * ```
- *
- * @example With Type-State Programming
- * ```tsx
- * const [auth, actions] = useMachine(() => createLoggedOutMachine());
- *
- * return (
- *   <div>
- *     {auth.context.status === 'loggedOut' && (
- *       <button onClick={() => actions.login('user')}>Login</button>
- *     )}
- *     {auth.context.status === 'loggedIn' && (
- *       <p>Welcome, {auth.context.username}!</p>
- *       <button onClick={() => actions.logout()}>Logout</button>
- *     )}
- *   </div>
- * );
- * ```
  */
 export function useMachine<M extends Machine<any>>(
   machineFactory: () => M
-): [M, Runner<M>['actions']] {
+): [M, Record<string, (...args: any[]) => void>] {
   // useState holds the machine state, triggering re-renders.
-  // The factory is passed directly to useState to ensure it's only called once.
   const [machine, setMachine] = useState(machineFactory);
 
   // useMemo creates a stable runner instance that survives re-renders.
-  // The runner's job is to hold the *current* machine state and update our
-  // React state when a transition occurs.
   const runner = useMemo(
-    () => createRunner(machine, (newState) => {
-      // This is the magic link: when the runner's internal state changes,
-      // we update React's state, causing a re-render.
+    () => runMachine(machine, (newState) => {
       setMachine(newState);
     }),
-    [] // Empty dependency array ensures the runner is created only once.
+    []
   );
 
-  return [machine, runner.actions];
+  // Create a stable actions object that proxies calls to the dispatcher
+  const actions = useMemo(() => {
+    return new Proxy({} as any, {
+      get: (_target, prop) => {
+        return (...args: any[]) => {
+          runner.dispatch({ type: prop as any, args: args as any } as any);
+        };
+      }
+    });
+  }, [runner]);
+
+  return [machine, actions];
 }
 
 // =============================================================================
@@ -149,21 +133,6 @@ export function useMachine<M extends Machine<any>>(
  *   values. Defaults to `Object.is` for strict equality checking. Provide your own
  *   for deep comparisons of objects or arrays.
  * @returns The selected, memoized value from the machine's state.
- *
- * @example
- * ```tsx
- * // In parent component:
- * const [machine, actions] = useMachine(() => createUserMachine());
- *
- * // In child component (only re-renders when the user's name changes):
- * function UserNameDisplay({ machine }) {
- *   const userName = useMachineSelector(
- *     machine,
- *     (m) => m.context.user.name
- *   );
- *   return <p>User: {userName}</p>;
- * }
- * ```
  */
 export function useMachineSelector<M extends Machine<any>, T>(
   machine: M,
@@ -172,7 +141,7 @@ export function useMachineSelector<M extends Machine<any>, T>(
 ): T {
   // Store the selected value in local state.
   const [selectedValue, setSelectedValue] = useState(() => selector(machine));
-  
+
   // Keep refs to the latest selector and comparison functions.
   const selectorRef = useRef(selector);
   const isEqualRef = useRef(isEqual);
@@ -209,32 +178,6 @@ export function useMachineSelector<M extends Machine<any>, T>(
  *   from the context.
  * @returns A stable `Ensemble` instance. The component will reactively update
  *   when the ensemble's underlying context changes.
- *
- * @example
- * ```tsx
- * const fetchFactories = {
- *   idle: (ctx) => createMachine(ctx, { fetch: () => ({ ...ctx, status: 'loading' }) }),
- *   loading: (ctx) => createMachine(ctx, { succeed: (data) => ({ status: 'success', data }) }),
- *   // ...
- * };
- *
- * function MyComponent() {
- *   const ensemble = useEnsemble(
- *     { status: 'idle', data: null },
- *     fetchFactories,
- *     (ctx) => ctx.status
- *   );
- *
- *   return (
- *     <div>
- *       <p>Status: {ensemble.context.status}</p>
- *       {ensemble.state.context.status === 'idle' && (
- *          <button onClick={() => ensemble.actions.fetch()}>Fetch</button>
- *       )}
- *     </div>
- *   );
- * }
- * ```
  */
 export function useEnsemble<
   C extends object,
@@ -280,46 +223,9 @@ export function useEnsemble<
  *
  * It returns a `Provider` component and a suite of consumer hooks for accessing
  * the state and actions.
- *
- * @returns An object containing:
- *  - `Provider`: The context provider component.
- *  - `useMachineContext`: Hook to get the full `[machine, actions]` tuple.
- *  - `useMachineState`: Hook to get only the reactive `machine` instance.
- *  - `useMachineActions`: Hook to get only the stable `actions` object.
- *  - `useSelector`: Hook to get a memoized slice of the machine's state.
- *
- * @example
- * ```tsx
- * // 1. Create the context
- * const { Provider, useMachineState, useMachineActions } = createMachineContext<MyMachine>();
- *
- * // 2. In your top-level component, create the machine and provide it
- * function App() {
- *   const [machine, actions] = useMachine(() => createMyMachine());
- *   return (
- *     <Provider machine={machine} actions={actions}>
- *       <ChildComponent />
- *     </Provider>
- *   );
- * }
- *
- * // 3. In a deeply nested child component
- * function ChildComponent() {
- *   const machine = useMachineState(); // Gets the current state
- *   const actions = useMachineActions(); // Gets the stable actions
- *   const name = useSelector(m => m.context.name); // Selects a slice
- *
- *   return (
- *     <div>
- *       <p>Name: {name}</p>
- *       <button onClick={() => actions.rename('new name')}>Rename</button>
- *     </div>
- *   );
- * }
- * ```
  */
 export function createMachineContext<M extends Machine<any>>() {
-  type MachineContextValue = [M, Runner<M>['actions']];
+  type MachineContextValue = [M, Record<string, (...args: any[]) => void>];
   const Context = createContext<MachineContextValue | null>(null);
 
   const Provider = ({
@@ -328,7 +234,7 @@ export function createMachineContext<M extends Machine<any>>() {
     children,
   }: {
     machine: M;
-    actions: Runner<M>['actions'];
+    actions: Record<string, (...args: any[]) => void>;
     children: ReactNode;
   }) => {
     // Memoize the context value to prevent unnecessary re-renders in consumers.
@@ -345,7 +251,7 @@ export function createMachineContext<M extends Machine<any>>() {
   };
 
   const useMachineState = (): M => useMachineContext()[0];
-  const useMachineActions = (): Runner<M>['actions'] => useMachineContext()[1];
+  const useMachineActions = (): Record<string, (...args: any[]) => void> => useMachineContext()[1];
 
   const useSelector = <T,>(
     selector: (state: M) => T,
@@ -362,4 +268,69 @@ export function createMachineContext<M extends Machine<any>>() {
     useMachineActions,
     useSelector,
   };
+}
+
+// =============================================================================
+// HOOK 5: useActor (Actor Model)
+// =============================================================================
+
+/**
+ * Subscribes to an Actor and returns the current snapshot.
+ * Uses `useSyncExternalStore` for concurrent features compatibility.
+ * 
+ * @param actor The actor instance to subscribe to.
+ * @returns The current machine snapshot.
+ */
+export function useActor<M extends BaseMachine<any>>(actor: Actor<M>): M {
+  // bind is important if subscribe methods rely on `this`
+  const subscribe = useMemo(() => actor.subscribe.bind(actor), [actor]);
+  const getSnapshot = useMemo(() => actor.getSnapshot.bind(actor), [actor]);
+
+  return useSyncExternalStore(subscribe, getSnapshot);
+}
+
+/**
+ * Subscribes to an Actor and selects a slice of the state.
+ * Only re-renders when the selected slice changes.
+ * 
+ * @param actor The actor instance.
+ * @param selector Function to select a part of the state.
+ * @param isEqual Optional equality function.
+ */
+export function useActorSelector<M extends BaseMachine<any>, T>(
+  actor: Actor<M>,
+  selector: (state: M) => T,
+  isEqual: (a: T, b: T) => boolean = Object.is
+): T {
+  const subscribe = useMemo(() => actor.subscribe.bind(actor), [actor]);
+  const getSnapshot = useMemo(() => actor.getSnapshot.bind(actor), [actor]);
+
+  const getSelection = () => selector(getSnapshot());
+
+  const [selection, setSelection] = useState(getSelection);
+
+  // Custom selector logic since useSyncExternalStoreWithSelector is not available directly
+  // and we want to avoid extra deps.
+  // Actually, we can just use useSyncExternalStore and manage the selection stability,
+  // but useSyncExternalStore triggers if the result of getSnapshot changes (strict eq).
+  // If we wrap getSnapshot to return the selection, standard useSyncExternalStore handles it?
+  // No, useSyncExternalStore calls getSnapshot continuously during render to check for tearing.
+  // It needs to be cheap and consistent.
+
+  // Simple implementation: Subscribe and update local state only on change.
+  useEffect(() => {
+    const checkUpdate = () => {
+      const nextSelection = selector(actor.getSnapshot());
+      setSelection(prev => isEqual(prev, nextSelection) ? prev : nextSelection);
+    };
+
+    // Check immediately in case it changed between render and effect
+    checkUpdate();
+
+    return actor.subscribe(() => {
+      checkUpdate();
+    });
+  }, [actor, selector, isEqual]);
+
+  return selection;
 }
