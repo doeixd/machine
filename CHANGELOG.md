@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.0.22](https://github.com/doeixd/machine/compare/v0.0.21...v0.0.22) (2025-12-16)
+
+
+### Features
+
+* Add machine union and exclusion mixins for combining and excluding machine behaviors. ([385453d](https://github.com/doeixd/machine/commit/385453df174723f82c6a50d7b3d0ab179a14797b))
+
 ### [0.0.21](https://github.com/doeixd/machine/compare/v0.0.20...v0.0.21) (2025-12-16)
 
 
