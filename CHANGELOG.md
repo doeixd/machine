@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.0.19](https://github.com/doeixd/machine/compare/v0.0.18...v0.0.19) (2025-12-16)
+
+
+### Features
+
+* implement advanced pattern matching for state machines ([2f0f894](https://github.com/doeixd/machine/commit/2f0f894dd127e609be7966e0751b37620fcc8001))
+
 ### [0.0.18](https://github.com/doeixd/machine/compare/v0.0.17...v0.0.18) (2025-12-05)
 
 
