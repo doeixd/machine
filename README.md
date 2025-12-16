@@ -8,7 +8,6 @@ A minimal, type-safe state machine library for TypeScript.
 
 > **Philosophy**: Provide minimal primitives that capture the essence of finite state machines, with maximum type safety and flexibility. **Type-State Programming** is our core paradigm—we use TypeScript's type system itself to represent finite states, making illegal states unrepresentable and invalid transitions impossible to write. The compiler becomes your safety net, catching state-related bugs before your code ever runs.
 
-> **Middleware System**: For production-ready state machines, we provide a comprehensive middleware system for cross-cutting concerns like logging, analytics, validation, error handling, and debugging. **📖 [Read the Middleware Guide](./docs/middleware.md)**
 
 ## Installation
 
@@ -41,7 +40,7 @@ An FSM is a 5-tuple: **M = (S, Σ, δ, s₀, F)** where:
 3. **Finite States**: Only a limited number of discrete configurations exist
 
 ### How `@doeixd/machine` Implements These Tenets
-
+A smiplified version of the core type / primitive:
 ```typescript
 type Machine<C extends object> = {
   context: C;  // Encodes the current state (s ∈ S)
