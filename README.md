@@ -161,49 +161,84 @@ This shows the **flexibility** of the library: immutability is the default patte
 The most powerful pattern: different machine types represent different states.
 
 ```typescript
-import { createMachine, Machine } from "@doeixd/machine";
+import { MachineBase } from "@doeixd/machine";
 
-// Define distinct machine types for each state
-type LoggedOut = Machine<{ status: "loggedOut" }, {
-  login: (username: string) => LoggedIn;
-};
+/**
+ * Type-State Programming with classes:
+ * - Each distinct class *is* a distinct state.
+ * - The methods on that class are the only valid transitions from that state.
+ * - Returning a different class type moves you to a different state (at compile time).
+ */
 
-type LoggedIn = Machine<{ status: "loggedIn"; username: string }, {
-  logout: () => LoggedOut;
-  viewProfile: () => LoggedIn;
-};
+/** "LoggedOut" state: only transitions available are methods on this class. */
+class LoggedOut extends MachineBase<{ status: "loggedOut" }> {
+  constructor() {
+    // MachineBase stores state data in `this.context`
+    super({ status: "loggedOut" });
+  }
 
-// Create factory functions
-const createLoggedOut = (): LoggedOut => {
-  return createMachine({ status: "loggedOut" }, {
-    login: function(username: string): LoggedIn {
-      return createLoggedIn(username);
-    }
-  });
-};
+  /**
+   * Transition: LoggedOut -> LoggedIn
+   * Notice: there's no `logout()` method here, so you literally cannot call it.
+   */
+  login(username: string): LoggedIn {
+    return new LoggedIn(username);
+  }
+}
 
-const createLoggedIn = (username: string): LoggedIn => {
-  return createMachine({ status: "loggedIn", username }, {
-    logout: function(): LoggedOut {
-      return createLoggedOut();
-    },
-    viewProfile: function(): LoggedIn {
-      console.log(`Viewing ${this.username}'s profile`);
-      return this;
-    }
-  });
-};
+/** "LoggedIn" state: different data + different allowed transitions. */
+class LoggedIn extends MachineBase<{ status: "loggedIn"; username: string }> {
+  constructor(username: string) {
+    // Context shape changes in this state (now includes `username`)
+    super({ status: "loggedIn", username });
+  }
 
-// Usage
-const machine = createLoggedOut();
+  /**
+   * Transition: LoggedIn -> LoggedOut
+   * This exists only on LoggedIn, so you cannot log out unless you're logged in.
+   */
+  logout(): LoggedOut {
+    return new LoggedOut();
+  }
 
-// TypeScript prevents invalid transitions at compile time!
-// machine.logout(); // ❌ Error: Property 'logout' does not exist on type 'LoggedOut'
+  /**
+   * Transition: LoggedIn -> LoggedIn (self-transition)
+   * Returning `this` means "stay in the same state".
+   */
+  viewProfile(): LoggedIn {
+    // With MachineBase, context lives under `this.context`
+    console.log(`Viewing ${this.context.username}'s profile`);
+    return this;
+  }
+}
+
+// -------------------- Usage --------------------
+
+const machine = new LoggedOut();
+
+/**
+ * ✅ Compiler-enforced validity:
+ * LoggedOut has only `.login()`, so calling `.logout()` is a type error.
+ */
+// machine.logout(); // ❌ Property 'logout' does not exist on type 'LoggedOut'
 
 const loggedIn = machine.login("alice");
-// loggedIn.login("bob"); // ❌ Error: Property 'login' does not exist on type 'LoggedIn'
 
-const loggedOut = loggedIn.logout(); // ✅ Valid
+/**
+ * LoggedIn has `.logout()` and `.viewProfile()`.
+ * It does NOT have `.login()`, so calling it is a compile-time error.
+ */
+// loggedIn.login("bob"); // ❌ Property 'login' does not exist on type 'LoggedIn'
+
+const stillLoggedIn = loggedIn.viewProfile(); // ✅ OK (self-transition)
+const loggedOut = loggedIn.logout();          // ✅ OK (LoggedIn -> LoggedOut)
+
+/**
+ * The key idea:
+ * - You never check `status` at runtime to know what you can do.
+ * - The *type* tells you what transitions are available.
+ * - Autocomplete only offers valid transitions for the current state.
+ */
 ```
 
 This pattern makes **illegal states unrepresentable** in your type system.
