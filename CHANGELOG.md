@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.0.1](https://github.com/doeixd/machine/compare/v0.0.23...v1.0.1) (2026-01-13)
+
+
+### ⚠ BREAKING CHANGES
+
+* transitions now read state via this.context and middleware/ensemble helpers no longer call
+  transitions with raw contexts.
+
+### Features
+
+* Add comprehensive documentation for the Actor Model, covering its concepts, API, and comparison with runners. ([484a689](https://github.com/doeixd/machine/commit/484a689ab74a104d8546edbeb93e9cb661f45351))
+* add context-bound helpers ([84719c0](https://github.com/doeixd/machine/commit/84719c08b59b2780ab204f80262e0c343b834a3c))
+* migrate docs and helpers to this.context binding ([b159ff9](https://github.com/doeixd/machine/commit/b159ff9dd8bdd520e397ef624a5e8b8be0cc3354))
+
 ## [1.0.0](https://github.com/doeixd/machine/compare/v0.0.23...v1.0.0) (2026-01-13)
 
 
