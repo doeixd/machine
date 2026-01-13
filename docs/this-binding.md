@@ -1,463 +1,136 @@
 # Understanding `this` in @doeixd/machine
 
-This guide explains how `this` binding works in the library, common patterns, pitfalls, and how to avoid `this` entirely if you prefer.
+The library now binds every transition function to the **machine instance**. That means `this` gives you full access to the machine (including `this.context` and every other transition), no matter whether you authored the machine with plain objects, functional builders, or helper factories. This guide explains what that means in practice, how the runtime keeps bindings consistent, and how to avoid the few remaining pitfalls.
 
 ## Table of Contents
 
-- [The Basics: What is `this`?](#the-basics-what-is-this)
-- [How `this` is Bound in Transitions](#how-this-is-bound-in-transitions)
-- [The Factory Function Pattern](#the-factory-function-pattern)
-- [Common Pitfalls](#common-pitfalls)
-- [Avoiding `this` Entirely](#avoiding-this-entirely)
-- [Best Practices](#best-practices)
+- [1. The Short Version](#1-the-short-version)
+- [2. How Binding Works](#2-how-binding-works)
+- [3. Factory & Builder Patterns](#3-factory--builder-patterns)
+- [4. Context Helpers (`setContext`, `next`)](#4-context-helpers-setcontext-next)
+- [5. Common Pitfalls](#5-common-pitfalls)
+- [6. Testing & Manual Invocation](#6-testing--manual-invocation)
+- [7. Best Practices](#7-best-practices)
 
 ---
 
-## The Basics: What is `this`?
+## 1. The Short Version
 
-In `@doeixd/machine`, transition functions use JavaScript's `this` keyword to access the **current state** of the machine. The library automatically binds `this` to the machine's context object.
-
-### Key Concept
-
-```typescript
-const machine = createMachine({ count: 0 }, (next) => ({
-  increment: function() {
-    // `this` is bound to the current context: { count: 0 }
-    // NOT the machine itself, but the context object
-    return next({ count: this.context.count + 1 });
-  }
-}));
-```
-
-**Important:** `this` refers directly to the **context object**, not the machine. You access `this.context.count`, not `this.context.count`.
-
----
-
-## How `this` is Bound in Transitions
-
-When you call a transition method on a machine, the library automatically binds `this` to the context:
-
-```typescript
+```ts
 const counter = createMachine({ count: 0 }, (next) => ({
-  increment: function() {
-    console.log(this); // { count: 0 }
+  increment() {
+    // `this` === the current machine (not just the raw context object)
     console.log(this.context.count); // 0
-    return next({ count: this.context.count + 1 });
+    const after = next({ count: this.context.count + 1 });
+    // You can immediately call other transitions
+    return after;
+  },
+  reset() {
+    return next({ count: 0 });
   }
 }));
 
-// When you call counter.increment():
-// 1. The library calls: increment.call(counter)
-// 2. Inside increment, `this` === { count: 0 }
-// 3. You can access this.context.count directly
+counter.increment().reset();
 ```
 
-### Why Bind to Context?
-
-Binding `this` to the context (not the full machine) keeps your code concise:
-
-```typescript
-// ✅ Clean: `this` bound to context
-increment: function() {
-  return next({ count: this.context.count + 1 });
-}
-
-// ❌ Would be verbose if `this` was the whole machine
-increment: function() {
-  return createMachine({ count: this.context.count + 1 }, this);
-}
-```
+- You always read data through `this.context`.
+- You can safely call `this.otherTransition()` because `this` is the machine.
+- Helper functions like `setContext`/`next` keep those bindings intact when they clone machines.
 
 ---
 
-## The Factory Function Pattern
+## 2. How Binding Works
 
-The factory function pattern adds a `ctx` parameter that provides **type information** to TypeScript while `this` provides **runtime access**:
+When a machine is created, the runtime stores the original transition map and binds every function to the machine object. Whenever a helper needs to clone the machine (e.g. `setContext`, `next`, `createMachine(newContext, machine)`), it reuses that same transition map so the new instance behaves exactly like the previous one.
 
-### Pattern Explained
+### Invocation Lifecycle
 
-```typescript
-// ❌ WRONG: Inline object with `this` - doesn't work!
-const counter = createMachine({ count: 0 }, {
-  increment: function() {
-    return createMachine({ count: this.context.count + 1 }, this);
-    // `this` here is the context, not transitions - TypeScript error!
-  }
-});
+1. You call `machine.transition(args)`.
+2. The library invokes the transition with `fn.apply(machine, args)`.
+3. Inside the function, `this === machine`, so `this.context` is the live state and `this.otherTransition` is callable.
+4. Returning a new machine (via `createMachine`, `next`, or helper factories) automatically keeps the same binding model.
 
-// ✅ CORRECT: Named transitions variable
-const transitions = {
-  increment: function() {
-    return createMachine({ count: this.context.count + 1 }, transitions);
-    // At RUNTIME: `this` is bound to context
-    // We pass `transitions` (the object) as second argument
-  }
-};
-const counter = createMachine({ count: 0 }, transitions);
-
-// ✅ CORRECT: Factory function with closure
-const counter2 = createMachine({ count: 0 }, (ctx) => {
-  const transitions = {
-    increment: function() {
-      return createMachine({ count: this.context.count + 1 }, transitions);
-    }
-  };
-  return transitions;
-});
-```
-
-### Why Both `ctx` and `this`?
-
-- **`ctx` (factory parameter)**: Provides TypeScript with type information
-- **`this` (inside functions)**: Provides runtime access to current state
-
-```typescript
-type Context = { count: number; max: number };
-
-const counter = createMachine<Context>(
-  { count: 0, max: 10 },
-  (ctx) => {
-    // `ctx` helps TypeScript infer the return type
-    // You can even use ctx for setup logic
-    const maxCount = ctx.max;
-
-    return {
-      increment: function() {
-        // `this` gives you the CURRENT state at runtime
-        const newCount = Math.min(this.context.count + 1, maxCount);
-        return next({ count: newCount, max: this.context.max });
-      }
-    };
-  }
-);
-```
-
-### When to Use Each
-
-| Scenario | Use |
-|----------|-----|
-| Access current state in transition | `this` |
-| Setup constants/helpers in factory | `ctx` |
-| Type inference for TypeScript | `ctx` |
-| Access state that changes between calls | `this` |
+Because `this` is the machine, you never have to worry about whether a transition was authored using a closure-based builder or a simple object literal—everything behaves the same at runtime.
 
 ---
 
-## Common Pitfalls
+## 3. Factory & Builder Patterns
 
-### 1. Arrow Functions Break `this` Binding
+The builder/factory APIs still exist to give TypeScript strong inference, but they no longer change the `this` semantics.
 
-**❌ WRONG:**
-```typescript
-const counter = createMachine({ count: 0 }, (ctx) => ({
-  increment: () => {
-    // `this` is NOT bound correctly with arrow functions!
-    // `this` will be undefined or refer to outer scope
-    return createMachine({ count: this.context.count + 1 }, this); // ERROR!
+```ts
+const createCounter = createMachineFactory<{ count: number }>()({
+  increment(ctx) {
+    return { count: ctx.count + 1 };
   }
-}));
+});
+
+const counter = createCounter({ count: 0 });
+counter.increment(); // `this` is the machine, increment uses ctx for typing
 ```
 
-**✅ CORRECT:**
-```typescript
-const counter = createMachine({ count: 0 }, (next) => ({
-  increment: function() {
-    // Regular function allows proper `this` binding
-    return next({ count: this.context.count + 1 });
-  }
-}));
-```
+- **`ctx` arguments** (from factory callbacks) are a *type-time* construct. They help TypeScript infer shapes but do not replace `this`.
+- **`this.context`** is always the runtime truth. If context changes, `this.context` reflects the latest data.
+- **Calling other transitions** is supported in every pattern because `this` always has the transition methods attached.
 
-**Why?** Arrow functions lexically bind `this` to the outer scope, preventing the library from binding it to the context.
+---
 
-### 2. Destructuring Loses `this` Binding
+## 4. Context Helpers (`setContext`, `next`)
 
-**❌ WRONG:**
-```typescript
-const counter = createMachine({ count: 0 }, (ctx) => ({
-  increment: function() {
-    return createMachine({ count: this.context.count + 1 }, this);
-  }
-}));
+`setContext` and `next` create new machine instances. Before the binding overhaul, these helpers could accidentally freeze builder-style machines to the old context because their transitions were already bound. The runtime now stores the canonical transition map, so both helpers behave consistently.
 
-const { increment } = counter;
-increment(); // ERROR! `this` is undefined
-```
-
-**✅ CORRECT:**
-```typescript
-// Call methods directly on the machine
-counter.increment(); // Works!
-
-// Or bind explicitly if you must destructure
-const increment = counter.increment.bind(counter.context);
-increment(); // Works!
-```
-
-### 3. Confusing `ctx` with `this`
-
-**Common Mistake:**
-```typescript
-const counter = createMachine({ count: 0 }, (ctx) => ({
-  increment: function() {
-    // ❌ WRONG: ctx is the INITIAL context
-    return createMachine({ count: ctx.count + 1 }, this);
-    //                              ^^^ Always 0!
-  }
-}));
-
-counter.increment(); // count becomes 1
-counter.increment(); // count is STILL 1! (Bug!)
-```
-
-**Explanation:**
-- `ctx` is captured from the factory function closure
-- `ctx` always refers to the **initial context** `{ count: 0 }`
-- `this` refers to the **current context** at runtime
-
-**✅ CORRECT:**
-```typescript
-const counter = createMachine({ count: 0 }, (next) => ({
-  increment: function() {
-    // ✅ Use `this` to access current state
-    return next({ count: this.context.count + 1 });
-  }
-}));
-```
-
-### 4. Passing `this` vs. Passing Transitions
-
-When creating a new machine, the second argument should be `this` (the transitions object):
-
-```typescript
-const counter = createMachine({ count: 0 }, (next) => ({
-  increment: function() {
-    // ✅ Use `next` helper to create new machine with updated context
+```ts
+const counter = createMachine({ count: 1 }, (next) => ({
+  increment() {
     return next({ count: this.context.count + 1 });
   },
-  decrement: function() {
-    return next({ count: this.context.count - 1 });
-  }
 }));
+
+const updated = setContext(counter, { count: 10 });
+updated.increment().context.count; // 11
+
+const iced = next(counter, (ctx) => ({ count: ctx.count + 5 }));
+iced.increment().context.count; // 7
 ```
 
-**What `this` refers to here:**
-In the functional builder pattern, `this` refers to the **context object** (e.g., `{ count: 0 }`). The `next` function automatically handles passing the transitions object to `createMachine`.
-
-This is why it works:
-1. The factory function returns a transitions object: `{ increment: fn, decrement: fn }`
-2. `createMachine` binds methods to context: `{ context: { count: 0 }, increment: fn, decrement: fn }`
-3. When you call `counter.increment()`, inside the function `this` is bound to the transitions object
-4. Passing `this` to the next `createMachine` preserves all the methods
+You can rely on these helpers to keep transitions usable regardless of how the machine was authored.
 
 ---
 
-## Avoiding `this` Entirely
+## 5. Common Pitfalls
 
-If you prefer to avoid `this`, use the **functional pattern** with `createFunctionalMachine` or the curried form of `state()`:
-
-### Functional Pattern (No `this` at all)
-
-```typescript
-import { state } from "@doeixd/machine";
-
-// Call state() with only context to get a factory
-const createCounter = state({ count: 0 });
-
-// Pass pure transformer functions (no `this` needed!)
-const counter = createCounter({
-  increment: (ctx) => ({ count: ctx.count + 1 }),
-  decrement: (ctx) => ({ count: ctx.count - 1 }),
-  add: (ctx, n: number) => ({ count: ctx.count + n }),
-  reset: (ctx) => ({ count: 0 })
-});
-
-// Use it the same way
-counter.increment(); // Works!
-counter.add(5); // Works!
-```
-
-### How It Works
-
-The functional pattern:
-1. Takes pure functions that receive context as the first parameter
-2. Automatically wraps them to create new machines
-3. No `this` binding needed - everything is explicit
-
-### Comparison
-
-**Functional Builder (uses `next`):**
-```typescript
-const counter = createMachine({ count: 0 }, (next) => ({
-  increment: function() {
-    return next({ count: this.context.count + 1 });
-  }
-}));
-```
-
-**Functional (no `this`):**
-```typescript
-const createCounter = state({ count: 0 });
-const counter = createCounter({
-  increment: (ctx) => ({ count: ctx.count + 1 })
-});
-```
-
-**Benefits of Functional Pattern:**
-- ✅ No `this` confusion
-- ✅ Pure functions (easier to test)
-- ✅ Can use arrow functions
-- ✅ More functional programming style
-- ✅ Explicit context parameter
-
-**Drawbacks:**
-- Slightly more verbose setup
-- Two-step creation (factory + instantiation)
+| Pitfall | Why It Happens | Fix |
+|--------|----------------|-----|
+| **Arrow functions for transitions** | Arrow functions capture `this` lexically, preventing the runtime from rebinding it to the machine. | Use `function () { ... }` declarations for transitions. |
+| **Manually binding to raw contexts** | Calling `fn.call(machine.context)` bypasses the binding system. | Use the machine instance (`fn.call(machine, …)`) or helper utilities (`call`, `bindTransitions`, `callWithContext`). |
+| **Mutating `this.context` directly** | You’ll mutate the current instance but still return a new one, leading to confusing state. | Prefer immutable helpers (`next`, `setContext`) unless you intentionally return `this` for a mutable pattern. |
 
 ---
 
-## Best Practices
+## 6. Testing & Manual Invocation
 
-### 1. Choose Your Pattern and Stick With It
+In tests you sometimes need to call a transition with a custom context or machine. The recommended tools are:
 
-**Option A: Functional with `next` (recommended for simple machines)**
-```typescript
-const machine = createMachine({ count: 0 }, (next) => ({
-  increment: function() {
-    return next({ count: this.context.count + 1 });
-  }
-}));
+```ts
+import { call, bindTransitions, callWithContext } from '@doeixd/machine';
+
+call(machine.increment, machine);              // Bind to machine
+callWithContext(machine, 'increment');         // Legacy helper for context-only binding
+const bound = bindTransitions(createMachine(...));
+bound.increment();                             // Proxy that auto-binds everything
 ```
 
-**Option B: Functional without `this` (recommended for complex logic)**
-```typescript
-const createMachine = state({ count: 0 });
-const machine = createMachine({
-  increment: (ctx) => ({ count: ctx.count + 1 })
-});
-```
-
-### 2. Always Use Regular Functions with `this`
-
-```typescript
-// ✅ Good
-{
-  increment: function() { return next({ count: this.context.count + 1 }); }
-}
-
-// ❌ Bad (arrow function)
-{
-  increment: () => { return createMachine({ count: this.context.count + 1 }, this); }
-}
-```
-
-### 3. Use `ctx` for Setup, `this` for State
-
-```typescript
-const machine = createMachine(
-  { count: 0, max: 100 },
-  (ctx) => {
-    // Use `ctx` for setup logic that depends on initial values
-    const maxValue = ctx.max;
-    const step = Math.floor(ctx.max / 10);
-
-    return {
-      increment: function() {
-        // Use `this` for accessing current state
-        const newCount = Math.min(this.context.count + step, maxValue);
-        return next({ count: newCount, max: this.context.max });
-      }
-    };
-  }
-);
-```
-
-### 4. Document When Using Closures
-
-```typescript
-const createCounter = (initialMax: number) => {
-  return createMachine({ count: 0, max: initialMax }, (ctx) => {
-    // Closure captures initialMax (never changes)
-    const maxValue = initialMax;
-
-    return {
-      increment: function() {
-        // `this.context.max` could change, but `maxValue` is fixed
-        const newCount = Math.min(this.context.count + 1, maxValue);
-        return next({ count: newCount, max: this.context.max });
-      }
-    };
-  });
-};
-```
-
-### 5. Type Annotations for Clarity
-
-```typescript
-type CounterContext = {
-  count: number;
-  max: number;
-};
-
-const counter = createMachine<CounterContext>(
-  { count: 0, max: 10 },
-  (ctx) => ({
-    increment: function(): Machine<CounterContext> {
-      // TypeScript knows `this` is CounterContext
-      return next({ count: this.context.count + 1, max: this.context.max });
-    }
-  })
-);
-```
-
-### 6. Testing Transitions
-
-When testing, you can call transitions with explicit context:
-
-```typescript
-const transitions = {
-  increment: function() {
-    return createMachine({ count: this.context.count + 1 }, this);
-  }
-};
-
-// Call with explicit context
-const result = transitions.increment.call({ count: 5 });
-expect(result.context.count).toBe(6);
-```
+`callWithContext` keeps backward compatibility for older code that expects `this === { context }`, but new code should prefer passing the machine.
 
 ---
 
-## Summary
+## 7. Best Practices
 
-### Key Takeaways
+1. **Use `function` declarations for transitions** so the runtime can bind `this`.
+2. **Read state through `this.context`**, not through captured variables that might become stale.
+3. **Call other transitions via `this.otherTransition()`** when it makes the intent clearer—this now works everywhere.
+4. **Use `next`/`setContext`/`createMachine(newContext, machine)`** for immutable updates. They keep the transition set intact.
+5. **Reach for builder/factory helpers for type inference**, not for different runtime semantics.
+6. **Use `bindTransitions` or `call` in tests** when you need to invoke transitions manually.
 
-1. **`this` is bound to the context object**, not the machine
-2. **Use regular functions** (`function() {}`), not arrow functions
-3. **`ctx` provides type info**, `this` provides runtime state
-4. **`ctx` is the initial context**, `this` is the current context
-5. **Functional pattern avoids `this` entirely** if you prefer
-
-### Quick Reference
-
-| What | When to Use |
-|------|-------------|
-| `this.context.count` | Access current state in transitions |
-| `ctx.count` | Setup logic in factory function |
-| `function() {}` | Required for proper `this` binding |
-| `() => {}` | Only in functional pattern (no `this`) |
-| Traditional pattern | Simple machines, familiar syntax |
-| Functional pattern | Pure functions, no `this` confusion |
-
-### Need Help?
-
-- **Traditional pattern**: [See examples in README.md](../README.md)
-- **Functional pattern**: [See createFunctionalMachine docs](../src/functional-combinators.ts)
-- **Type-State programming**: [See Type-State guide](../README.md#type-state-programming)
-
----
-
-**Related Documentation:**
-- [Pattern Decision Guide](./patterns.md)
-- [Core Principles](./principles.md)
-- [API Reference](../README.md)
+With these rules, every machine—simple or complex—behaves the same way: `this` is the machine, `this.context` holds the current state, and binding stays consistent across clones.
