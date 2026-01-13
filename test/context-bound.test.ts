@@ -124,16 +124,14 @@ describe('Context-Bound Machines', () => {
       expect(isContextBound(machine)).toBe(false);
     });
 
-    it('returns false for context-bound machines (no marker)', () => {
-      // Note: Current implementation returns false because we don't
-      // actually set the __contextBound marker. This is fine.
+    it('returns true for context-bound machines', () => {
       const machine = createContextBoundMachine({ count: 0 }, {
         increment() {
           return { count: this.context.count + 1 };
         }
       });
 
-      expect(isContextBound(machine)).toBe(false);
+      expect(isContextBound(machine)).toBe(true);
     });
   });
 

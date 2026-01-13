@@ -3,6 +3,7 @@
  * @author doeixd
  * @version 1.0.0
  */
+import { attachTransitions, getStoredTransitions, snapshotOwnTransitions } from './internal-transitions';
 
 // =============================================================================
 // SECTION: CORE TYPES & INTERFACES
@@ -389,16 +390,17 @@ export function createMachine(context: any, fnsOrFactory: any): any {
     };
     transitions = fnsOrFactory(transition);
 
-    return Object.assign({ context }, transitions);
+    return attachTransitions(Object.assign({ context }, transitions), transitions);
   }
 
   // If fns is a machine (has context property), extract just the transition functions
-  const transitions = 'context' in fnsOrFactory ? Object.fromEntries(
-    Object.entries(fnsOrFactory).filter(([key]) => key !== 'context')
-  ) : fnsOrFactory;
+  const stored = getStoredTransitions(fnsOrFactory);
+  const transitions = stored ?? ('context' in fnsOrFactory
+    ? snapshotOwnTransitions(fnsOrFactory)
+    : fnsOrFactory);
 
   const machine = Object.assign({ context }, transitions);
-  return machine;
+  return attachTransitions(machine, transitions);
 }
 
 /**
@@ -453,16 +455,17 @@ export function createAsyncMachine(context: any, fnsOrFactory: any): any {
     };
     transitions = fnsOrFactory(transition);
 
-    return Object.assign({ context }, transitions);
+    return attachTransitions(Object.assign({ context }, transitions), transitions);
   }
 
   // If fns is a machine (has context property), extract just the transition functions
-  const transitions = 'context' in fnsOrFactory ? Object.fromEntries(
-    Object.entries(fnsOrFactory).filter(([key]) => key !== 'context')
-  ) : fnsOrFactory;
+  const stored = getStoredTransitions(fnsOrFactory);
+  const transitions = stored ?? ('context' in fnsOrFactory
+    ? snapshotOwnTransitions(fnsOrFactory)
+    : fnsOrFactory);
 
   const machine = Object.assign({ context }, transitions);
-  return machine;
+  return attachTransitions(machine, transitions);
 }
 
 /**
@@ -527,10 +530,12 @@ export function setContext<M extends Machine<any>>(
   machine: M,
   newContextOrFn: Context<M> | ((ctx: Readonly<Context<M>>) => Context<M>)
 ): M {
-  const { context, ...transitions } = machine;
+  const currentContext = machine.context;
+  const transitions =
+    getStoredTransitions(machine) ?? snapshotOwnTransitions(machine);
   const newContext =
     typeof newContextOrFn === "function"
-      ? (newContextOrFn as (ctx: Readonly<Context<M>>) => Context<M>)(context)
+      ? (newContextOrFn as (ctx: Readonly<Context<M>>) => Context<M>)(currentContext)
       : newContextOrFn;
 
   return createMachine(newContext, transitions as any) as M;
@@ -938,8 +943,7 @@ export function next<C extends object>(
   m: Machine<C>,
   update: (ctx: Readonly<C>) => C
 ): Machine<C> {
-  const { context, ...transitions } = m;
-  return createMachine(update(context), transitions as any) as Machine<C>;
+  return setContext(m, (ctx) => update(ctx)) as Machine<C>;
 }
 
 /**

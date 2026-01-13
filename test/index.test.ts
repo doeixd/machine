@@ -251,6 +251,22 @@ describe('setContext', () => {
     expect(typeof updated.increment).toBe('function');
     expect(typeof updated.decrement).toBe('function');
   });
+
+  it('should support machines created with functional builder callbacks', () => {
+    const machine = createMachine(
+      { count: 1 },
+      (next) => ({
+        increment() {
+          return next({ count: this.context.count + 1 });
+        },
+      })
+    );
+
+    const updated = setContext(machine, { count: 10 });
+
+    expect(updated.context.count).toBe(10);
+    expect(updated.increment().context.count).toBe(11);
+  });
 });
 
 describe('next', () => {
@@ -283,6 +299,22 @@ describe('next', () => {
     const updated = next(machine, (ctx) => ({ count: ctx.count + 1 }));
 
     expect(typeof updated.increment).toBe('function');
+  });
+
+  it('should preserve transitions for functional builder machines', () => {
+    const machine = createMachine(
+      { count: 2 },
+      (next) => ({
+        increment() {
+          return next({ count: this.context.count + 1 });
+        },
+      })
+    );
+
+    const updated = next(machine, (ctx) => ({ count: ctx.count + 3 }));
+
+    expect(updated.context.count).toBe(5);
+    expect(updated.increment().context.count).toBe(6);
   });
 });
 

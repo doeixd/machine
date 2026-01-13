@@ -1,4 +1,5 @@
 import type { Machine, Transitions } from './index';
+import { attachTransitions } from './internal-transitions';
 
 /**
  * Creates a machine where transformers receive context as `this` and return new contexts.
@@ -65,7 +66,19 @@ export function createContextBoundMachine<
     ])
   );
 
-  return Object.assign({ context: initialContext }, boundTransitions) as any;
+  Object.values(boundTransitions).forEach((fn) => {
+    if (typeof fn === 'function') {
+      Object.defineProperty(fn, '__contextBound', {
+        value: true,
+        enumerable: false,
+      });
+    }
+  });
+
+  return attachTransitions(
+    Object.assign({ context: initialContext }, boundTransitions),
+    boundTransitions as any
+  ) as any;
 }
 
 /**
