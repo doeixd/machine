@@ -21,7 +21,7 @@ import { createMachine, Machine, BaseMachine, extendTransitions } from './index'
  * // Define your machine's transitions object
  * const counterTransitions = {
  *   increment: function(amount: number) {
- *     return createMachine({ count: this.count + amount }, counterTransitions);
+ *     return createMachine({ count: this.context.count + amount }, counterTransitions);
  *   }
  * };
  *
@@ -103,7 +103,7 @@ export function createTransitionFactory<C extends object>() {
  * // Start with a basic counter machine
  * const basicCounter = createMachine({ count: 0 }, {
  *   increment: function() {
- *     return createMachine({ count: this.count + 1 }, this);
+ *     return createMachine({ count: this.context.count + 1 }, this);
  *   }
  * });
  *
@@ -276,7 +276,7 @@ export function createFunctionalMachine<C extends object>(initialContext: C) {
  * 1. **Traditional Pattern** (with transitions object):
  *    ```typescript
  *    const machine = state({ count: 0 }, {
- *      increment() { return createMachine({ count: this.count + 1 }, this); }
+ *      increment() { return createMachine({ count: this.context.count + 1 }, this); }
  *    });
  *    ```
  *
@@ -308,8 +308,8 @@ export function createFunctionalMachine<C extends object>(initialContext: C) {
  * ```typescript
  * // Traditional pattern
  * const counter1 = state({ count: 0 }, {
- *   increment() { return createMachine({ count: this.count + 1 }, this); },
- *   decrement() { return createMachine({ count: this.count - 1 }, this); }
+ *   increment() { return createMachine({ count: this.context.count + 1 }, this); },
+ *   decrement() { return createMachine({ count: this.context.count - 1 }, this); }
  * });
  *
  * // Functional pattern

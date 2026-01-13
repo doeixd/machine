@@ -221,7 +221,7 @@ function createTransition(getTransitions, transformer) {
  *
  * @example
  * type MyContext = { count: number };
- * const increment = function(this: MyContext) { return this.count + 1; };
+ * const increment = function(this: MyContext) { return this.context.count + 1; };
  * const result = call(increment, { count: 5 }); // Returns 6
  *
  * // Particularly useful with machine transitions:
@@ -234,7 +234,7 @@ function call(fn, context, ...args) {
 /**
  * Binds all transition methods of a machine to its context automatically.
  * Returns a Proxy that intercepts method calls and binds them to `machine.context`.
- * This eliminates the need to use `.call(m.context, ...)` for every transition.
+ * This eliminates the need to use `.call(m, ...)` for every transition.
  *
  * Automatically recursively wraps returned machines, enabling seamless chaining
  * in generator-based flows.
@@ -246,7 +246,7 @@ function call(fn, context, ...args) {
  * @example
  * type CounterContext = { count: number };
  * const counter = bindTransitions(createMachine({ count: 0 }, {
- *   increment(this: CounterContext) { return createCounter(this.count + 1); }
+ *   increment(this: CounterContext) { return createCounter(this.context.count + 1); }
  * }));
  *
  * // Now you can call transitions directly without .call():
@@ -295,7 +295,7 @@ function bindTransitions(machine) {
  * @example
  * type CounterContext = { count: number };
  * const counter = createMachine({ count: 0 }, {
- *   increment(this: CounterContext) { return createCounter(this.count + 1); }
+ *   increment(this: CounterContext) { return createCounter(this.context.count + 1); }
  * });
  *
  * const bound = new BoundMachine(counter);

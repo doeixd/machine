@@ -10,8 +10,8 @@ beforeAll(() => {
 
 const createCounter = () => {
   const t = {
-    increment: function() { return createMachine({ count: this.count + 1 }, t); },
-    add: function(n: number) { return createMachine({ count: this.count + n }, t); },
+    increment: function() { return createMachine({ count: this.context.count + 1 }, t); },
+    add: function(n: number) { return createMachine({ count: this.context.count + n }, t); },
     reset: function() { return createMachine({ count: 0 }, t); }
   };
   return createMachine({ count: 0 }, t);
@@ -24,13 +24,13 @@ describe('withTimeTravel Debug', () => {
 
     console.log('\n=== Before first increment ===');
     console.log('tracker has history:', 'history' in tracker);
-    tracker = tracker.increment.call(tracker.context);
+    tracker = tracker.increment.call(tracker);
 
     console.log('\n=== After first increment ===');
     console.log('tracker has history:', 'history' in tracker);
     console.log('tracker has snapshots:', 'snapshots' in tracker);
 
-    tracker = tracker.add.call(tracker.context, 5);
+    tracker = tracker.add.call(tracker, 5);
 
     console.log('\n=== After add ===');
     console.log('tracker has history:', 'history' in tracker);

@@ -14,10 +14,10 @@ describe('Actor', () => {
   // Sync Machine Fixture - Using Functional Builder for consistent 'this' context
   const createCounter = () => createMachine({ count: 0 }, (next) => ({
     increment() {
-      return next({ count: this.count + 1 });
+      return next({ count: this.context.count + 1 });
     },
     add(n: number) {
-      return next({ count: this.count + n });
+      return next({ count: this.context.count + n });
     },
     set(n: number) {
       return next({ count: n });
@@ -94,10 +94,10 @@ describe('Actor', () => {
       return createAsyncMachine({ count: 0, status: 'idle' }, (next) => ({
         async delayedIncrement() {
           await new Promise(r => setTimeout(r, 10)); // tiny delay
-          return next({ ...this, count: this.count + 1 });
+          return next({ ...this, count: this.context.count + 1 });
         },
         async fastIncrement() {
-          return next({ ...this, count: this.count + 1 });
+          return next({ ...this, count: this.context.count + 1 });
         }
       }));
     }

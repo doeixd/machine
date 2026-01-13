@@ -27,11 +27,11 @@ Imagine you're building a UI with several counter components. Without a factory,
 import { createMachine } from '@doeixd/machine';
 
 const counter1 = createMachine({ count: 0 }, (next) => ({
-  increment() { return next({ count: this.count + 1 }); }
+  increment() { return next({ count: this.context.count + 1 }); }
 }));
 
 const counter2 = createMachine({ count: 10 }, (next) => ({
-  increment() { return next({ count: this.count + 1 }); }
+  increment() { return next({ count: this.context.count + 1 }); }
 }));
 ```
 
@@ -61,10 +61,10 @@ export function createCounterMachine(initialContext: { count: number } = { count
   // createMachine combines the initial state with the shared behavior.
   return createMachine(initialContext, (next) => ({
     increment() {
-      return createCounterMachine({ count: this.count + 1 });
+      return createCounterMachine({ count: this.context.count + 1 });
     },
     add(n: number) {
-      return createCounterMachine({ count: this.count + n });
+      return createCounterMachine({ count: this.context.count + n });
     }
   }));
 }
@@ -174,10 +174,10 @@ This is your go-to tool for simple, single-state machines where transitions are 
 function createManualCounter(ctx) {
   return createMachine(ctx, {
   increment(this: { count: number }) {
-    return createMachine({ count: this.count + 1 }, transitions);
+    return createMachine({ count: this.context.count + 1 }, transitions);
   },
   add(this: { count: number }, n: number) {
-    return createMachine({ count: this.count + n }, transitions);
+    return createMachine({ count: this.context.count + n }, transitions);
   }
   });
 }
@@ -198,7 +198,7 @@ const createDeclarativeCounter = createMachineFactory<{ count: number }>()({
 
 // Usage is the same
 const counter = createDeclarativeCounter({ count: 10 });
-const next = counter.add.call(counter.context, 5);
+const next = counter.add.call(counter, 5);
 console.log(next.context.count); // 15
 ```
 
@@ -305,10 +305,10 @@ export const createAnalyticsLogger = () => createLoggableMachine(analytics.track
 
 // --- Usage ---
 const consoleMachine = createConsoleLogger();
-consoleMachine.log.call(consoleMachine.context, 'Hello, console!'); // Logs to console
+consoleMachine.log.call(consoleMachine, 'Hello, console!'); // Logs to console
 
 const analyticsMachine = createAnalyticsLogger();
-analyticsMachine.log.call(analyticsMachine.context, 'User clicked button'); // Sends to analytics
+analyticsMachine.log.call(analyticsMachine, 'User clicked button'); // Sends to analytics
 ```
 
 <br />
@@ -379,8 +379,8 @@ const taggableCounter = withTaggable(
 
 // The final machine has methods from both!
 let machine = taggableCounter;
-machine = machine.increment.call(machine.context);      // From counter
-machine = machine.addTag.call(machine.context, 'important'); // From taggable
+machine = machine.increment.call(machine);      // From counter
+machine = machine.addTag.call(machine, 'important'); // From taggable
 
 console.log(machine.context); // { count: 11, tags: ['important'] }
 ```
@@ -447,8 +447,8 @@ const createTimerCounter = combineFactories(createCounter, createTimer);
 const timerCounter = createTimerCounter(10); // initial count = 10
 
 let state = timerCounter;
-state = state.increment.call(state.context);
-state = state.tick.call(state.context);
+state = state.increment.call(state);
+state = state.tick.call(state);
 
 console.log(state.context); // { count: 11, elapsed: 1 }
 ```
@@ -500,7 +500,7 @@ const productMachine = createProductFetcher();
 // productMachine is pre-configured to fetch from '/api/products'
 
 // Example run (would typically be in a UI with `runMachine`)
-// userMachine.fetch.call(userMachine.context, { id: 123 });
+// userMachine.fetch.call(userMachine, { id: 123 });
 ```
 This pattern is fantastic for reducing boilerplate and providing a clean, semantic API for other developers on your team. Instead of remembering `createApiFetcher('/api/users')`, they can just import and use `createUserFetcher()`.
 

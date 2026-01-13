@@ -102,7 +102,7 @@ describe('Runtime Metadata Extraction', () => {
       const machine = createMachine({ count: 5 }, {});
       const guardedFn = guard(
         (ctx) => ctx.count > 0,
-        function() { return createMachine({ count: this.count - 1 }, this); }
+        function() { return createMachine({ count: this.context.count - 1 }, this); }
       );
 
       const meta = extractFunctionMetadata(guardedFn);
@@ -116,7 +116,7 @@ describe('Runtime Metadata Extraction', () => {
       const machine = createMachine({ count: 5 }, {});
       const guardedFn = guard(
         (ctx) => ctx.count > 0,
-        function() { return createMachine({ count: this.count - 1 }, this); },
+        function() { return createMachine({ count: this.context.count - 1 }, this); },
         { description: 'Custom guard description' }
       );
 
@@ -299,7 +299,7 @@ describe('Runtime Metadata Extraction', () => {
       class Source extends MachineBase<any> {
         guardedTransition = guard(
           (ctx) => ctx.count > 0,
-          function() { return createMachine({ count: this.count - 1 }, this); },
+          function() { return createMachine({ count: this.context.count - 1 }, this); },
           { description: 'Decrement only if positive' }
         );
       }

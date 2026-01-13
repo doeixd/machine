@@ -22,7 +22,7 @@ describe('createRunner', () => {
   it('should create a runner with initial machine state', () => {
     const machine = createMachine({ count: 0 }, {
       increment() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       },
     });
 
@@ -35,7 +35,7 @@ describe('createRunner', () => {
   it('should provide stable actions object', () => {
     const machine = createMachine({ count: 0 }, {
       increment() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       },
     });
 
@@ -48,7 +48,7 @@ describe('createRunner', () => {
   it('should update state when action is called', () => {
     const machine = createMachine({ count: 0 }, {
       increment() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       },
     });
 
@@ -62,7 +62,7 @@ describe('createRunner', () => {
   it('should return new machine from actions', () => {
     const machine = createMachine({ count: 0 }, {
       increment() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       },
     });
 
@@ -75,10 +75,10 @@ describe('createRunner', () => {
   it('should handle multiple consecutive transitions', () => {
     const machine = createMachine({ count: 0 }, {
       increment() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       },
       add(n: number) {
-        return createMachine({ count: this.count + n }, this);
+        return createMachine({ count: this.context.count + n }, this);
       },
     });
 
@@ -94,7 +94,7 @@ describe('createRunner', () => {
     const onChange = vi.fn();
     const machine = createMachine({ count: 0 }, {
       increment() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       },
     });
 
@@ -111,14 +111,14 @@ describe('createRunner', () => {
   it('should support setState for manual state updates', () => {
     const machine = createMachine({ count: 0 }, {
       increment() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       },
     });
 
     const runner = createRunner(machine);
     const newMachine = createMachine({ count: 10 }, {
       increment() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       },
     });
 
@@ -131,14 +131,14 @@ describe('createRunner', () => {
     const onChange = vi.fn();
     const machine = createMachine({ count: 0 }, {
       increment() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       },
     });
 
     const runner = createRunner(machine, onChange);
     const newMachine = createMachine({ count: 5 }, {
       increment() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       },
     });
 
@@ -150,7 +150,7 @@ describe('createRunner', () => {
   it('should handle transitions with parameters', () => {
     const machine = createMachine({ count: 0 }, {
       add(n: number) {
-        return createMachine({ count: this.count + n }, this);
+        return createMachine({ count: this.context.count + n }, this);
       },
     });
 
@@ -164,7 +164,7 @@ describe('createRunner', () => {
   it('should return undefined for non-existent actions', () => {
     const machine = createMachine({ count: 0 }, {
       increment() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       },
     });
 
@@ -414,10 +414,10 @@ describe('runWithRunner', () => {
   it('should execute generator workflow with runner', () => {
     const machine = createMachine({ count: 0 }, {
       increment() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       },
       add(n: number) {
-        return createMachine({ count: this.count + n }, this);
+        return createMachine({ count: this.context.count + n }, this);
       }
     });
 
@@ -433,7 +433,7 @@ describe('runWithRunner', () => {
   it('should allow conditional logic in generator', () => {
     const machine = createMachine({ count: 0 }, {
       increment() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       },
       reset() {
         return createMachine({ count: 0 }, this);
@@ -455,7 +455,7 @@ describe('runWithRunner', () => {
   it('should return generator return value', () => {
     const machine = createMachine({ count: 0 }, {
       increment() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 
@@ -470,7 +470,7 @@ describe('runWithRunner', () => {
   it('should handle multiple state transitions in loop', () => {
     const machine = createMachine({ count: 0 }, {
       increment() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 

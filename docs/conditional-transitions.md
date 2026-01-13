@@ -109,7 +109,7 @@ delete = guard(
 withdraw = guardSync(
   (ctx, amount) => ctx.balance >= amount, // ← Sync condition
   function(amount: number) {             // ← Sync transition
-    return createMachine({ balance: this.balance - amount }, this);
+    return createMachine({ balance: this.context.balance - amount }, this);
   },
   {
     onFail: 'throw',
@@ -141,12 +141,12 @@ type DocumentContext = {
 
 const machine = createMachine({ content: 'Hello', isEditable: true }, {
   edit: function(newContent: string) {
-    if (!this.isEditable) {
+    if (!this.context.isEditable) {
       throw new Error('Cannot edit: document is locked');
     }
     return createMachine({
       content: newContent,
-      isEditable: this.isEditable
+      isEditable: this.context.isEditable
     }, this);
   }
 });
@@ -181,7 +181,7 @@ const editableMachine = createMachine({ content: 'Hello', status: 'editable' as 
   },
   lock: function() {
     return createMachine({
-      content: this.content,
+      content: this.context.content,
       status: 'locked' as const
     }, this);
   }
@@ -190,7 +190,7 @@ const editableMachine = createMachine({ content: 'Hello', status: 'editable' as 
 const lockedMachine = createMachine({ content: 'Hello', status: 'locked' as const }, {
   unlock: function() {
     return createMachine({
-      content: this.content,
+      content: this.context.content,
       status: 'editable' as const
     }, this);
   }
@@ -227,7 +227,7 @@ const machine = createMachine({ balance: 100 }, {
   withdraw: guard(
     (ctx, amount) => ctx.balance >= amount, // ← Synchronous condition
     function(amount: number) {              // ← Synchronous transition
-      return createMachine({ balance: this.balance - amount }, this);
+      return createMachine({ balance: this.context.balance - amount }, this);
     },
     {
       onFail: 'throw',
@@ -258,7 +258,7 @@ const machine = createMachine({ balance: 100 }, {
     async function(amount: number) {  // ← Async transition
       // Simulate API call to process withdrawal
       await new Promise(resolve => setTimeout(resolve, 100));
-      return createMachine({ balance: this.balance - amount }, this);
+      return createMachine({ balance: this.context.balance - amount }, this);
     },
     {
       onFail: 'throw',
@@ -420,7 +420,7 @@ const syncMachine = createMachine({ count: 0 }, {
   increment: guard(  // Synchronous
     (ctx) => ctx.count < 10,
     function() {
-      return createMachine({ count: this.count + 1 }, this);
+      return createMachine({ count: this.context.count + 1 }, this);
     },
     { description: 'Increment counter if under limit' }
   )
@@ -434,7 +434,7 @@ const asyncMachine = createMachine({ count: 0 }, {
     },
     async function() {
       await updateCounter();
-      return createMachine({ count: this.count + 1 }, this);
+      return createMachine({ count: this.context.count + 1 }, this);
     },
     { description: 'Increment counter after async validation' }
   )

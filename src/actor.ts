@@ -167,7 +167,7 @@ export class Actor<M extends BaseMachine<any>> implements ActorRef<M> {
 
       let result: MaybePromise<M>;
       try {
-        result = fn.apply(this._state.context, event.args);
+        result = fn.apply(this._state, event.args);
       } catch (error) {
         console.error(`[Actor] Error in transition '${String(event.type)}':`, error);
         continue;

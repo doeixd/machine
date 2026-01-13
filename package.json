@@ -126,7 +126,7 @@
       "import": "./dist/esm/production/extract.js"
     },
     "./react": {
-      "types": "./dist/types/react.d.ts",
+      "types": "./dist/types/entry-react.d.ts",
       "development": {
         "require": "./dist/cjs/development/react.js",
         "import": "./dist/esm/development/react.js"
@@ -144,7 +144,7 @@
         "./dist/types/extract.d.ts"
       ],
       "react": [
-        "./dist/types/react.d.ts"
+        "./dist/types/entry-react.d.ts"
       ]
     }
   },

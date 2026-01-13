@@ -198,12 +198,12 @@ export type Event<M extends BaseMachine<any>> = {
  * const counterTransitions = {
  *   increment() {
  *     // `this` is now fully typed!
- *     // IntelliSense knows `this.count` is a number and
+ *     // IntelliSense knows `this.context.count` is a number and
  *     // `this.transitions.add` is a function.
- *     return createMachine({ count: this.count + 1 }, this.transitions);
+ *     return createMachine({ count: this.context.count + 1 }, this.transitions);
  *   },
  *   add(n: number) {
- *     return createMachine({ count: this.count + n }, this.transitions);
+ *     return createMachine({ count: this.context.count + n }, this.transitions);
  *   },
  *   // ❌ TypeScript will immediately throw a compile error on the next line
  *   //    because the return type 'string' does not satisfy 'Machine<any>'.
@@ -220,7 +220,7 @@ export type Event<M extends BaseMachine<any>> = {
  * }
  */
 export type TransitionsFor<C extends object, T extends Record<string, any>> = {
-  [K in keyof T]: (this: C & { transitions: T }, ...args: Parameters<T[K] extends (...a: infer A) => any ? (...a: A) => any : never>) => Machine<any, any>;
+  [K in keyof T]: (this: Machine<C, T>, ...args: Parameters<T[K] extends (...a: infer A) => any ? (...a: A) => any : never>) => Machine<any, any>;
 };
 
 /**
@@ -228,7 +228,7 @@ export type TransitionsFor<C extends object, T extends Record<string, any>> = {
  * type-checking for standalone asynchronous transition objects.
  */
 export type AsyncTransitionsFor<C extends object, T extends Record<string, any>> = {
-  [K in keyof T]: (this: C & { transitions: T }, ...args: Parameters<T[K] extends (...a: infer A) => any ? (...a: A) => any : never>) => MaybePromise<AsyncMachine<any, any>>;
+  [K in keyof T]: (this: Machine<C, T>, ...args: Parameters<T[K] extends (...a: infer A) => any ? (...a: A) => any : never>) => MaybePromise<AsyncMachine<any, any>>;
 };
 
 /**
@@ -345,24 +345,26 @@ export type BindTransitions<T> = {
  * @param factory - A function that receives a `transition` helper and returns the transitions object.
  * @returns A new machine instance.
  */
-export function createMachine<C extends object, T extends Record<string, (this: C, ...args: any[]) => any> = Record<string, (this: C, ...args: any[]) => any>>(
+export function createMachine<C extends object, T extends Record<string, (this: Machine<C, any>, ...args: any[]) => any> = Record<string, (this: Machine<C, any>, ...args: any[]) => any>>(
   context: C,
   factory: (transition: (newContext: C) => Machine<C, any>) => T
-): Machine<C, BindTransitions<T>>;
+): Machine<C, T>;
 
 /**
  * Creates a synchronous state machine from a context and transition functions.
  * This is the core factory for the functional approach.
+ * Transitions receive the full machine as `this`, allowing them to access
+ * `this.context` and call other transitions via `this.otherTransition()`.
  *
  * @template C - The context object type.
  * @param context - The initial state context.
  * @param fns - An object containing transition function definitions.
  * @returns A new machine instance.
  */
-export function createMachine<C extends object, T extends Record<string, (this: { context: C } & T, ...args: any[]) => any> & { context?: any }>(
+export function createMachine<C extends object, T extends Record<string, (this: Machine<C, T>, ...args: any[]) => any> & { context?: any }>(
   context: C,
   fns: T
-): { context: C } & T;
+): Machine<C, T>;
 
 /**
  * Creates a synchronous state machine by copying context and transitions from an existing machine.
@@ -379,55 +381,21 @@ export function createMachine<C extends object, M extends BaseMachine<C>>(
   machine: M
 ): Machine<C, Transitions<M>>;
 
-/**
- * Creates a synchronous state machine from a context and transition functions that expect `this` to be the context object.
- * This is used internally by utilities that need to bind transitions to context objects.
- *
- * @template C - The context object type.
- * @param context - The initial state context.
- * @param fns - An object containing transition function definitions that expect `this` to be the context.
- * @returns A new machine instance.
- */
-export function createMachine<C extends object, T extends Record<string, (this: C, ...args: any[]) => any>>(
-  context: C,
-  fns: T
-): Machine<C, T>;
-
 export function createMachine(context: any, fnsOrFactory: any): any {
   if (typeof fnsOrFactory === 'function') {
     let transitions: any;
     const transition = (newContext: any) => {
-      const machine = createMachine(newContext, transitions);
-      // Re-bind transitions to the new context
-      const boundTransitions = Object.fromEntries(
-        Object.entries(transitions).map(([key, fn]) => [
-          key,
-          (fn as Function).bind(newContext)
-        ])
-      );
-      return Object.assign(machine, boundTransitions);
+      return createMachine(newContext, transitions);
     };
     transitions = fnsOrFactory(transition);
 
-    // Bind transitions to initial context
-    const boundTransitions = Object.fromEntries(
-      Object.entries(transitions).map(([key, fn]) => [
-        key,
-        (fn as Function).bind(context)
-      ])
-    );
-
-    return Object.assign({ context }, boundTransitions);
+    return Object.assign({ context }, transitions);
   }
 
   // If fns is a machine (has context property), extract just the transition functions
   const transitions = 'context' in fnsOrFactory ? Object.fromEntries(
     Object.entries(fnsOrFactory).filter(([key]) => key !== 'context')
   ) : fnsOrFactory;
-
-  // For normal object transitions, we might also need binding if they use `this`
-  // But existing code expects `this` to be the machine (context + transitions).
-  // The new API expects `this` to be just context.
 
   const machine = Object.assign({ context }, transitions);
   return machine;
@@ -481,27 +449,11 @@ export function createAsyncMachine(context: any, fnsOrFactory: any): any {
   if (typeof fnsOrFactory === 'function') {
     let transitions: any;
     const transition = (newContext: any) => {
-      const machine = createAsyncMachine(newContext, transitions);
-      // Re-bind transitions to the new context
-      const boundTransitions = Object.fromEntries(
-        Object.entries(transitions).map(([key, fn]) => [
-          key,
-          (fn as Function).bind(newContext)
-        ])
-      );
-      return Object.assign(machine, boundTransitions);
+      return createAsyncMachine(newContext, transitions);
     };
     transitions = fnsOrFactory(transition);
 
-    // Bind transitions to initial context
-    const boundTransitions = Object.fromEntries(
-      Object.entries(transitions).map(([key, fn]) => [
-        key,
-        (fn as Function).bind(context)
-      ])
-    );
-
-    return Object.assign({ context }, boundTransitions);
+    return Object.assign({ context }, transitions);
   }
 
   // If fns is a machine (has context property), extract just the transition functions
@@ -682,14 +634,14 @@ export function extendTransitions<
  * // Define two independent machines
  * const createCounter = (initial: number) =>
  *   createMachine({ count: initial }, {
- *     increment: function() { return createMachine({ count: this.count + 1 }, this); },
- *     decrement: function() { return createMachine({ count: this.count - 1 }, this); }
+ *     increment: function() { return createMachine({ count: this.context.count + 1 }, this); },
+ *     decrement: function() { return createMachine({ count: this.context.count - 1 }, this); }
  *   });
  *
  * const createLogger = () =>
  *   createMachine({ logs: [] as string[] }, {
  *     log: function(message: string) {
- *       return createMachine({ logs: [...this.logs, message] }, this);
+ *       return createMachine({ logs: [...this.context.logs, message] }, this);
  *     },
  *     clear: function() {
  *       return createMachine({ logs: [] }, this);
@@ -872,7 +824,7 @@ export function runMachine<M extends AsyncMachine<any>>(
 
     try {
       // 3. Pass the signal to the transition function.
-      const nextStatePromise = fn.apply(current.context, [...event.args, { signal: controller.signal }]);
+      const nextStatePromise = fn.apply(current, [...event.args, { signal: controller.signal }]);
 
       const nextState = await nextStatePromise;
 
@@ -1165,3 +1117,14 @@ export {
   type ActorRef,
   type InspectionEvent
 } from './actor';
+
+// =============================================================================
+// SECTION: CONTEXT-BOUND UTILITIES
+// =============================================================================
+
+export {
+  createContextBoundMachine,
+  callWithContext,
+  isContextBound,
+  type ContextBoundMachine
+} from './context-bound';

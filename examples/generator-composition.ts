@@ -15,10 +15,10 @@ const counter = createMachine(
   { count: 0 },
   {
     increment: function() {
-      return createMachine({ count: this.count + 1 }, this);
+      return createMachine({ count: this.context.count + 1 }, this);
     },
     add: function(n: number) {
-      return createMachine({ count: this.count + n }, this);
+      return createMachine({ count: this.context.count + n }, this);
     },
     reset: function() {
       return createMachine({ count: 0 }, this);
@@ -148,16 +148,16 @@ const riskyCounter = createMachine(
   { count: 0, lastError: null as string | null },
   {
     increment: function() {
-      return createMachine({ ...this, count: this.count + 1 }, this);
+      return createMachine({ ...this.context, count: this.context.count + 1 }, this);
     },
     riskyOperation: function() {
-      if (this.count > 5) {
+      if (this.context.count > 5) {
         throw new Error('Count too high!');
       }
-      return createMachine({ ...this, count: this.count * 2 }, this);
+      return createMachine({ ...this.context, count: this.context.count * 2 }, this);
     },
     handleError: function(error: Error) {
-      return createMachine({ ...this, lastError: error.message }, this);
+      return createMachine({ ...this.context, lastError: error.message }, this);
     }
   }
 );
@@ -221,25 +221,25 @@ const formMachine = createMachine(
   {
     setName: function(name: string) {
       return createMachine(
-        { step: 'email' as const, data: { ...this.data, name } },
+        { step: 'email' as const, data: { ...this.context.data, name } },
         this
       );
     },
     setEmail: function(email: string) {
       return createMachine(
-        { step: 'age' as const, data: { ...this.data, email } },
+        { step: 'age' as const, data: { ...this.context.data, email } },
         this
       );
     },
     setAge: function(age: number) {
-      const data = { ...this.data, age } as FormData;
+      const data = { ...this.context.data, age } as FormData;
       return createMachine({ step: 'complete' as const, data }, this);
     },
     back: function() {
-      if (this.step === 'email') {
-        return createMachine({ step: 'name' as const, data: this.data }, this);
-      } else if (this.step === 'age') {
-        return createMachine({ step: 'email' as const, data: this.data }, this);
+      if (this.context.step === 'email') {
+        return createMachine({ step: 'name' as const, data: this.context.data }, this);
+      } else if (this.context.step === 'age') {
+        return createMachine({ step: 'email' as const, data: this.context.data }, this);
       }
       return this as any;
     }

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createMachine, bindTransitions, BoundMachine } from '../src/index';
+import { createMachine, bindTransitions, BoundMachine, type Machine } from '../src/index';
 import {
   run,
   step,
@@ -15,28 +15,29 @@ type CounterContext = { count: number };
 
 // Helper function to create a test counter machine
 function createCounter(count: number = 0) {
+  type CounterMachine = Machine<CounterContext>;
   type CounterTransitions = {
-    increment: (this: CounterContext) => ReturnType<typeof createCounter>;
-    decrement: (this: CounterContext) => ReturnType<typeof createCounter>;
-    add: (this: CounterContext, n: number) => ReturnType<typeof createCounter>;
-    multiply: (this: CounterContext, n: number) => ReturnType<typeof createCounter>;
-    reset: (this: CounterContext) => ReturnType<typeof createCounter>;
+    increment: (this: CounterMachine) => ReturnType<typeof createCounter>;
+    decrement: (this: CounterMachine) => ReturnType<typeof createCounter>;
+    add: (this: CounterMachine, n: number) => ReturnType<typeof createCounter>;
+    multiply: (this: CounterMachine, n: number) => ReturnType<typeof createCounter>;
+    reset: (this: CounterMachine) => ReturnType<typeof createCounter>;
   };
 
   const transitions: CounterTransitions = {
-    increment(this: CounterContext) {
-      return createCounter(this.count + 1);
+    increment(this: CounterMachine) {
+      return createCounter(this.context.count + 1);
     },
-    decrement(this: CounterContext) {
-      return createCounter(this.count - 1);
+    decrement(this: CounterMachine) {
+      return createCounter(this.context.count - 1);
     },
-    add(this: CounterContext, n: number) {
-      return createCounter(this.count + n);
+    add(this: CounterMachine, n: number) {
+      return createCounter(this.context.count + n);
     },
-    multiply(this: CounterContext, n: number) {
-      return createCounter(this.count * n);
+    multiply(this: CounterMachine, n: number) {
+      return createCounter(this.context.count * n);
     },
-    reset(this: CounterContext) {
+    reset(this: CounterMachine) {
       return createCounter(0);
     },
   };
@@ -49,9 +50,9 @@ describe('run', () => {
     const counter = bindTransitions(createCounter(0));
 
     const result = run(function* (m) {
-      m = yield* step(m.increment.call(m.context));
-      m = yield* step(m.increment.call(m.context));
-      m = yield* step(m.add.call(m.context, 5));
+      m = yield* step(m.increment());
+      m = yield* step(m.increment());
+      m = yield* step(m.add(5));
       return m.context.count;
     }, counter);
 
@@ -113,9 +114,9 @@ describe('run', () => {
 
     run(function* (m) {
       states.push(m.context.count);
-      m = yield* step(m.increment.call(m.context));
+      m = yield* step(m.increment());
       states.push(m.context.count);
-      m = yield* step(m.increment.call(m.context));
+      m = yield* step(m.increment());
       states.push(m.context.count);
       return m;
     }, counter);
@@ -127,7 +128,7 @@ describe('run', () => {
     const counter = createCounter(5);
 
     const result = run(function* (m) {
-      m = yield* step(m.multiply.call(m.context, 2));
+      m = yield* step(m.multiply(2));
       return `Count is ${m.context.count}`;
     }, counter);
 
@@ -140,7 +141,7 @@ describe('step', () => {
     const counter = createCounter(0);
 
     const result = run(function* (m) {
-      const next = yield* step(m.increment.call(m.context));
+      const next = yield* step(m.increment());
       expect(next.context.count).toBe(1);
       return next;
     }, counter);
@@ -152,9 +153,9 @@ describe('step', () => {
     const counter = createCounter(0);
 
     const result = run(function* (m) {
-      m = yield* step(m.increment.call(m.context));
-      m = yield* step(m.increment.call(m.context));
-      m = yield* step(m.increment.call(m.context));
+      m = yield* step(m.increment());
+      m = yield* step(m.increment());
+      m = yield* step(m.increment());
       return m;
     }, counter);
 
@@ -167,8 +168,8 @@ describe('yieldMachine', () => {
     const counter = createCounter(0);
 
     const result = run(function* (m) {
-      m = yield yieldMachine(m.increment.call(m.context));
-      m = yield yieldMachine(m.add.call(m.context, 5));
+      m = yield yieldMachine(m.increment());
+      m = yield yieldMachine(m.add(5));
       return m;
     }, counter);
 
@@ -179,8 +180,8 @@ describe('yieldMachine', () => {
     const counter = createCounter(10);
 
     const result = run(function* (m) {
-      m = yield m.decrement.call(m.context);
-      m = yield m.decrement.call(m.context);
+      m = yield m.decrement();
+      m = yield m.decrement();
       return m.context.count;
     }, counter);
 
@@ -193,18 +194,18 @@ describe('runSequence', () => {
     const counter = createCounter(0);
 
     const flow1 = function* (m: ReturnType<typeof createCounter>) {
-      m = yield* step(m.increment.call(m.context));
-      m = yield* step(m.increment.call(m.context));
+      m = yield* step(m.increment());
+      m = yield* step(m.increment());
       return m;
     };
 
     const flow2 = function* (m: ReturnType<typeof createCounter>) {
-      m = yield* step(m.add.call(m.context, 5));
+      m = yield* step(m.add(5));
       return m;
     };
 
     const flow3 = function* (m: ReturnType<typeof createCounter>) {
-      m = yield* step(m.multiply.call(m.context, 2));
+      m = yield* step(m.multiply(2));
       return m;
     };
 
@@ -218,7 +219,7 @@ describe('runSequence', () => {
     const counter = createCounter(1);
 
     const double = function* (m: ReturnType<typeof createCounter>) {
-      m = yield* step(m.multiply.call(m.context, 2));
+      m = yield* step(m.multiply(2));
       return m;
     };
 
@@ -240,15 +241,15 @@ describe('createFlow', () => {
     const counter = createCounter(0);
 
     const incrementThrice = createFlow(function* (m: ReturnType<typeof createCounter>) {
-      m = yield* step(m.increment.call(m.context));
-      m = yield* step(m.increment.call(m.context));
-      m = yield* step(m.increment.call(m.context));
+      m = yield* step(m.increment());
+      m = yield* step(m.increment());
+      m = yield* step(m.increment());
       return m;
     });
 
     const result = run(function* (m) {
       m = yield* incrementThrice(m);
-      m = yield* step(m.add.call(m.context, 10));
+      m = yield* step(m.add(10));
       return m;
     }, counter);
 
@@ -259,12 +260,12 @@ describe('createFlow', () => {
     const counter = createCounter(0);
 
     const addFive = createFlow(function* (m: ReturnType<typeof createCounter>) {
-      m = yield* step(m.add.call(m.context, 5));
+      m = yield* step(m.add(5));
       return m;
     });
 
     const doubleIt = createFlow(function* (m: ReturnType<typeof createCounter>) {
-      m = yield* step(m.multiply.call(m.context, 2));
+      m = yield* step(m.multiply(2));
       return m;
     });
 
@@ -287,8 +288,8 @@ describe('runWithDebug', () => {
     const counter = createCounter(0);
 
     const result = runWithDebug(function* (m) {
-      m = yield* step(m.increment.call(m.context));
-      m = yield* step(m.add.call(m.context, 5));
+      m = yield* step(m.increment());
+      m = yield* step(m.add(5));
       return m.context.count;
     }, counter);
 
@@ -313,8 +314,8 @@ describe('runWithDebug', () => {
 
     runWithDebug(
       function* (m) {
-        m = yield* step(m.increment.call(m.context));
-        m = yield* step(m.increment.call(m.context));
+        m = yield* step(m.increment());
+        m = yield* step(m.increment());
         return m;
       },
       counter,
@@ -334,9 +335,9 @@ describe('runAsync', () => {
     const counter = createCounter(0);
 
     const result = await runAsync(async function* (m) {
-      m = yield* stepAsync(m.increment.call(m.context));
+      m = yield* stepAsync(m.increment());
       await new Promise((resolve) => setTimeout(resolve, 10));
-      m = yield* stepAsync(m.add.call(m.context, 5));
+      m = yield* stepAsync(m.add(5));
       return m.context.count;
     }, counter);
 
@@ -349,13 +350,13 @@ describe('runAsync', () => {
 
     const result = await runAsync(async function* (m) {
       operations.push('start');
-      m = yield* stepAsync(m.increment.call(m.context));
+      m = yield* stepAsync(m.increment());
 
       operations.push('before async');
       await new Promise((resolve) => setTimeout(resolve, 10));
       operations.push('after async');
 
-      m = yield* stepAsync(m.increment.call(m.context));
+      m = yield* stepAsync(m.increment());
       return m;
     }, counter);
 
@@ -368,7 +369,7 @@ describe('runAsync', () => {
 
     const result = await runAsync(async function* (m) {
       const initial = m.context.count;
-      m = yield* stepAsync(m.add.call(m.context, 10));
+      m = yield* stepAsync(m.add(10));
       expect(initial).toBe(0);
       return m;
     }, counter);
@@ -382,7 +383,7 @@ describe('stepAsync', () => {
     const counter = createCounter(0);
 
     const result = await runAsync(async function* (m) {
-      const next = yield* stepAsync(m.increment.call(m.context));
+      const next = yield* stepAsync(m.increment());
       expect(next.context.count).toBe(1);
       return next;
     }, counter);
@@ -394,9 +395,9 @@ describe('stepAsync', () => {
     const counter = createCounter(0);
 
     const result = await runAsync(async function* (m) {
-      m = yield* stepAsync(m.increment.call(m.context));
-      m = yield* stepAsync(m.multiply.call(m.context, 5));
-      m = yield* stepAsync(m.add.call(m.context, 3));
+      m = yield* stepAsync(m.increment());
+      m = yield* stepAsync(m.multiply(5));
+      m = yield* stepAsync(m.add(3));
       return m.context.count;
     }, counter);
 
@@ -454,12 +455,12 @@ describe('Complex generator scenarios', () => {
 
     const result = run(function* (m) {
       for (let i = 0; i < 3; i++) {
-        m = yield* step(m.add.call(m.context, i + 1));
+        m = yield* step(m.add(i + 1));
 
         if (m.context.count > 3) {
-          m = yield* step(m.multiply.call(m.context, 2));
+          m = yield* step(m.multiply(2));
         } else {
-          m = yield* step(m.increment.call(m.context));
+          m = yield* step(m.increment());
         }
       }
 
@@ -477,13 +478,13 @@ describe('Complex generator scenarios', () => {
 
     const result = run(function* (m) {
       try {
-        m = yield* step(m.increment.call(m.context));
+        m = yield* step(m.increment());
 
         if (m.context.count === 1) {
           throw new Error('Test error');
         }
       } catch (error) {
-        m = yield* step(m.add.call(m.context, 100));
+        m = yield* step(m.add(100));
       }
 
       return m.context.count;
@@ -496,13 +497,13 @@ describe('Complex generator scenarios', () => {
     const counter = createCounter(0);
 
     const result = run(function* (m) {
-      m = yield* step(m.increment.call(m.context));
+      m = yield* step(m.increment());
 
       if (m.context.count === 1) {
         return 'early exit';
       }
 
-      m = yield* step(m.add.call(m.context, 100));
+      m = yield* step(m.add(100));
       return m.context.count;
     }, counter);
 

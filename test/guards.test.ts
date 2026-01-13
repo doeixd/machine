@@ -5,14 +5,14 @@ describe('guardAsync', () => {
   it('should execute transition when condition passes', async () => {
     const machine = createMachine({ count: 5 }, {
       increment: function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 
     const guardedIncrement = guardAsync(
       (ctx) => ctx.count < 10,
       function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     );
 
@@ -23,14 +23,14 @@ describe('guardAsync', () => {
   it('should throw error when condition fails and onFail=throw', async () => {
     const machine = createMachine({ count: 15 }, {
       increment: function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 
     const guardedIncrement = guardAsync(
       (ctx) => ctx.count < 10,
       function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       },
       { onFail: 'throw' }
     );
@@ -41,14 +41,14 @@ describe('guardAsync', () => {
   it('should use custom error message', async () => {
     const machine = createMachine({ count: 15 }, {
       increment: function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 
     const guardedIncrement = guardAsync(
       (ctx) => ctx.count < 10,
       function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       },
       { onFail: 'throw', errorMessage: 'Count too high' }
     );
@@ -59,14 +59,14 @@ describe('guardAsync', () => {
   it('should return unchanged machine when condition fails and onFail=ignore', async () => {
     const machine = createMachine({ count: 15 }, {
       increment: function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 
     const guardedIncrement = guardAsync(
       (ctx) => ctx.count < 10,
       function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       },
       { onFail: 'ignore' }
     );
@@ -79,7 +79,7 @@ describe('guardAsync', () => {
   it('should execute custom fallback function when condition fails', async () => {
     const machine = createMachine({ count: 15 }, {
       increment: function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 
@@ -90,7 +90,7 @@ describe('guardAsync', () => {
     const guardedIncrement = guardAsync(
       (ctx) => ctx.count < 10,
       function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       },
       { onFail: fallback }
     );
@@ -104,7 +104,7 @@ describe('guardAsync', () => {
   it('should execute custom fallback machine when condition fails', async () => {
     const machine = createMachine({ count: 15 }, {
       increment: function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 
@@ -113,7 +113,7 @@ describe('guardAsync', () => {
     const guardedIncrement = guardAsync(
       (ctx) => ctx.count < 10,
       function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       },
       { onFail: errorMachine }
     );
@@ -126,7 +126,7 @@ describe('guardAsync', () => {
   it('should handle async conditions', async () => {
     const machine = createMachine({ count: 5 }, {
       increment: function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 
@@ -138,7 +138,7 @@ describe('guardAsync', () => {
     const guardedIncrement = guardAsync(
       asyncCondition,
       function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     );
 
@@ -149,13 +149,13 @@ describe('guardAsync', () => {
   it('should pass arguments to condition and transition', async () => {
     const machine = createMachine({ balance: 100 }, {
       withdraw: function(amount: number) {
-        return createMachine({ balance: this.balance - amount }, this);
+        return createMachine({ balance: this.context.balance - amount }, this);
       }
     });
 
     const conditionSpy = vi.fn((ctx, amount) => ctx.balance >= amount);
     const transitionSpy = vi.fn(function(amount: number) {
-      return createMachine({ balance: this.balance - amount }, this);
+      return createMachine({ balance: this.context.balance - amount }, this);
     });
 
     const guardedWithdraw = guardAsync(conditionSpy, transitionSpy);
@@ -184,14 +184,14 @@ describe('guard', () => {
   it('should execute transition when condition passes', () => {
     const machine = createMachine({ count: 5 }, {
       increment: function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 
     const guardedIncrement = guard(
       (ctx) => ctx.count < 10,
       function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     );
 
@@ -202,14 +202,14 @@ describe('guard', () => {
   it('should throw error when condition fails and onFail=throw', () => {
     const machine = createMachine({ count: 15 }, {
       increment: function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 
     const guardedIncrement = guard(
       (ctx) => ctx.count < 10,
       function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       },
       { onFail: 'throw' }
     );
@@ -220,14 +220,14 @@ describe('guard', () => {
   it('should use custom error message', () => {
     const machine = createMachine({ count: 15 }, {
       increment: function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 
     const guardedIncrement = guard(
       (ctx) => ctx.count < 10,
       function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       },
       { onFail: 'throw', errorMessage: 'Count too high' }
     );
@@ -238,14 +238,14 @@ describe('guard', () => {
   it('should return unchanged machine when condition fails and onFail=ignore', () => {
     const machine = createMachine({ count: 15 }, {
       increment: function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 
     const guardedIncrement = guard(
       (ctx) => ctx.count < 10,
       function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       },
       { onFail: 'ignore' }
     );
@@ -258,7 +258,7 @@ describe('guard', () => {
   it('should execute custom fallback function when condition fails', () => {
     const machine = createMachine({ count: 15 }, {
       increment: function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 
@@ -269,7 +269,7 @@ describe('guard', () => {
     const guardedIncrement = guard(
       (ctx) => ctx.count < 10,
       function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       },
       { onFail: fallback }
     );
@@ -283,7 +283,7 @@ describe('guard', () => {
   it('should execute custom fallback machine when condition fails', () => {
     const machine = createMachine({ count: 15 }, {
       increment: function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 
@@ -292,7 +292,7 @@ describe('guard', () => {
     const guardedIncrement = guard(
       (ctx) => ctx.count < 10,
       function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       },
       { onFail: errorMachine }
     );
@@ -305,13 +305,13 @@ describe('guard', () => {
   it('should pass arguments to condition and transition', () => {
     const machine = createMachine({ balance: 100 }, {
       withdraw: function(amount: number) {
-        return createMachine({ balance: this.balance - amount }, this);
+        return createMachine({ balance: this.context.balance - amount }, this);
       }
     });
 
     const conditionSpy = vi.fn((ctx, amount) => ctx.balance >= amount);
     const transitionSpy = vi.fn(function(amount: number) {
-      return createMachine({ balance: this.balance - amount }, this);
+      return createMachine({ balance: this.context.balance - amount }, this);
     });
 
     const guardedWithdraw = guard(conditionSpy, transitionSpy);
@@ -338,14 +338,14 @@ describe('guard', () => {
   it('should work synchronously without promises', () => {
     const machine = createMachine({ count: 5 }, {
       increment: function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 
     const guardedIncrement = guard(
       (ctx) => ctx.count < 10,
       function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     );
 
@@ -359,7 +359,7 @@ describe('guard', () => {
   it('should reject async conditions at compile time', () => {
     const machine = createMachine({ count: 5 }, {
       increment: function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 
@@ -367,7 +367,7 @@ describe('guard', () => {
     const guardedIncrement = guard(
       async (ctx) => ctx.count < 10, // This should cause a TypeScript error
       function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     );
 
@@ -476,39 +476,33 @@ describe('whenGuard', () => {
 describe('guard integration with createMachine', () => {
   it('should work as machine transitions', async () => {
     // Create a guarded withdraw function
+    const depositFn = function(amount: number) {
+      return createMachine({
+        ...this.context,
+        balance: this.context.balance + amount
+      }, {
+        withdraw: guardedWithdraw,
+        deposit: depositFn
+      });
+    };
+
     const guardedWithdraw = guardAsync(
       (ctx, amount) => ctx.isActive && ctx.balance >= amount,
       function(amount: number) {
         return createMachine({
           ...this.context,
-          balance: this.balance - amount
+          balance: this.context.balance - amount
         }, {
           withdraw: guardedWithdraw,
-          deposit: function(amount: number) {
-            return createMachine({
-              ...this.context,
-              balance: this.balance + amount
-            }, {
-              withdraw: guardedWithdraw,
-              deposit: this.deposit
-            });
-          }
+          deposit: depositFn
         });
       },
-      { onFail: function() { return createMachine(this.context, { withdraw: guardedWithdraw, deposit: () => {} }); } }
+      { onFail: function() { return createMachine(this.context, { withdraw: guardedWithdraw, deposit: depositFn }); } }
     );
 
     const machine = createMachine({ balance: 100, isActive: true }, {
       withdraw: guardedWithdraw,
-      deposit: function(amount: number) {
-        return createMachine({
-          ...this.context,
-          balance: this.balance + amount
-        }, {
-          withdraw: guardedWithdraw,
-          deposit: this.deposit
-        });
-      }
+      deposit: depositFn
     });
 
     // Valid withdrawal
@@ -520,7 +514,7 @@ describe('guard integration with createMachine', () => {
     expect(afterInvalid.context.balance).toBe(50); // Should return machine with same balance
 
     // Normal deposit still works
-    const afterDeposit = machine.deposit.call(afterInvalid.context, 25);
+    const afterDeposit = afterInvalid.deposit(25);
     expect(afterDeposit.context.balance).toBe(75);
   });
 
@@ -528,7 +522,7 @@ describe('guard integration with createMachine', () => {
     const guardedIncrement = guard(
       (ctx) => ctx.count < 5,
       function() {
-        return createMachine({ count: this.count + 1 }, {
+        return createMachine({ count: this.context.count + 1 }, {
           increment: guardedIncrement
         });
       }
@@ -538,7 +532,7 @@ describe('guard integration with createMachine', () => {
       increment: guardedIncrement
     });
 
-    const result = await machine.increment.call(machine.context);
+    const result = await machine.increment.call(machine);
     expect(result.context.count).toBe(1);
 
     // TypeScript should know result is still the same machine type

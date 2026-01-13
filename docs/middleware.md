@@ -156,10 +156,10 @@ import { createMiddleware, createMachine } from '@doeixd/machine';
 
 const counter = createMachine({ count: 0 }, (next) => ({
   increment() {
-    return next({ count: this.count + 1 });
+    return next({ count: this.context.count + 1 });
   },
   decrement() {
-    return next({ count: this.count - 1 });
+    return next({ count: this.context.count - 1 });
   }
 }));
 
@@ -573,29 +573,29 @@ const cart = createMachine({
 }, (next) => ({
   addItem(item) {
     return next({
-      items: [...this.items, item],
-      total: this.total + item.price,
-      user: this.user
+      items: [...this.context.items, item],
+      total: this.context.total + item.price,
+      user: this.context.user
     });
   },
   removeItem(itemId) {
-    const item = this.items.find(i => i.id === itemId);
+    const item = this.context.items.find(i => i.id === itemId);
     return next({
-      items: this.items.filter(i => i.id !== itemId),
-      total: this.total - (item?.price || 0),
-      user: this.user
+      items: this.context.items.filter(i => i.id !== itemId),
+      total: this.context.total - (item?.price || 0),
+      user: this.context.user
     });
   },
   checkout() {
-    if (this.items.length === 0) {
+    if (this.context.items.length === 0) {
       throw new Error('Cart is empty');
     }
     // Process payment...
     return next({
       items: [],
       total: 0,
-      user: this.user,
-      lastOrder: { items: this.items, total: this.total }
+      user: this.context.user,
+      lastOrder: { items: this.context.items, total: this.context.total }
     });
   }
 });
@@ -673,28 +673,28 @@ const form = createMachine({
 }, (next) => ({
   updateField(field, value) {
     return next({
-      values: { ...this.values, [field]: value },
-      errors: { ...this.errors, [field]: undefined },
+      values: { ...this.context.values, [field]: value },
+      errors: { ...this.context.errors, [field]: undefined },
       submitted: false
     });
   },
   validate() {
     const errors = {};
-    if (!this.values.email.includes('@')) {
+    if (!this.context.values.email.includes('@')) {
       errors.email = 'Invalid email';
     }
-    if (this.values.password.length < 8) {
+    if (this.context.values.password.length < 8) {
       errors.password = 'Password too short';
     }
     return next({
-      values: this.values,
+      values: this.context.values,
       errors,
       submitted: false
     });
   },
   submit() {
     return next({
-      values: this.values,
+      values: this.context.values,
       errors: {},
       submitted: true
     });

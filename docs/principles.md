@@ -44,7 +44,7 @@ Concepts like *Guards*, *Actions*, and *Services* are not special primitives in 
 - **A Guard is an `if` statement:**
   ```typescript
   adminAction: function() {
-    if (!this.user.isAdmin) {
+    if (!this.context.user.isAdmin) {
       return this; // Stay in the same state
     }
     return createAdminMachine();

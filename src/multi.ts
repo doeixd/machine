@@ -211,7 +211,7 @@ export function createRunner<M extends Machine<any>>(
       }
 
       return (...args: any[]) => {
-        const nextState = transition.apply(currentMachine.context, args);
+        const nextState = transition.apply(currentMachine, args);
         // Ensure the next state has all the original transitions
         // by reconstructing it with the original transition functions
         const nextStateWithTransitions = Object.assign(
@@ -498,7 +498,7 @@ export function createEnsemble<
       // Return a function that, when called, executes the transition.
       // The transition itself is responsible for calling `store.setContext`.
       return (...args: any[]) => {
-        return action.apply(currentMachine.context, args);
+        return action.apply(currentMachine, args);
       };
     },
   });
@@ -1153,7 +1153,7 @@ export function createMutableMachine<
       if (typeof transition === 'function') {
         return (...args: any[]) => {
           // This pattern requires transitions to be pure functions that return the next context.
-          const nextContext = transition.apply(currentMachine.context, args);
+          const nextContext = transition.apply(currentMachine, args);
           if (typeof nextContext !== 'object' || nextContext === null) {
             console.warn(`[MutableMachine] Transition "${String(prop)}" did not return a valid context object. State may be inconsistent.`);
             return;

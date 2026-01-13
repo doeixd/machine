@@ -6,7 +6,11 @@
       "WebSearch",
       "Bash(npm run extract:*)",
       "Bash(node debug-test.js:*)",
-      "Bash(npx vitest:*)"
+      "Bash(npx vitest:*)",
+      "Bash(for file in generators.test.ts runtime.test.ts actor.test.ts multi.test.ts)",
+      "Bash(do sed -i 's/this\\\\.count/this.context.count/g; s/this\\\\.balance/this.context.balance/g; s/this\\\\.value/this.context.value/g; s/this\\\\.x/this.context.x/g; s/this\\\\.y/this.context.y/g; s/this\\\\.name/this.context.name/g' \"$file\")",
+      "Bash(echo:*)",
+      "Bash(done)"
     ],
     "deny": [],
     "ask": []

@@ -211,7 +211,7 @@ export function withTimeTravel<M extends BaseMachine<any>>(
     for (const entry of transitionsToReplay) {
       const transitionFn = replayedMachine[entry.transitionName as keyof M] as Function;
       if (transitionFn) {
-        replayedMachine = transitionFn.apply(replayedMachine.context, entry.args);
+        replayedMachine = transitionFn.apply(replayedMachine, entry.args);
       }
     }
 

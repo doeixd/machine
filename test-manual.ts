@@ -7,8 +7,8 @@ import {
 
 const createCounter = () => {
   const t = {
-    increment: function() { return createMachine({ count: this.count + 1 }, t); },
-    add: function(n: number) { return createMachine({ count: this.count + n }, t); }
+    increment: function() { return createMachine({ count: this.context.count + 1 }, t); },
+    add: function(n: number) { return createMachine({ count: this.context.count + n }, t); }
   };
   return createMachine({ count: 0 }, t);
 };
@@ -20,7 +20,7 @@ console.log('Has snapshots:', 'snapshots' in tracker);
 console.log('History:', tracker.history);
 console.log('Snapshots:', tracker.snapshots);
 
-const result1 = tracker.increment.call(tracker.context);
+const result1 = tracker.increment.call(tracker);
 console.log('\nAfter first increment, result1 keys:', Object.keys(result1));
 console.log('Result1 has history:', 'history' in result1);
 console.log('Result1 history:', (result1 as any).history);

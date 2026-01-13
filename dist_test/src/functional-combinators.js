@@ -26,7 +26,7 @@ const index_1 = require("./index");
  * // Define your machine's transitions object
  * const counterTransitions = {
  *   increment: function(amount: number) {
- *     return createMachine({ count: this.count + amount }, counterTransitions);
+ *     return createMachine({ count: this.context.count + amount }, counterTransitions);
  *   }
  * };
  *
@@ -105,7 +105,7 @@ function createTransitionFactory() {
  * // Start with a basic counter machine
  * const basicCounter = createMachine({ count: 0 }, {
  *   increment: function() {
- *     return createMachine({ count: this.count + 1 }, this);
+ *     return createMachine({ count: this.context.count + 1 }, this);
  *   }
  * });
  *

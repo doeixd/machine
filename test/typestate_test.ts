@@ -31,7 +31,7 @@ loggedInTransitions = {
     return createMachine({ status: "loggedOut" }, (loggedOut as any)); // reusing the machine as transitions
   },
   viewProfile(this: { username: string }) {
-    return createMachine({ status: "loggedIn", username: this.username }, loggedInTransitions);
+    return createMachine({ status: "loggedIn", username: this.context.username }, loggedInTransitions);
   }
 };
 

@@ -33,10 +33,10 @@ type Context = { count: number };
 const machine = createMachine({ count: 0 }, (transition) => ({
   inc() {
     // 'this' should be Context
-    return transition({ count: this.count + 1 });
+    return transition({ count: this.context.count + 1 });
   },
   add(n: number) {
-    return transition({ count: this.count + n });
+    return transition({ count: this.context.count + n });
   }
 }));
 
