@@ -302,7 +302,6 @@ export function useActorSelector<M extends BaseMachine<any>, T>(
   selector: (state: M) => T,
   isEqual: (a: T, b: T) => boolean = Object.is
 ): T {
-  const subscribe = useMemo(() => actor.subscribe.bind(actor), [actor]);
   const getSnapshot = useMemo(() => actor.getSnapshot.bind(actor), [actor]);
 
   const getSelection = () => selector(getSnapshot());

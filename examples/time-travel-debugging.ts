@@ -20,13 +20,13 @@ console.log('=== EXAMPLE 1: Basic History Tracking ===\n');
 
 const counter = createMachine({ count: 0 }, {
   increment: function() {
-    return createMachine({ count: this.count + 1 }, this);
+    return createMachine({ count: this.context.count + 1 }, this);
   },
   decrement: function() {
-    return createMachine({ count: this.count - 1 }, this);
+    return createMachine({ count: this.context.count - 1 }, this);
   },
   add: function(n: number) {
-    return createMachine({ count: this.count + n }, this);
+    return createMachine({ count: this.context.count + n }, this);
   },
   reset: function() {
     return createMachine({ count: 0 }, this);
@@ -41,10 +41,10 @@ const { machine: trackedCounter, history, clear: clearHistory } = withHistory(co
 });
 
 let state1 = trackedCounter;
-state1 = state1.increment.call(state1.context);
-state1 = state1.increment.call(state1.context);
-state1 = state1.add.call(state1.context, 5);
-state1 = state1.decrement.call(state1.context);
+state1 = state1.increment();
+state1 = state1.increment();
+state1 = state1.add(5);
+state1 = state1.decrement();
 
 console.log('\n📚 Full History:');
 history.forEach((entry, i) => {
@@ -63,13 +63,13 @@ console.log('\n=== EXAMPLE 2: Serialized History ===\n');
 
 const calculator = createMachine({ result: 0 }, {
   add: function(n: number) {
-    return createMachine({ result: this.result + n }, this);
+    return createMachine({ result: this.context.result + n }, this);
   },
   multiply: function(n: number) {
-    return createMachine({ result: this.result * n }, this);
+    return createMachine({ result: this.context.result * n }, this);
   },
   divide: function(n: number) {
-    return createMachine({ result: this.result / n }, this);
+    return createMachine({ result: this.context.result / n }, this);
   }
 });
 
@@ -81,9 +81,9 @@ const { machine: persistentCalc, history: calcHistory } = withHistory(calculator
 });
 
 let calcState = persistentCalc;
-calcState = calcState.add.call(calcState.context, 10);
-calcState = calcState.multiply.call(calcState.context, 3);
-calcState = calcState.add.call(calcState.context, 5);
+calcState = calcState.add(10);
+calcState = calcState.multiply(3);
+calcState = calcState.add(5);
 
 console.log('💾 Serialized History (for storage):');
 calcHistory.forEach((entry) => {
@@ -112,19 +112,19 @@ const todoMachine = createMachine(
   { todos: [] as string[], completed: [] as string[] },
   {
     addTodo: function(todo: string) {
-      return createMachine({ ...this, todos: [...this.todos, todo] }, this);
+      return createMachine({ ...this, todos: [...this.context.todos, todo] }, this);
     },
     completeTodo: function(index: number) {
-      const todo = this.todos[index];
+      const todo = this.context.todos[index];
       return createMachine({
-        todos: this.todos.filter((_, i) => i !== index),
-        completed: [...this.completed, todo]
+        todos: this.context.todos.filter((_, i) => i !== index),
+        completed: [...this.context.completed, todo]
       }, this);
     },
     removeTodo: function(index: number) {
       return createMachine({
         ...this,
-        todos: this.todos.filter((_, i) => i !== index)
+        todos: this.context.todos.filter((_, i) => i !== index)
       }, this);
     }
   }
@@ -149,11 +149,11 @@ const { machine: snapshotTodos, snapshots, restore } = withSnapshot(todoMachine,
 });
 
 let todoState = snapshotTodos;
-todoState = todoState.addTodo.call(todoState.context, 'Buy groceries');
-todoState = todoState.addTodo.call(todoState.context, 'Write tests');
-todoState = todoState.addTodo.call(todoState.context, 'Deploy app');
-todoState = todoState.completeTodo.call(todoState.context, 1); // Complete "Write tests"
-todoState = todoState.addTodo.call(todoState.context, 'Review PR');
+todoState = todoState.addTodo('Buy groceries');
+todoState = todoState.addTodo('Write tests');
+todoState = todoState.addTodo('Deploy app');
+todoState = todoState.completeTodo(1); // Complete "Write tests"
+todoState = todoState.addTodo('Review PR');
 
 console.log('\n⏮️  Time Travel: Restore to snapshot #2 (after adding 3 todos)');
 const restoredState = restore(snapshots[2].after);
@@ -176,16 +176,16 @@ const game = createMachine<GameState>(
   { player: 'Hero', score: 0, level: 1, health: 100 },
   {
     earnPoints: function(points: number) {
-      return createMachine({ ...this, score: this.score + points }, this);
+      return createMachine({ ...this, score: this.context.score + points }, this);
     },
     levelUp: function() {
-      return createMachine({ ...this, level: this.level + 1, health: 100 }, this);
+      return createMachine({ ...this, level: this.context.level + 1, health: 100 }, this);
     },
     takeDamage: function(damage: number) {
-      return createMachine({ ...this, health: Math.max(0, this.health - damage) }, this);
+      return createMachine({ ...this, health: Math.max(0, this.context.health - damage) }, this);
     },
     heal: function(amount: number) {
-      return createMachine({ ...this, health: Math.min(100, this.health + amount) }, this);
+      return createMachine({ ...this, health: Math.min(100, this.context.health + amount) }, this);
     }
   }
 );
@@ -204,13 +204,13 @@ const gameTracker = withTimeTravel(game, {
 });
 
 let gameState = gameTracker.machine;
-gameState = gameState.earnPoints.call(gameState.context, 100);
-gameState = gameState.earnPoints.call(gameState.context, 50);
-gameState = gameState.levelUp.call(gameState.context);
-gameState = gameState.earnPoints.call(gameState.context, 200);
-gameState = gameState.takeDamage.call(gameState.context, 30);
-gameState = gameState.takeDamage.call(gameState.context, 20);
-gameState = gameState.heal.call(gameState.context, 15);
+gameState = gameState.earnPoints(100);
+gameState = gameState.earnPoints(50);
+gameState = gameState.levelUp();
+gameState = gameState.earnPoints(200);
+gameState = gameState.takeDamage(30);
+gameState = gameState.takeDamage(20);
+gameState = gameState.heal(15);
 
 console.log('\n📊 Game Statistics:');
 console.log(`  Final State: Level ${gameState.context.level}, Score ${gameState.context.score}, Health ${gameState.context.health}`);
@@ -257,23 +257,23 @@ const bankAccount = createMachine<BankAccount>(
   { balance: 1000, owner: 'Alice' },
   {
     deposit: function(amount: number) {
-      return createMachine({ ...this, balance: this.balance + amount }, this);
+      return createMachine({ ...this, balance: this.context.balance + amount }, this);
     },
     withdraw: function(amount: number) {
-      if (amount > this.balance) {
+      if (amount > this.context.balance) {
         throw new Error('Insufficient funds');
       }
-      return createMachine({ ...this, balance: this.balance - amount }, this);
+      return createMachine({ ...this, balance: this.context.balance - amount }, this);
     },
     checkBalance: function() {
       // Read-only operation, no state change
       return createMachine(this, this);
     },
     transfer: function(amount: number, recipient: string) {
-      if (amount > this.balance) {
+      if (amount > this.context.balance) {
         throw new Error('Insufficient funds');
       }
-      return createMachine({ ...this, balance: this.balance - amount }, this);
+      return createMachine({ ...this, balance: this.context.balance - amount }, this);
     }
   }
 );
@@ -303,12 +303,12 @@ const { machine: auditedWithSnapshot, snapshots: accountSnapshots } = withSnapsh
 });
 
 let accountState = auditedWithSnapshot;
-accountState = accountState.deposit.call(accountState.context, 500);
-accountState = accountState.checkBalance.call(accountState.context); // Not logged
-accountState = accountState.withdraw.call(accountState.context, 200);
-accountState = accountState.transfer.call(accountState.context, 300, 'Bob');
-accountState = accountState.checkBalance.call(accountState.context); // Not logged
-accountState = accountState.deposit.call(accountState.context, 100);
+accountState = accountState.deposit(500);
+accountState = accountState.checkBalance(); // Not logged
+accountState = accountState.withdraw(200);
+accountState = accountState.transfer(300, 'Bob');
+accountState = accountState.checkBalance(); // Not logged
+accountState = accountState.deposit(100);
 
 console.log('\n📋 Audit Log Summary:');
 console.log(`  Total audited operations: ${accountHistory.length}`);
@@ -335,16 +335,16 @@ const editor = createMachine<EditorState>(
   { text: '', cursor: 0 },
   {
     type: function(char: string) {
-      const newText = this.text.slice(0, this.cursor) + char + this.text.slice(this.cursor);
-      return createMachine({ text: newText, cursor: this.cursor + 1 }, this);
+      const newText = this.context.text.slice(0, this.context.cursor) + char + this.context.text.slice(this.context.cursor);
+      return createMachine({ text: newText, cursor: this.context.cursor + 1 }, this);
     },
     delete: function() {
-      if (this.cursor === 0) return createMachine(this, this);
-      const newText = this.text.slice(0, this.cursor - 1) + this.text.slice(this.cursor);
-      return createMachine({ text: newText, cursor: this.cursor - 1 }, this);
+      if (this.context.cursor === 0) return createMachine(this, this);
+      const newText = this.context.text.slice(0, this.context.cursor - 1) + this.context.text.slice(this.context.cursor);
+      return createMachine({ text: newText, cursor: this.context.cursor - 1 }, this);
     },
     moveCursor: function(pos: number) {
-      return createMachine({ ...this, cursor: Math.max(0, Math.min(pos, this.text.length)) }, this);
+      return createMachine({ ...this, cursor: Math.max(0, Math.min(pos, this.context.text.length)) }, this);
     }
   }
 );
@@ -382,15 +382,15 @@ const redo = () => {
 let editorState = undoableEditor;
 
 console.log('Typing: "Hello"');
-editorState = editorState.type.call(editorState.context, 'H');
+editorState = editorState.type('H');
 currentSnapshotIndex++;
-editorState = editorState.type.call(editorState.context, 'e');
+editorState = editorState.type('e');
 currentSnapshotIndex++;
-editorState = editorState.type.call(editorState.context, 'l');
+editorState = editorState.type('l');
 currentSnapshotIndex++;
-editorState = editorState.type.call(editorState.context, 'l');
+editorState = editorState.type('l');
 currentSnapshotIndex++;
-editorState = editorState.type.call(editorState.context, 'o');
+editorState = editorState.type('o');
 currentSnapshotIndex++;
 
 console.log(`Current text: "${editorState.context.text}"\n`);
@@ -406,17 +406,17 @@ console.log(`After 1 redo: "${editorState.context.text}"\n`);
 
 // Type more
 console.log('Typing: " World"');
-editorState = editorState.type.call(editorState.context, ' ');
+editorState = editorState.type(' ');
 currentSnapshotIndex++;
-editorState = editorState.type.call(editorState.context, 'W');
+editorState = editorState.type('W');
 currentSnapshotIndex++;
-editorState = editorState.type.call(editorState.context, 'o');
+editorState = editorState.type('o');
 currentSnapshotIndex++;
-editorState = editorState.type.call(editorState.context, 'r');
+editorState = editorState.type('r');
 currentSnapshotIndex++;
-editorState = editorState.type.call(editorState.context, 'l');
+editorState = editorState.type('l');
 currentSnapshotIndex++;
-editorState = editorState.type.call(editorState.context, 'd');
+editorState = editorState.type('d');
 currentSnapshotIndex++;
 
 console.log(`Final text: "${editorState.context.text}"`);

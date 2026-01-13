@@ -9,8 +9,8 @@ import {
 // Helper to create counter machine with proper closures
 const createCounter = () => {
   const t = {
-    increment: function() { return createMachine({ count: this.count + 1 }, t); },
-    add: function(n: number) { return createMachine({ count: this.count + n }, t); },
+    increment: function() { return createMachine({ count: this.context.count + 1 }, t); },
+    add: function(n: number) { return createMachine({ count: this.context.count + n }, t); },
     reset: function() { return createMachine({ count: 0 }, t); }
   };
   return createMachine({ count: 0 }, t);
@@ -20,8 +20,8 @@ describe('withHistory', () => {
   it('should record transition calls with arguments', () => {
     const tracked = withHistory(createCounter());
 
-    tracked.increment.call(tracked.context);
-    tracked.add.call(tracked.context, 5);
+    tracked.increment.call(tracked);
+    tracked.add.call(tracked, 5);
 
     expect(tracked.history).toHaveLength(2);
     expect(tracked.history[0].transitionName).toBe('increment');
@@ -34,7 +34,7 @@ describe('withHistory', () => {
     const tracked = withHistory(createCounter());
 
     const before = Date.now();
-    const s = tracked.increment.call(tracked.context);
+    const s = tracked.increment.call(tracked);
     const after = Date.now();
 
     expect(tracked.history[0].timestamp).toBeGreaterThanOrEqual(before);
@@ -49,7 +49,7 @@ describe('withHistory', () => {
       }
     });
 
-    tracked.add.call(tracked.context, 42);
+    tracked.add.call(tracked, 42);
 
     expect(tracked.history[0].serializedArgs).toBe('[42]');
   });
@@ -57,9 +57,9 @@ describe('withHistory', () => {
   it('should respect maxSize', () => {
     const tracked = withHistory(createCounter(), { maxSize: 2 });
 
-    tracked.increment.call(tracked.context);
-    tracked.increment.call(tracked.context);
-    tracked.increment.call(tracked.context);
+    tracked.increment.call(tracked);
+    tracked.increment.call(tracked);
+    tracked.increment.call(tracked);
 
     expect(tracked.history).toHaveLength(2);
   });
@@ -68,7 +68,7 @@ describe('withHistory', () => {
     const onEntry = vi.fn();
     const tracked = withHistory(createCounter(), { onEntry });
 
-    tracked.increment.call(tracked.context);
+    tracked.increment.call(tracked);
 
     expect(onEntry).toHaveBeenCalledTimes(1);
   });
@@ -76,7 +76,7 @@ describe('withHistory', () => {
   it('should clear history', () => {
     const tracked = withHistory(createCounter());
 
-    tracked.increment.call(tracked.context);
+    tracked.increment.call(tracked);
     expect(tracked.history).toHaveLength(1);
 
     tracked.clearHistory();
@@ -88,7 +88,7 @@ describe('withSnapshot', () => {
   it('should record context before and after', () => {
     const tracked = withSnapshot(createCounter());
 
-    tracked.increment.call(tracked.context);
+    tracked.increment.call(tracked);
 
     expect(tracked.snapshots).toHaveLength(1);
     expect(tracked.snapshots[0].before).toEqual({ count: 0 });
@@ -103,7 +103,7 @@ describe('withSnapshot', () => {
       }
     });
 
-    tracked.increment.call(tracked.context);
+    tracked.increment.call(tracked);
 
     expect(tracked.snapshots[0].serializedBefore).toBe('{"count":0}');
     expect(tracked.snapshots[0].serializedAfter).toBe('{"count":1}');
@@ -116,7 +116,7 @@ describe('withSnapshot', () => {
       })
     });
 
-    tracked.add.call(tracked.context, 5);
+    tracked.add.call(tracked, 5);
 
     expect(tracked.snapshots[0].diff).toEqual({ delta: 5 });
   });
@@ -124,9 +124,9 @@ describe('withSnapshot', () => {
   it('should respect maxSize', () => {
     const tracked = withSnapshot(createCounter(), { maxSize: 2 });
 
-    tracked.increment.call(tracked.context);
-    tracked.increment.call(tracked.context);
-    tracked.increment.call(tracked.context);
+    tracked.increment.call(tracked);
+    tracked.increment.call(tracked);
+    tracked.increment.call(tracked);
 
     expect(tracked.snapshots).toHaveLength(2);
   });
@@ -134,7 +134,7 @@ describe('withSnapshot', () => {
   it('should restore to previous state', () => {
     const tracked = withSnapshot(createCounter());
 
-    tracked.add.call(tracked.context, 10);
+    tracked.add.call(tracked, 10);
 
     const restored = tracked.restoreSnapshot(tracked.snapshots[0].before);
     expect(restored.context.count).toBe(0);
@@ -143,7 +143,7 @@ describe('withSnapshot', () => {
   it('should clear snapshots', () => {
     const tracked = withSnapshot(createCounter());
 
-    tracked.increment.call(tracked.context);
+    tracked.increment.call(tracked);
     expect(tracked.snapshots).toHaveLength(1);
 
     tracked.clearSnapshots();
@@ -155,8 +155,8 @@ describe('withTimeTravel', () => {
   it('should track both history and snapshots', () => {
     let tracker = withTimeTravel(createCounter());
 
-    tracker = tracker.increment.call(tracker.context);
-    tracker = tracker.add.call(tracker.context, 5);
+    tracker = tracker.increment.call(tracker);
+    tracker = tracker.add.call(tracker, 5);
 
     expect(tracker.history).toHaveLength(2);
     expect(tracker.snapshots).toHaveLength(2);
@@ -173,7 +173,7 @@ describe('withTimeTravel', () => {
       }
     });
 
-    tracker.add.call(tracker.context, 10);
+    tracker.add.call(tracker, 10);
 
     expect(tracker.history[0].serializedArgs).toBe('[10]');
     expect(tracker.snapshots[0].serializedBefore).toBe('{"count":0}');
@@ -183,7 +183,7 @@ describe('withTimeTravel', () => {
     const onRecord = vi.fn();
     const tracker = withTimeTravel(createCounter(), { onRecord });
 
-    tracker.increment.call(tracker.context);
+    tracker.increment.call(tracker);
 
     expect(onRecord).toHaveBeenCalledTimes(2);
     expect(onRecord).toHaveBeenCalledWith('history', expect.any(Object));
@@ -193,8 +193,8 @@ describe('withTimeTravel', () => {
   it('should restore to previous state', () => {
     let tracker = withTimeTravel(createCounter());
 
-    tracker = tracker.add.call(tracker.context, 10);
-    tracker = tracker.add.call(tracker.context, 5);
+    tracker = tracker.add.call(tracker, 10);
+    tracker = tracker.add.call(tracker, 5);
 
     const restored = tracker.restoreSnapshot(tracker.snapshots[0].after);
     expect(restored.context.count).toBe(10);
@@ -203,7 +203,7 @@ describe('withTimeTravel', () => {
   it('should clear both', () => {
     const tracker = withTimeTravel(createCounter());
 
-    tracker.increment.call(tracker.context);
+    tracker.increment.call(tracker);
 
     tracker.clearTimeTravel();
 
@@ -214,8 +214,8 @@ describe('withTimeTravel', () => {
   it('should replay from snapshot', () => {
     let tracker = withTimeTravel(createCounter());
 
-    tracker = tracker.increment.call(tracker.context);
-    tracker = tracker.add.call(tracker.context, 5);
+    tracker = tracker.increment.call(tracker);
+    tracker = tracker.add.call(tracker, 5);
 
     // Replay from first snapshot should re-execute all transitions
     const replayed = tracker.replayFrom(0);

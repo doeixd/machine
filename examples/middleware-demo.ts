@@ -27,13 +27,13 @@ console.log('=== EXAMPLE 1: Basic createMiddleware ===\n');
 // Simple counter machine
 const counter = createMachine({ count: 0 }, {
   increment: function() {
-    return createMachine({ count: this.count + 1 }, this);
+    return createMachine({ count: this.context.count + 1 }, this);
   },
   decrement: function() {
-    return createMachine({ count: this.count - 1 }, this);
+    return createMachine({ count: this.context.count - 1 }, this);
   },
   add: function(n: number) {
-    return createMachine({ count: this.count + n }, this);
+    return createMachine({ count: this.context.count + n }, this);
   }
 });
 
@@ -51,9 +51,9 @@ const loggedCounter = createMiddleware(counter, {
 });
 
 let state = loggedCounter;
-state = state.increment.call(state.context);
-state = state.add.call(state.context, 5);
-state = state.decrement.call(state.context);
+state = state.increment(state);
+state = state.add(state, 5);
+state = state.decrement(state);
 
 // =============================================================================
 // EXAMPLE 2: Built-in Middleware Helpers
@@ -64,8 +64,8 @@ console.log('\n=== EXAMPLE 2: Built-in Helpers ===\n');
 // Logging middleware
 const withLogs = withLogging(counter);
 let state2 = withLogs;
-state2 = state2.increment.call(state2.context);
-state2 = state2.add.call(state2.context, 10);
+state2 = state2.increment(state2);
+state2 = state2.add(state2, 10);
 
 // Analytics middleware
 const tracked = withAnalytics(counter, (event, props) => {
@@ -73,7 +73,7 @@ const tracked = withAnalytics(counter, (event, props) => {
 });
 
 let state3 = tracked;
-state3 = state3.increment.call(state3.context);
+state3 = state3.increment(state3);
 
 // Validation middleware
 const validated = withValidation(counter, ({ transitionName, context }) => {
@@ -83,10 +83,10 @@ const validated = withValidation(counter, ({ transitionName, context }) => {
 });
 
 let state4 = createMachine({ count: 1 }, validated);
-state4 = state4.decrement.call(state4.context); // OK: count is 1
+state4 = state4.decrement(state4); // OK: count is 1
 
 try {
-  state4 = state4.decrement.call(state4.context); // Error: count would be -1
+  state4 = state4.decrement(state4); // Error: count would be -1
 } catch (err) {
   console.log('Validation caught:', (err as Error).message);
 }
@@ -112,7 +112,7 @@ const protectedMachine = withPermissions(adminMachine, ({ transitionName }) => {
 });
 
 try {
-  protectedMachine.delete.call(protectedMachine.context); // Error: unauthorized
+  protectedMachine.delete(protectedMachine); // Error: unauthorized
 } catch (err) {
   console.log('Permission denied:', (err as Error).message);
 }
@@ -155,8 +155,8 @@ const fullyInstrumented = compose(
 );
 
 let state5 = fullyInstrumented;
-state5 = state5.increment.call(state5.context);
-state5 = state5.add.call(state5.context, 5);
+state5 = state5.increment(state5);
+state5 = state5.add(state5, 5);
 
 // =============================================================================
 // EXAMPLE 4: Retry Middleware for Resilient Operations
@@ -190,7 +190,7 @@ const resilient = withRetry(flakyMachine, {
 
 (async () => {
   try {
-    const result = await resilient.fetchData.call(resilient.context);
+    const result = await resilient.fetchData(resilient);
     console.log('Success after retries!', result.context);
   } catch (err) {
     console.log('Failed after all retries:', (err as Error).message);
@@ -230,9 +230,9 @@ const withTimeout = (timeoutMs: number) => createCustomMiddleware({
 // Apply custom middleware
 const notified = withNotifications(counter);
 let state6 = notified;
-state6 = state6.increment.call(state6.context);
-state6 = state6.add.call(state6.context, 0); // No change
-state6 = state6.add.call(state6.context, 5); // Changed
+state6 = state6.increment(state6);
+state6 = state6.add(state6, 0); // No change
+state6 = state6.add(state6, 5); // Changed
 
 // =============================================================================
 // EXAMPLE 6: Real-World Use Case - Shopping Cart
@@ -245,16 +245,16 @@ type CartContext = { items: CartItem[]; total: number };
 
 const cart = createMachine<CartContext>({ items: [], total: 0 }, {
   addItem: function(item: CartItem) {
-    const existingItem = this.items.find(i => i.id === item.id);
+    const existingItem = this.context.items.find(i => i.id === item.id);
     const items = existingItem
-      ? this.items.map(i => i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i)
-      : [...this.items, item];
+      ? this.context.items.map(i => i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i)
+      : [...this.context.items, item];
     const total = items.reduce((sum, i) => sum + (i.price * i.quantity), 0);
     return createMachine({ items, total }, this);
   },
 
   removeItem: function(itemId: string) {
-    const items = this.items.filter(i => i.id !== itemId);
+    const items = this.context.items.filter(i => i.id !== itemId);
     const total = items.reduce((sum, i) => sum + (i.price * i.quantity), 0);
     return createMachine({ items, total }, this);
   },
@@ -301,14 +301,14 @@ const productionCart = compose(
 let cartState = productionCart;
 
 console.log('\nAdding items to cart...');
-cartState = cartState.addItem.call(cartState.context, {
+cartState = cartState.addItem(cartState, {
   id: '1',
   name: 'Widget',
   price: 19.99,
   quantity: 1
 });
 
-cartState = cartState.addItem.call(cartState.context, {
+cartState = cartState.addItem(cartState, {
   id: '2',
   name: 'Gadget',
   price: 29.99,
@@ -317,7 +317,7 @@ cartState = cartState.addItem.call(cartState.context, {
 
 console.log('\nAttempting checkout...');
 try {
-  cartState = cartState.checkout.call(cartState.context);
+  cartState = cartState.checkout(cartState);
   console.log('✓ Checkout successful!');
 } catch (err) {
   console.log('✗ Checkout failed:', (err as Error).message);

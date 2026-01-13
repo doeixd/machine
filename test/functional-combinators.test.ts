@@ -6,10 +6,10 @@ describe('createTransitionFactory', () => {
   it('should create a factory that generates type-safe transitions', () => {
     const counterTransitions = {
       increment() {
-        return createMachine({ count: this.count + 1 }, counterTransitions);
+        return createMachine({ count: this.context.count + 1 }, counterTransitions);
       },
       decrement() {
-        return createMachine({ count: this.count - 1 }, counterTransitions);
+        return createMachine({ count: this.context.count - 1 }, counterTransitions);
       },
     };
 
@@ -30,7 +30,7 @@ describe('createTransitionFactory', () => {
   it('should work with multiple arguments', () => {
     const calculatorTransitions = {
       add() {
-        return createMachine({ result: this.result + 1 }, calculatorTransitions);
+        return createMachine({ result: this.context.result + 1 }, calculatorTransitions);
       },
     };
 
@@ -49,7 +49,7 @@ describe('createTransitionFactory', () => {
   it('should create pure functions that can be reused', () => {
     const todoTransitions = {
       addTodo() {
-        return createMachine({ todos: [...this.todos, 'new'] }, todoTransitions);
+        return createMachine({ todos: [...this.context.todos, 'new'] }, todoTransitions);
       },
     };
 
@@ -72,7 +72,7 @@ describe('createTransitionFactory', () => {
   it('should work with complex context transformations', () => {
     const userTransitions = {
       updateProfile() {
-        return createMachine({ profile: { ...this.profile } }, userTransitions);
+        return createMachine({ profile: { ...this.context.profile } }, userTransitions);
       },
     };
 
@@ -106,7 +106,7 @@ describe('createTransitionExtender', () => {
   it('should create an extender that can add transitions to a machine', () => {
     const basicCounter = createMachine({ count: 0 }, {
       increment() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 

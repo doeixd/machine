@@ -187,7 +187,7 @@ function action(action, transition) {
  *   withdraw: guard(
  *     (ctx, amount) => ctx.balance >= amount,
  *     function(amount: number) {
- *       return createMachine({ balance: this.balance - amount }, this);
+ *       return createMachine({ balance: this.context.balance - amount }, this);
  *     },
  *     { onFail: 'throw', errorMessage: 'Insufficient funds' }
  *   )
@@ -282,7 +282,7 @@ function guard(condition, transition, options = {}) {
  *     async function(amount: number) {
  *       // Simulate API call to process withdrawal
  *       await new Promise(resolve => setTimeout(resolve, 100));
- *       return createMachine({ balance: this.balance - amount }, this);
+ *       return createMachine({ balance: this.context.balance - amount }, this);
  *     },
  *     { onFail: 'throw', errorMessage: 'Insufficient funds' }
  *   )
@@ -370,7 +370,7 @@ function guardAsync(condition, transition, options = {}) {
  *   withdraw: guardSync(
  *     (ctx, amount) => ctx.balance >= amount,
  *     function(amount: number) {
- *       return createMachine({ balance: this.balance - amount }, this);
+ *       return createMachine({ balance: this.context.balance - amount }, this);
  *     },
  *     { onFail: 'throw', errorMessage: 'Insufficient funds' }
  *   )

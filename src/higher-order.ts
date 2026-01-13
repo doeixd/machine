@@ -333,7 +333,7 @@ export function createParallelMachine<
   for (const key in transitions1) {
     const transitionFn = (transitions1 as any)[key];
     combinedTransitions[key] = (...args: any[]) => {
-      const nextM1 = transitionFn.apply(m1.context, args);
+      const nextM1 = transitionFn.apply(m1, args);
       // Recursively create a new parallel machine with the new M1 state
       return createParallelMachine(nextM1, m2);
     };
@@ -343,7 +343,7 @@ export function createParallelMachine<
   for (const key in transitions2) {
     const transitionFn = (transitions2 as any)[key];
     combinedTransitions[key] = (...args: any[]) => {
-      const nextM2 = transitionFn.apply(m2.context, args);
+      const nextM2 = transitionFn.apply(m2, args);
       // Recursively create a new parallel machine with the new M2 state
       return createParallelMachine(m1, nextM2);
     };

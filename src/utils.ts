@@ -231,7 +231,7 @@ export function createTransition<
   C extends object,
   TArgs extends any[]
 >(
-  getTransitions: () => Record<string, (this: C, ...args: any[]) => any>,
+  getTransitions: () => Record<string, (this: Machine<C, any>, ...args: any[]) => any>,
   transformer: (ctx: C, ...args: TArgs) => C
 ): (this: { context: C }, ...args: TArgs) => Machine<C> {
   return function (this: { context: C }, ...args: TArgs): Machine<C> {
@@ -245,50 +245,50 @@ export function createTransition<
 // =============================================================================
 
 /**
- * Calls a transition function with an explicit `this` context.
- * Useful for invoking transition methods with proper context binding.
+ * Calls a transition function with an explicit `this` binding.
+ * Useful for invoking transition methods with proper machine binding.
  *
- * @template C - The context type that the function expects as `this`.
+ * @template M - The machine type that the function expects as `this`.
  * @template F - The function type with a `this` parameter.
  * @template A - The argument types for the function.
  * @param fn - The transition function to call.
- * @param context - The context object to bind as `this`.
+ * @param machine - The machine object to bind as `this`.
  * @param args - Arguments to pass to the function.
- * @returns The result of calling the function with the given context and arguments.
+ * @returns The result of calling the function with the given machine and arguments.
  *
  * @example
- * type MyContext = { count: number };
- * const increment = function(this: MyContext) { return this.count + 1; };
- * const result = call(increment, { count: 5 }); // Returns 6
+ * type MyMachine = Machine<{ count: number }>;
+ * const increment = function(this: MyMachine) { return createMachine({ count: this.context.count + 1 }, this); };
+ * const result = call(increment, machine); // Returns new machine
  *
  * // Particularly useful with machine transitions:
  * import { call } from '@doeixd/machine/utils';
- * const nextMachine = yield* step(call(m.increment, m.context));
+ * const nextMachine = yield* step(call(m.increment, m));
  */
-export function call<C, F extends (this: C, ...args: any[]) => any>(
+export function call<M extends Machine<any>, F extends (this: M, ...args: any[]) => any>(
   fn: F,
-  context: C,
+  machine: M,
   ...args: Parameters<F> extends [any, ...infer Rest] ? Rest : never
 ): ReturnType<F> {
-  return fn.apply(context, args);
+  return fn.apply(machine, args);
 }
 
 /**
- * Binds all transition methods of a machine to its context automatically.
- * Returns a Proxy that intercepts method calls and binds them to `machine.context`.
- * This eliminates the need to use `.call(m.context, ...)` for every transition.
+ * Binds all transition methods of a machine to the machine itself automatically.
+ * Returns a Proxy that intercepts method calls and binds them to the full machine.
+ * This eliminates the need to use `.call(m, ...)` for every transition.
  *
  * Automatically recursively wraps returned machines, enabling seamless chaining
  * in generator-based flows.
  *
  * @template M - The machine type with a `context` property and transition methods.
  * @param machine - The machine instance to wrap.
- * @returns A Proxy of the machine where all callable properties (transitions) are automatically bound to the machine's context.
+ * @returns A Proxy of the machine where all callable properties (transitions) are automatically bound to the machine.
  *
  * @example
- * type CounterContext = { count: number };
+ * type CounterMachine = Machine<{ count: number }>;
  * const counter = bindTransitions(createMachine({ count: 0 }, {
- *   increment(this: CounterContext) { return createCounter(this.count + 1); }
+ *   increment(this: CounterMachine) { return createMachine({ count: this.context.count + 1 }, this); }
  * }));
  *
  * // Now you can call transitions directly without .call():
@@ -304,18 +304,18 @@ export function call<C, F extends (this: C, ...args: any[]) => any>(
  * @remarks
  * The Proxy preserves all original properties and methods. Non-callable properties
  * are accessed directly from the machine. Callable properties are wrapped to bind
- * them to `machine.context` before invocation. Returned machines are automatically
+ * them to the machine before invocation. Returned machines are automatically
  * re-wrapped to maintain binding across transition chains.
  */
 export function bindTransitions<M extends { context: any }>(machine: M): M {
   return new Proxy(machine, {
     get(target, prop) {
       const value = target[prop as keyof M];
-      
-      // If it's a callable property (transition method), bind it to context
+
+      // If it's a callable property (transition method), bind it to machine
       if (typeof value === 'function') {
         return function(...args: any[]) {
-          const result = value.apply(target.context, args);
+          const result = value.apply(target, args);
           // Recursively wrap returned machines to maintain binding
           if (result && typeof result === 'object' && 'context' in result) {
             return bindTransitions(result);
@@ -323,7 +323,7 @@ export function bindTransitions<M extends { context: any }>(machine: M): M {
           return result;
         };
       }
-      
+
       // Otherwise, return the value as-is
       return value;
     },
@@ -331,21 +331,21 @@ export function bindTransitions<M extends { context: any }>(machine: M): M {
 }
 
 /**
- * A strongly-typed wrapper class for binding transitions to machine context.
+ * A strongly-typed wrapper class for binding transitions to the machine.
  * Unlike the Proxy-based `bindTransitions`, this class preserves full type safety
  * and provides better IDE support through explicit property forwarding.
  *
  * @template M - The machine type with a `context` property and transition methods.
  *
  * @example
- * type CounterContext = { count: number };
+ * type CounterMachine = Machine<{ count: number }>;
  * const counter = createMachine({ count: 0 }, {
- *   increment(this: CounterContext) { return createCounter(this.count + 1); }
+ *   increment(this: CounterMachine) { return createMachine({ count: this.context.count + 1 }, this); }
  * });
  *
  * const bound = new BoundMachine(counter);
  *
- * // All transitions are automatically bound to context
+ * // All transitions are automatically bound to machine
  * const result = run(function* (m) {
  *   m = yield* step(m.increment());
  *   m = yield* step(m.add(5));
@@ -383,10 +383,10 @@ export class BoundMachine<M extends { context: any }> {
 
         const value = this.wrappedMachine[prop as keyof M];
 
-        // Bind transition methods to context
+        // Bind transition methods to machine
         if (typeof value === 'function') {
           return (...args: any[]) => {
-            const result = value.apply(this.wrappedMachine.context, args);
+            const result = value.apply(this.wrappedMachine, args);
             // Recursively wrap returned machines
             if (result && typeof result === 'object' && 'context' in result) {
               return new BoundMachine(result);

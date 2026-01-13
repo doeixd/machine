@@ -21,10 +21,10 @@ import { createMachine, createActor } from '@doeixd/machine';
 // 1. Define the Machine
 const counterMachine = createMachine({ count: 0 }, (next) => ({
   increment() {
-    return next({ count: this.count + 1 });
+    return next({ count: this.context.count + 1 });
   },
   add(amount: number) {
-    return next({ count: this.count + amount });
+    return next({ count: this.context.count + amount });
   }
 }));
 

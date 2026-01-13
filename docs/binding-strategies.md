@@ -11,7 +11,7 @@ type CounterContext = { count: number };
 
 const counter = createMachine({ count: 0 }, {
   increment(this: CounterContext) {
-    return createCounter(this.count + 1);
+    return createCounter(this.context.count + 1);
   }
 });
 
@@ -19,7 +19,7 @@ const counter = createMachine({ count: 0 }, {
 m.increment();
 
 // ✅ Workaround: explicit .call() binding
-m.increment.call(m.context);
+m.increment.call(m);
 ```
 
 ## Solution 1: `bindTransitions()` - Proxy-based

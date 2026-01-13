@@ -27,7 +27,7 @@ type AsyncFunctions<C extends object> =
  * const machine: Machine<{ count: number }> = {
  *   context: { count: 0 },
  *   increment: function() {
- *     return createMachine({ count: this.count + 1 }, this)
+ *     return createMachine({ count: this.context.count + 1 }, this)
  *   }
  * }
  */
@@ -57,10 +57,10 @@ export type AsyncMachine<C extends object> = { context: C } & AsyncFunctions<C>
  *   { count: 0 },
  *   {
  *     increment: function() {
- *       return createMachine({ count: this.count + 1 }, this)
+ *       return createMachine({ count: this.context.count + 1 }, this)
  *     },
  *     decrement: function() {
- *       return createMachine({ count: this.count - 1 }, this)
+ *       return createMachine({ count: this.context.count - 1 }, this)
  *     }
  *   }
  * )
@@ -147,7 +147,7 @@ export type Event<M> = {
  *   { count: 0 },
  *   {
  *     increment: async function() {
- *       return createAsyncMachine({ count: this.count + 1 }, this)
+ *       return createAsyncMachine({ count: this.context.count + 1 }, this)
  *     }
  *   }
  * )
@@ -164,7 +164,7 @@ export function runMachine<C extends object>(
   async function dispatch<E extends Event<typeof current>>(event: E) {
     const fn = current[event.type] as any
     if (!fn) throw new Error(`Unknown event: ${event.type}`)
-    const next = await fn.apply(current.context, event.args)
+    const next = await fn.apply(current as any, event.args)
     current = next
     onChange?.(current)
     return current
@@ -203,5 +203,5 @@ const counter = createMachine(
 );
 
 // Test by calling with proper context binding
-const result = counterFns.increment.call(counter.context);
+const result = counterFns.increment.call(counter);
 console.log('Result:', result.context.count);

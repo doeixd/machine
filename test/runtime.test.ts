@@ -8,7 +8,7 @@ describe('runMachine', () => {
       { count: 0 },
       {
         increment() {
-          return createAsyncMachine({ count: this.count + 1 }, this);
+          return createAsyncMachine({ count: this.context.count + 1 }, this);
         },
       }
     );
@@ -22,10 +22,10 @@ describe('runMachine', () => {
   it('should dispatch events and update state', async () => {
     const transitions = {
       increment() {
-        return createAsyncMachine({ count: this.count + 1 }, transitions);
+        return createAsyncMachine({ count: this.context.count + 1 }, transitions);
       },
       add(n: number) {
-        return createAsyncMachine({ count: this.count + n }, transitions);
+        return createAsyncMachine({ count: this.context.count + n }, transitions);
       },
     };
 
@@ -43,7 +43,7 @@ describe('runMachine', () => {
   it('should call onChange callback after each transition', async () => {
     const transitions = {
       increment() {
-        return createAsyncMachine({ count: this.count + 1 }, transitions);
+        return createAsyncMachine({ count: this.context.count + 1 }, transitions);
       },
     };
 
@@ -89,7 +89,7 @@ describe('runMachine', () => {
       { count: 0 },
       {
         increment() {
-          return createAsyncMachine({ count: this.count + 1 }, this);
+          return createAsyncMachine({ count: this.context.count + 1 }, this);
         },
       }
     );
@@ -106,7 +106,7 @@ describe('runMachine', () => {
       { count: 0 },
       {
         increment() {
-          return createAsyncMachine({ count: this.count + 1 }, this);
+          return createAsyncMachine({ count: this.context.count + 1 }, this);
         },
       }
     );
@@ -121,10 +121,10 @@ describe('runMachine', () => {
   it('should handle multiple sequential dispatches', async () => {
     const transitions = {
       increment() {
-        return createAsyncMachine({ count: this.count + 1 }, transitions);
+        return createAsyncMachine({ count: this.context.count + 1 }, transitions);
       },
       decrement() {
-        return createAsyncMachine({ count: this.count - 1 }, transitions);
+        return createAsyncMachine({ count: this.context.count - 1 }, transitions);
       },
     };
 
@@ -145,7 +145,7 @@ describe('runMachine', () => {
       { x: 0, y: 0 },
       {
         move(dx: number, dy: number) {
-          return createAsyncMachine({ x: this.x + dx, y: this.y + dy }, this);
+          return createAsyncMachine({ x: this.context.x + dx, y: this.context.y + dy }, this);
         },
       }
     );
@@ -162,10 +162,10 @@ describe('runMachine with createEvent', () => {
   it('should work with type-safe events from createEvent', async () => {
     const transitions = {
       increment() {
-        return createAsyncMachine({ count: this.count + 1 }, transitions);
+        return createAsyncMachine({ count: this.context.count + 1 }, transitions);
       },
       add(n: number) {
-        return createAsyncMachine({ count: this.count + n }, transitions);
+        return createAsyncMachine({ count: this.context.count + n }, transitions);
       },
     };
 
@@ -327,7 +327,7 @@ describe('Complex async state machine scenarios', () => {
     const transitions = {
       async slowIncrement() {
         await new Promise((resolve) => setTimeout(resolve, 20));
-        return createAsyncMachine({ count: this.count + 1 }, transitions);
+        return createAsyncMachine({ count: this.context.count + 1 }, transitions);
       },
     };
 
@@ -386,7 +386,7 @@ describe('runMachine error handling', () => {
       { count: 0 },
       {
         increment() {
-          return createAsyncMachine({ count: this.count + 1 }, this);
+          return createAsyncMachine({ count: this.context.count + 1 }, this);
         },
         fail() {
           throw new Error('Failed');

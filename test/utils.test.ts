@@ -61,10 +61,10 @@ describe('createEvent', () => {
         { count: 0 },
         {
           increment() {
-            return createMachine({ count: this.count + 1 }, this);
+            return createMachine({ count: this.context.count + 1 }, this);
           },
           add(n: number) {
-            return createMachine({ count: this.count + n }, this);
+            return createMachine({ count: this.context.count + n }, this);
           },
         }
       );
@@ -103,7 +103,7 @@ describe('mergeContext', () => {
       {
         increment() {
           return createMachine(
-            { count: this.count + 1, name: this.name, active: this.active },
+            { count: this.context.count + 1, name: this.context.name, active: this.context.active },
             this
           );
         },
@@ -122,7 +122,7 @@ describe('mergeContext', () => {
       { count: 0, name: 'test' },
       {
         increment() {
-          return createMachine({ count: this.count + 1, name: this.name }, this);
+          return createMachine({ count: this.context.count + 1, name: this.context.name }, this);
         },
       }
     );
@@ -138,7 +138,7 @@ describe('mergeContext', () => {
       { count: 0, name: 'test' },
       {
         increment() {
-          return createMachine({ count: this.count + 1, name: this.name }, this);
+          return createMachine({ count: this.context.count + 1, name: this.context.name }, this);
         },
       }
     );
@@ -153,13 +153,13 @@ describe('pipeTransitions', () => {
   it('should apply sync transitions sequentially', async () => {
     const transitions = {
       increment() {
-        return createAsyncMachine({ count: this.count + 1 }, transitions);
+        return createAsyncMachine({ count: this.context.count + 1 }, transitions);
       },
       double() {
-        return createAsyncMachine({ count: this.count * 2 }, transitions);
+        return createAsyncMachine({ count: this.context.count * 2 }, transitions);
       },
       add(n: number) {
-        return createAsyncMachine({ count: this.count + n }, transitions);
+        return createAsyncMachine({ count: this.context.count + n }, transitions);
       },
     };
 
@@ -167,10 +167,10 @@ describe('pipeTransitions', () => {
 
     const result = await pipeTransitions(
       machine,
-      (m) => m.increment.call(m.context),
-      (m) => m.increment.call(m.context),
-      (m) => m.double.call(m.context),
-      (m) => m.add.call(m.context, 10)
+      (m) => m.increment.call(m),
+      (m) => m.increment.call(m),
+      (m) => m.double.call(m),
+      (m) => m.add.call(m, 10)
     );
 
     // (0 + 1 + 1) * 2 + 10 = 14
@@ -181,11 +181,11 @@ describe('pipeTransitions', () => {
     const transitions = {
       async asyncIncrement() {
         await new Promise((resolve) => setTimeout(resolve, 10));
-        return createAsyncMachine({ count: this.count + 1 }, transitions);
+        return createAsyncMachine({ count: this.context.count + 1 }, transitions);
       },
       async asyncDouble() {
         await new Promise((resolve) => setTimeout(resolve, 10));
-        return createAsyncMachine({ count: this.count * 2 }, transitions);
+        return createAsyncMachine({ count: this.context.count * 2 }, transitions);
       },
     };
 
@@ -193,9 +193,9 @@ describe('pipeTransitions', () => {
 
     const result = await pipeTransitions(
       machine,
-      (m) => m.asyncIncrement.call(m.context),
-      (m) => m.asyncIncrement.call(m.context),
-      (m) => m.asyncDouble.call(m.context)
+      (m) => m.asyncIncrement.call(m),
+      (m) => m.asyncIncrement.call(m),
+      (m) => m.asyncDouble.call(m)
     );
 
     // (0 + 1 + 1) * 2 = 4
@@ -205,11 +205,11 @@ describe('pipeTransitions', () => {
   it('should handle mixed sync and async transitions', async () => {
     const transitions = {
       increment() {
-        return createAsyncMachine({ count: this.count + 1 }, transitions);
+        return createAsyncMachine({ count: this.context.count + 1 }, transitions);
       },
       async asyncDouble() {
         await new Promise((resolve) => setTimeout(resolve, 10));
-        return createAsyncMachine({ count: this.count * 2 }, transitions);
+        return createAsyncMachine({ count: this.context.count * 2 }, transitions);
       },
     };
 
@@ -217,9 +217,9 @@ describe('pipeTransitions', () => {
 
     const result = await pipeTransitions(
       machine,
-      (m) => m.increment.call(m.context),
-      (m) => m.asyncDouble.call(m.context),
-      (m) => m.increment.call(m.context)
+      (m) => m.increment.call(m),
+      (m) => m.asyncDouble.call(m),
+      (m) => m.increment.call(m)
     );
 
     // (0 + 1) * 2 + 1 = 3
@@ -229,7 +229,7 @@ describe('pipeTransitions', () => {
   it('should not mutate original machine', async () => {
     const transitions = {
       increment() {
-        return createAsyncMachine({ count: this.count + 1 }, transitions);
+        return createAsyncMachine({ count: this.context.count + 1 }, transitions);
       },
     };
 
@@ -237,8 +237,8 @@ describe('pipeTransitions', () => {
 
     await pipeTransitions(
       machine,
-      (m) => m.increment.call(m.context),
-      (m) => m.increment.call(m.context)
+      (m) => m.increment.call(m),
+      (m) => m.increment.call(m)
     );
 
     expect(machine.context.count).toBe(0);
@@ -253,7 +253,7 @@ describe('logState', () => {
       { count: 5, name: 'test' },
       {
         increment() {
-          return createMachine({ count: this.count + 1, name: this.name }, this);
+          return createMachine({ count: this.context.count + 1, name: this.context.name }, this);
         },
       }
     );
@@ -283,7 +283,7 @@ describe('logState', () => {
 
     const transitions = {
       increment() {
-        return createAsyncMachine({ count: this.count + 1 }, transitions);
+        return createAsyncMachine({ count: this.context.count + 1 }, transitions);
       },
     };
 
@@ -291,9 +291,9 @@ describe('logState', () => {
 
     const result = await pipeTransitions(
       machine,
-      (m) => m.increment.call(m.context),
+      (m) => m.increment.call(m),
       (m) => logState(m),
-      (m) => m.increment.call(m.context)
+      (m) => m.increment.call(m)
     );
 
     expect(consoleSpy).toHaveBeenCalledWith({ count: 1 });

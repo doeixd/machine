@@ -65,10 +65,10 @@ exports.stepAsync = stepAsync;
  * ```typescript
  * const counter = createMachine({ count: 0 }, {
  *   increment: function() {
- *     return createMachine({ count: this.count + 1 }, this);
+ *     return createMachine({ count: this.context.count + 1 }, this);
  *   },
  *   add: function(n: number) {
- *     return createMachine({ count: this.count + n }, this);
+ *     return createMachine({ count: this.context.count + n }, this);
  *   }
  * });
  *

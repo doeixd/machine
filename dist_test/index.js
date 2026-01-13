@@ -161,14 +161,14 @@ function extendTransitions(machine, newTransitions) {
  * // Define two independent machines
  * const createCounter = (initial: number) =>
  *   createMachine({ count: initial }, {
- *     increment: function() { return createMachine({ count: this.count + 1 }, this); },
- *     decrement: function() { return createMachine({ count: this.count - 1 }, this); }
+ *     increment: function() { return createMachine({ count: this.context.count + 1 }, this); },
+ *     decrement: function() { return createMachine({ count: this.context.count - 1 }, this); }
  *   });
  *
  * const createLogger = () =>
  *   createMachine({ logs: [] as string[] }, {
  *     log: function(message: string) {
- *       return createMachine({ logs: [...this.logs, message] }, this);
+ *       return createMachine({ logs: [...this.context.logs, message] }, this);
  *     },
  *     clear: function() {
  *       return createMachine({ logs: [] }, this);

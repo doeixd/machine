@@ -4,12 +4,12 @@ const index_1 = require("../src/index");
 const machine = (0, index_1.createMachine)({ count: 0 }, (transition) => ({
     increment() {
         // `this` is inferred as Context
-        console.log('Current count:', this.count);
+        console.log('Current count:', this.context.count);
         // `transition` is a helper that returns a Machine with the same transitions
-        return transition({ count: this.count + 1 });
+        return transition({ count: this.context.count + 1 });
     },
     add(n) {
-        return transition({ count: this.count + n });
+        return transition({ count: this.context.count + n });
     }
 }));
 // Usage

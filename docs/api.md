@@ -128,7 +128,7 @@ Creates a synchronous state machine.
 -   **Example:**
 ```typescript
 const counter = createMachine({ count: 0 }, (next) => ({
-  increment() { return next({ count: this.count + 1 }); }
+  increment() { return next({ count: this.context.count + 1 }); }
 }));
 ```
 ---
@@ -183,10 +183,10 @@ Creates a synchronous state machine using the **Functional Builder** pattern. Th
 const machine = createMachine({ count: 0 }, (next) => ({
   increment() {
     // `this` is correctly inferred as Context
-    return next({ count: this.count + 1 });
+    return next({ count: this.context.count + 1 });
   },
   add(n: number) {
-    return next({ count: this.count + n });
+    return next({ count: this.context.count + n });
   }
 }));
 ```
@@ -198,14 +198,14 @@ Creates a synchronous state machine from a context and transition functions.
 **Recommended (better type inference):**
 ```typescript
 const machine = createMachine({ count: 0 }, (next) => ({
-  increment() { return next({ count: this.count + 1 }); }
+  increment() { return next({ count: this.context.count + 1 }); }
 }));
 ```
 
 **Traditional (requires explicit `this` typing):**
 ```typescript
 const transitions = {
-  increment(this: { count: number }) { return createMachine({ count: this.count + 1 }, transitions); }
+  increment(this: { count: number }) { return createMachine({ count: this.context.count + 1 }, transitions); }
 };
 const machine = createMachine({ count: 0 }, transitions);
 ```
@@ -274,7 +274,7 @@ A smart, type-safe function that automatically chooses between traditional and f
     ```typescript
     // Traditional pattern (with transitions object)
     const machine1 = state({ count: 0 }, {
-      increment() { return createMachine({ count: this.count + 1 }, this); }
+      increment() { return createMachine({ count: this.context.count + 1 }, this); }
     });
 
     // Functional pattern (curried, with transformers)

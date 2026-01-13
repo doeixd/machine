@@ -200,8 +200,8 @@ const withRename = createTransitionExtender(withDouble)('rename', (ctx, newName:
 let finalMachine = withRename;
 
 // `finalMachine` now has `double` and `rename` methods.
-finalMachine = finalMachine.double.call(finalMachine.context);    // { value: 20, name: 'base' }
-finalMachine = finalMachine.rename.call(finalMachine.context, 'composed'); // { value: 20, name: 'composed' }
+finalMachine = finalMachine.double.call(finalMachine);    // { value: 20, name: 'base' }
+finalMachine = finalMachine.rename.call(finalMachine, 'composed'); // { value: 20, name: 'composed' }
 
 // The original machine is untouched and has no methods.
 // baseMachine.double(); // => COMPILE ERROR!

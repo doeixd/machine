@@ -169,7 +169,7 @@ const machine = createMachine({
 ```typescript
 const counter = createMachine({ count: 0 }, (next) => ({
   increment() {
-    return next({ count: this.count + 1 });
+    return next({ count: this.context.count + 1 });
   }
 }));
 
@@ -346,7 +346,7 @@ XState provides everything; `@doeixd/machine` provides primitives to build what 
 const counter = createMachine({ count: 0 }, (next) => ({
   increment() {
     // 'this' is automatically typed without explicit annotations!
-    return next({ count: this.count + 1 });
+    return next({ count: this.context.count + 1 });
   }
 }));
 

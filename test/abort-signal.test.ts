@@ -13,7 +13,7 @@ describe('AbortSignal Support', () => {
         slowIncrement: async function({ signal }) {
           return new Promise((resolve, reject) => {
             const timeout = setTimeout(() => {
-              resolve(createAsyncMachine({ count: this.count + 1 }, this));
+              resolve(createAsyncMachine({ count: this.context.count + 1 }, this));
             }, 100);
 
             signal.addEventListener('abort', () => {
@@ -73,7 +73,7 @@ describe('AbortSignal Support', () => {
         increment: async function({ signal }) {
           return new Promise((resolve) => {
             setTimeout(() => {
-              resolve(createAsyncMachine({ count: this.count + 1 }, this));
+              resolve(createAsyncMachine({ count: this.context.count + 1 }, this));
             }, 10);
           });
         }

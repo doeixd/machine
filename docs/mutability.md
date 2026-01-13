@@ -25,7 +25,7 @@ In a mutable pattern, the state machine is a single, long-lived, stateful object
 ### How It Works: The Core Principle
 
 A mutable transition follows two simple rules:
-1.  **Mutate the context directly** using standard assignments (e.g., `this.count++`).
+1.  **Mutate the context directly** using standard assignments (e.g., `this.context.count++`).
 2.  **Return the same machine instance** by returning `this`.
 
 #### Manual Example: A Mutable Counter
@@ -35,11 +35,11 @@ import { createMachine } from '@doeixd/machine';
 
 const mutableTransitions = {
   increment(this: { count: number }) {
-    this.count++; // 1. Mutate context in place
+    this.context.count++; // 1. Mutate context in place
     return this;   // 2. Return the same instance
   },
   add(this: { count: number }, n: number) {
-    this.count += n;
+    this.context.count += n;
     return this;
   }
 };
@@ -50,7 +50,7 @@ const machineReference = machine; // Keep a reference to the original object
 console.log('Initial count:', machine.context.count); // 0
 
 // The transition mutates the machine in place
-const nextState = machine.increment.call(machine.context);
+const nextState = machine.increment.call(machine);
 
 console.log('Count after increment:', machine.context.count); // 1
 

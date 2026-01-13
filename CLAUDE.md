@@ -63,7 +63,7 @@ const machine = { context: { status: 'idle' as const } };
 ```typescript
 // ✅ CORRECT - for real machines
 const machine = createMachine({ count: 0 }, {
-  increment() { return createMachine({ count: this.count + 1 }, this); }
+  increment() { return createMachine({ count: this.context.count + 1 }, this); }
 });
 ```
 
@@ -537,7 +537,7 @@ Every transition must return a new machine instance. The context is readonly. Us
 
 ```typescript
 increment: function() {
-  return createMachine({ count: this.count + 1 }, this);
+  return createMachine({ count: this.context.count + 1 }, this);
   // OR
   return setContext(this, (ctx) => ({ count: ctx.count + 1 }));
 }
@@ -590,7 +590,7 @@ Uses **pridepack** as the build tool, which is a zero-config bundler for TypeScr
 ```typescript
 const counter = createMachine({ count: 0 }, {
   increment: function() {
-    return createMachine({ count: this.count + 1 }, this);
+    return createMachine({ count: this.context.count + 1 }, this);
   }
 });
 ```

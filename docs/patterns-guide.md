@@ -29,8 +29,8 @@ This comprehensive guide explains all the different patterns and overloads for c
 ```typescript
 // ✅ Simple synchronous machine
 const counter = createMachine({ count: 0 }, (next) => ({
-  increment() { return next({ count: this.count + 1 }); },
-  decrement() { return next({ count: this.count - 1 }); }
+  increment() { return next({ count: this.context.count + 1 }); },
+  decrement() { return next({ count: this.context.count - 1 }); }
 }));
 
 // ✅ Simple async machine
@@ -57,10 +57,10 @@ const calculator = createMachineFactory<{ value: number }>()({
 ```typescript
 const machine = createMachine({ count: 0 }, (next) => ({
   increment() {
-    return next({ count: this.count + 1 });
+    return next({ count: this.context.count + 1 });
   },
   add(n: number) {
-    return next({ count: this.count + n });
+    return next({ count: this.context.count + n });
   }
 }));
 ```
@@ -88,7 +88,7 @@ const machine = createMachine({ count: 0 }, (next) => ({
 ```typescript
 const transitions = {
   increment: function() {
-    return createMachine({ count: this.count + 1 }, transitions);
+    return createMachine({ count: this.context.count + 1 }, transitions);
   }
 };
 
@@ -119,8 +119,8 @@ const machine = createMachine({ count: 0, max: 10 }, (ctx) => {
 
   return (next) => ({
     increment() {
-      const newCount = Math.min(this.count + 1, maxCount);
-      return next({ count: newCount, max: this.max });
+      const newCount = Math.min(this.context.count + 1, maxCount);
+      return next({ count: newCount, max: this.context.max });
     }
   });
 });
@@ -247,8 +247,8 @@ The `state()` function automatically chooses between traditional and functional 
 
 ```typescript
 const machine = state({ count: 0 }, {
-  increment() { return createMachine({ count: this.count + 1 }, this); },
-  decrement() { return createMachine({ count: this.count - 1 }, this); }
+  increment() { return createMachine({ count: this.context.count + 1 }, this); },
+  decrement() { return createMachine({ count: this.context.count - 1 }, this); }
 });
 ```
 
@@ -346,7 +346,7 @@ const machine = createCounter({
 ```typescript
 const transitions = {
   increment: function() {
-    return createMachine({ count: this.count + 1 }, transitions);
+    return createMachine({ count: this.context.count + 1 }, transitions);
   }
 };
 const machine = createMachine({ count: 0 }, transitions);
@@ -356,7 +356,7 @@ const machine = createMachine({ count: 0 }, transitions);
 ```typescript
 const machine = createMachine({ count: 0 }, (next) => ({
   increment() {
-    return next({ count: this.count + 1 });
+    return next({ count: this.context.count + 1 });
   }
 }));
 ```
@@ -372,7 +372,7 @@ const machine = createMachine({ count: 0 }, (next) => ({
 **Before:**
 ```typescript
 const machine = createMachine({ count: 0 }, (next) => ({
-  increment() { return next({ count: this.count + 1 }); }
+  increment() { return next({ count: this.context.count + 1 }); }
 }));
 ```
 
@@ -396,14 +396,14 @@ const machine = createCounter({ count: 0 });
 ```typescript
 // WRONG - arrow functions don't bind `this`
 const machine = createMachine({ count: 0 }, (next) => ({
-  increment: () => next({ count: this.count + 1 }) // `this` is undefined!
+  increment: () => next({ count: this.context.count + 1 }) // `this` is undefined!
 }));
 ```
 
 ```typescript
 // RIGHT - use function declarations or method syntax
 const machine = createMachine({ count: 0 }, (next) => ({
-  increment() { return next({ count: this.count + 1 }); }
+  increment() { return next({ count: this.context.count + 1 }); }
 }));
 ```
 
@@ -412,14 +412,14 @@ const machine = createMachine({ count: 0 }, (next) => ({
 ```typescript
 // WRONG - `this` in inline object doesn't work
 const machine = createMachine({ count: 0 }, {
-  increment: () => next({ count: this.count + 1 }) // `this` refers to wrong context
+  increment: () => next({ count: this.context.count + 1 }) // `this` refers to wrong context
 });
 ```
 
 ```typescript
 // RIGHT - use named transitions object
 const transitions = {
-  increment: function() { return createMachine({ count: this.count + 1 }, transitions); }
+  increment: function() { return createMachine({ count: this.context.count + 1 }, transitions); }
 };
 const machine = createMachine({ count: 0 }, transitions);
 ```
@@ -466,7 +466,7 @@ const machine = createMachine({ count: 0 }, (ctx) => (next) => ({
 describe('counter transitions', () => {
   it('should increment count', () => {
     const machine = createMachine({ count: 5 }, (next) => ({
-      increment() { return next({ count: this.count + 1 }); }
+      increment() { return next({ count: this.context.count + 1 }); }
     }));
 
     const result = machine.increment();

@@ -5,5 +5,12 @@
 // Re-export core functionality
 export * from './core';
 
-// Re-export React-specific functionality
-export * from './react';
+// Re-export React-specific functionality (excluding duplicates like Runner)
+export {
+  useMachine,
+  useMachineSelector,
+  useEnsemble,
+  createMachineContext,
+  useActor,
+  useActorSelector,
+} from './react';

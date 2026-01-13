@@ -35,12 +35,12 @@ describe('createMiddleware', () => {
     const beforeHook = vi.fn();
     const machine = createMachine({ count: 0 }, {
       increment: function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 
     const instrumented = createMiddleware(machine, { before: beforeHook });
-    instrumented.increment.call(instrumented.context);
+    instrumented.increment.call(instrumented);
 
     expect(beforeHook).toHaveBeenCalledWith({
       transitionName: 'increment',
@@ -53,12 +53,12 @@ describe('createMiddleware', () => {
     const afterHook = vi.fn();
     const machine = createMachine({ count: 0 }, {
       increment: function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 
     const instrumented = createMiddleware(machine, { after: afterHook });
-    instrumented.increment.call(instrumented.context);
+    instrumented.increment.call(instrumented);
 
     expect(afterHook).toHaveBeenCalledWith({
       transitionName: 'increment',
@@ -79,7 +79,7 @@ describe('createMiddleware', () => {
     const instrumented = createMiddleware(machine, { error: errorHook });
 
     expect(() => {
-      instrumented.throwError.call(instrumented.context);
+      instrumented.throwError.call(instrumented);
     }).toThrow('Test error');
 
     expect(errorHook).toHaveBeenCalled();
@@ -92,12 +92,12 @@ describe('createMiddleware', () => {
     const beforeHook = vi.fn();
     const machine = createMachine({ count: 0 }, {
       add: function(n: number) {
-        return createMachine({ count: this.count + n }, this);
+        return createMachine({ count: this.context.count + n }, this);
       }
     });
 
     const instrumented = createMiddleware(machine, { before: beforeHook });
-    instrumented.add.call(instrumented.context, 5);
+    instrumented.add.call(instrumented, 5);
 
     expect(beforeHook).toHaveBeenCalledWith({
       transitionName: 'add',
@@ -109,7 +109,7 @@ describe('createMiddleware', () => {
   it('should not wrap context property', () => {
     const machine = createMachine({ count: 0 }, {
       increment: function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 
@@ -120,12 +120,12 @@ describe('createMiddleware', () => {
   it('should preserve this binding', async () => {
     const machine = createMachine({ count: 5 }, {
       double: function() {
-        return createMachine({ count: this.count * 2 }, this);
+        return createMachine({ count: this.context.count * 2 }, this);
       }
     });
 
     const instrumented = createMiddleware(machine, {});
-    const result = instrumented.double.call(instrumented.context);
+    const result = instrumented.double.call(instrumented);
 
     expect(result.context.count).toBe(10);
   });
@@ -137,7 +137,7 @@ describe('createMiddleware', () => {
     const machine = createAsyncMachine({ count: 0 }, {
       asyncIncrement: async function() {
         await new Promise(resolve => setTimeout(resolve, 10));
-        return createAsyncMachine({ count: this.count + 1 }, this);
+        return createAsyncMachine({ count: this.context.count + 1 }, this);
       }
     });
 
@@ -146,7 +146,7 @@ describe('createMiddleware', () => {
       after: afterHook
     });
 
-    const result = await instrumented.asyncIncrement.call(instrumented.context);
+    const result = await instrumented.asyncIncrement.call(instrumented);
 
     expect(beforeHook).toHaveBeenCalled();
     expect(afterHook).toHaveBeenCalled();
@@ -156,7 +156,7 @@ describe('createMiddleware', () => {
   it('should allow before hook to prevent transition by throwing', async () => {
     const machine = createMachine({ count: 0 }, {
       increment: function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 
@@ -169,7 +169,7 @@ describe('createMiddleware', () => {
     });
 
     expect(() => {
-      instrumented.increment.call(instrumented.context);
+      instrumented.increment.call(instrumented);
     }).toThrow('Blocked');
   });
 });
@@ -179,12 +179,12 @@ describe('withLogging', () => {
     const logger = vi.fn();
     const machine = createMachine({ count: 0 }, {
       increment: function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 
     const logged = withLogging(machine, { logger });
-    logged.increment.call(logged.context);
+    logged.increment.call(logged);
 
     await new Promise(resolve => setTimeout(resolve, 10));
 
@@ -196,12 +196,12 @@ describe('withLogging', () => {
     const logger = vi.fn();
     const machine = createMachine({ count: 0 }, {
       add: function(n: number) {
-        return createMachine({ count: this.count + n }, this);
+        return createMachine({ count: this.context.count + n }, this);
       }
     });
 
     const logged = withLogging(machine, { logger, includeArgs: true });
-    logged.add.call(logged.context, 5);
+    logged.add.call(logged, 5);
 
     await new Promise(resolve => setTimeout(resolve, 10));
 
@@ -212,12 +212,12 @@ describe('withLogging', () => {
     const logger = vi.fn();
     const machine = createMachine({ count: 0 }, {
       increment: function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 
     const logged = withLogging(machine, { logger, includeContext: false });
-    logged.increment.call(logged.context);
+    logged.increment.call(logged);
 
     await new Promise(resolve => setTimeout(resolve, 10));
 
@@ -235,7 +235,7 @@ describe('withAnalytics', () => {
     });
 
     const tracked = withAnalytics(machine, track);
-    tracked.start.call(tracked.context);
+    tracked.start.call(tracked);
 
     await new Promise(resolve => setTimeout(resolve, 10));
 
@@ -252,12 +252,12 @@ describe('withAnalytics', () => {
     const track = vi.fn();
     const machine = createMachine({ count: 0 }, {
       increment: function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 
     const tracked = withAnalytics(machine, track, { includePrevContext: true });
-    tracked.increment.call(tracked.context);
+    tracked.increment.call(tracked);
 
     await new Promise(resolve => setTimeout(resolve, 10));
 
@@ -274,12 +274,12 @@ describe('withAnalytics', () => {
     const track = vi.fn();
     const machine = createMachine({ count: 0 }, {
       increment: function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 
     const tracked = withAnalytics(machine, track, { eventPrefix: 'custom_event' });
-    tracked.increment.call(tracked.context);
+    tracked.increment.call(tracked);
 
     await new Promise(resolve => setTimeout(resolve, 10));
 
@@ -291,7 +291,7 @@ describe('withValidation', () => {
   it('should validate transitions before execution', async () => {
     const machine = createMachine({ count: 0 }, {
       decrement: function() {
-        return createMachine({ count: this.count - 1 }, this);
+        return createMachine({ count: this.context.count - 1 }, this);
       }
     });
 
@@ -302,14 +302,14 @@ describe('withValidation', () => {
     });
 
     expect(() => {
-      validated.decrement.call(validated.context);
+      validated.decrement.call(validated);
     }).toThrow('Cannot decrement below zero');
   });
 
   it('should allow valid transitions', async () => {
     const machine = createMachine({ count: 5 }, {
       decrement: function() {
-        return createMachine({ count: this.count - 1 }, this);
+        return createMachine({ count: this.context.count - 1 }, this);
       }
     });
 
@@ -319,21 +319,21 @@ describe('withValidation', () => {
       }
     });
 
-    const result = await validated.decrement.call(validated.context);
+    const result = await validated.decrement.call(validated);
     expect(result.context.count).toBe(4);
   });
 
   it('should throw if validation returns false', async () => {
     const machine = createMachine({ count: 0 }, {
       increment: function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 
     const validated = withValidation(machine, () => false);
 
     expect(() => {
-      validated.increment.call(validated.context);
+      validated.increment.call(validated);
     }).toThrow('Validation failed');
   });
 });
@@ -351,20 +351,20 @@ describe('withPermissions', () => {
     });
 
     expect(() => {
-      protectedMachine.adminAction.call(protectedMachine.context);
+      protectedMachine.adminAction.call(protectedMachine);
     }).toThrow('Unauthorized transition: adminAction');
   });
 
   it('should allow authorized transitions', async () => {
     const machine = createMachine({ count: 0 }, {
       increment: function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 
     const protectedMachine = withPermissions(machine, () => true);
 
-    const result = await protectedMachine.increment.call(protectedMachine.context);
+    const result = await protectedMachine.increment.call(protectedMachine);
     expect(result.context.count).toBe(1);
   });
 });
@@ -381,7 +381,7 @@ describe('withErrorReporting', () => {
     const monitored = withErrorReporting(machine, captureError);
 
     expect(() => {
-      monitored.throwError.call(monitored.context);
+      monitored.throwError.call(monitored);
     }).toThrow('Test error');
 
     expect(captureError).toHaveBeenCalledWith(
@@ -404,7 +404,7 @@ describe('withErrorReporting', () => {
     const monitored = withErrorReporting(machine, captureError, { includeArgs: true });
 
     expect(() => {
-      monitored.throwWithArgs.call(monitored.context, 42);
+      monitored.throwWithArgs.call(monitored, 42);
     }).toThrow('Test error');
 
     expect(captureError).toHaveBeenCalledWith(
@@ -427,7 +427,7 @@ describe('withPerformanceMonitoring', () => {
     });
 
     const monitored = withPerformanceMonitoring(machine, onMetric);
-    await monitored.slowTransition.call(monitored.context);
+    await monitored.slowTransition.call(monitored);
 
     await new Promise(resolve => setTimeout(resolve, 10));
 
@@ -458,7 +458,7 @@ describe('withRetry', () => {
     });
 
     const resilient = withRetry(machine, { maxRetries: 3, delay: 10 });
-    const result = await resilient.flaky.call(resilient.context);
+    const result = await resilient.flaky.call(resilient);
 
     expect(result.context.count).toBe(1);
     expect(attempts).toBe(3);
@@ -479,7 +479,7 @@ describe('withRetry', () => {
     });
 
     const resilient = withRetry(machine, { maxRetries: 3, delay: 10, onRetry });
-    await resilient.flaky.call(resilient.context);
+    await resilient.flaky.call(resilient);
 
     expect(onRetry).toHaveBeenCalledWith(expect.any(Error), 1);
   });
@@ -499,7 +499,7 @@ describe('withRetry', () => {
       shouldRetry: (error) => !error.message.includes('Permanent')
     });
 
-    await expect(resilient.permanent.call(resilient.context)).rejects.toThrow('Permanent failure');
+    await expect(resilient.permanent.call(resilient)).rejects.toThrow('Permanent failure');
     expect(attempts).toBe(1);
   });
 
@@ -524,7 +524,7 @@ describe('withRetry', () => {
       backoffMultiplier: 2
     });
 
-    await resilient.flaky.call(resilient.context);
+    await resilient.flaky.call(resilient);
 
     // Check that delays increase exponentially (50ms, 100ms)
     const delay1 = timestamps[1] - timestamps[0];
@@ -541,7 +541,7 @@ describe('compose', () => {
 
     const machine = createMachine({ count: 0 }, {
       increment: function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 
@@ -555,7 +555,7 @@ describe('compose', () => {
       })
     );
 
-    instrumented.increment.call(instrumented.context);
+    instrumented.increment.call(instrumented);
 
     await new Promise(resolve => setTimeout(resolve, 10));
 
@@ -575,7 +575,7 @@ describe('createCustomMiddleware', () => {
 
     const machine1 = createMachine({ count: 0 }, {
       increment: function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 
@@ -588,8 +588,8 @@ describe('createCustomMiddleware', () => {
     const instrumented1 = myMiddleware(machine1);
     const instrumented2 = myMiddleware(machine2);
 
-    instrumented1.increment.call(instrumented1.context);
-    instrumented2.change.call(instrumented2.context);
+    instrumented1.increment.call(instrumented1);
+    instrumented2.change.call(instrumented2);
 
     await new Promise(resolve => setTimeout(resolve, 10));
 
@@ -607,10 +607,10 @@ describe('Complex middleware scenarios', () => {
 
     const machine = createMachine({ count: 0 }, {
       increment: function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       },
       add: function(n: number) {
-        return createMachine({ count: this.count + n }, this);
+        return createMachine({ count: this.context.count + n }, this);
       }
     });
 
@@ -625,8 +625,8 @@ describe('Complex middleware scenarios', () => {
       (m) => withPerformanceMonitoring(m, (metric) => metrics.push(metric))
     );
 
-    instrumented.increment.call(instrumented.context);
-    instrumented.add.call(instrumented.context, 5);
+    instrumented.increment.call(instrumented);
+    instrumented.add.call(instrumented, 5);
 
     await new Promise(resolve => setTimeout(resolve, 10));
 
@@ -638,18 +638,18 @@ describe('Complex middleware scenarios', () => {
   it('should preserve type safety through middleware', () => {
     const machine = createMachine({ count: 0 }, {
       increment: function(): typeof machine {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       },
       add: function(n: number): typeof machine {
-        return createMachine({ count: this.count + n }, this);
+        return createMachine({ count: this.context.count + n }, this);
       }
     });
 
     const instrumented = withLogging(machine);
 
     // TypeScript should allow these calls
-    const result1 = instrumented.increment.call(instrumented.context);
-    const result2 = instrumented.add.call(instrumented.context, 5);
+    const result1 = instrumented.increment.call(instrumented);
+    const result2 = instrumented.add.call(instrumented, 5);
 
     expect(result1.context.count).toBeDefined();
     expect(result2.context.count).toBeDefined();
@@ -660,7 +660,7 @@ describe('composeTyped', () => {
   it('should compose middlewares with improved type inference', () => {
     const machine = createMachine({ count: 0 }, {
       increment: function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 
@@ -674,7 +674,7 @@ describe('composeTyped', () => {
     expect(composed.history).toBeDefined();
     expect(composed.snapshots).toBeDefined();
 
-    composed.increment.call(composed.context);
+    composed.increment.call(composed);
     expect(composed.history).toHaveLength(1);
     expect(composed.snapshots).toHaveLength(1);
   });
@@ -684,7 +684,7 @@ describe('createPipeline', () => {
   it('should execute middlewares in pipeline with error handling', () => {
     const machine = createMachine({ count: 0 }, {
       increment: function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 
@@ -710,7 +710,7 @@ describe('createPipeline', () => {
   it('should handle conditional middlewares', () => {
     const machine = createMachine({ count: 0, debug: true }, {
       increment: function() {
-        return createMachine({ count: this.count + 1, debug: this.debug }, this);
+        return createMachine({ count: this.context.count + 1, debug: this.context.debug }, this);
       }
     });
 
@@ -732,7 +732,7 @@ describe('createMiddlewareRegistry', () => {
   it('should register and apply named middlewares', () => {
     const machine = createMachine({ count: 0 }, {
       increment: function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 
@@ -749,7 +749,7 @@ describe('createMiddlewareRegistry', () => {
   it('should apply all middlewares in priority order', () => {
     const machine = createMachine({ count: 0 }, {
       increment: function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 
@@ -768,7 +768,7 @@ describe('when', () => {
   it('should conditionally apply middleware', () => {
     const machine = createMachine({ count: 0, enabled: true }, {
       increment: function() {
-        return createMachine({ count: this.count + 1, enabled: this.enabled }, this);
+        return createMachine({ count: this.context.count + 1, enabled: this.context.enabled }, this);
       }
     });
 
@@ -779,7 +779,7 @@ describe('when', () => {
 
     const disabledMachine = createMachine({ count: 0, enabled: false }, {
       increment: function() {
-        return createMachine({ count: this.count + 1, enabled: this.enabled }, this);
+        return createMachine({ count: this.context.count + 1, enabled: this.context.enabled }, this);
       }
     });
 
@@ -792,7 +792,7 @@ describe('inDevelopment', () => {
   it('should apply middleware only in development', () => {
     const machine = createMachine({ count: 0 }, {
       increment: function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 
@@ -814,7 +814,7 @@ describe('whenContext', () => {
   it('should apply middleware based on context property', () => {
     const machine = createMachine({ count: 0, mode: 'debug' }, {
       increment: function() {
-        return createMachine({ count: this.count + 1, mode: this.mode }, this);
+        return createMachine({ count: this.context.count + 1, mode: this.context.mode }, this);
       }
     });
 
@@ -829,7 +829,7 @@ describe('combine', () => {
   it('should combine multiple middlewares', () => {
     const machine = createMachine({ count: 0 }, {
       increment: function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 
@@ -848,13 +848,13 @@ describe('branch', () => {
   it('should apply different middlewares based on conditions', () => {
     const debugMachine = createMachine({ count: 0, mode: 'debug' }, {
       increment: function() {
-        return createMachine({ count: this.count + 1, mode: this.mode }, this);
+        return createMachine({ count: this.context.count + 1, mode: this.context.mode }, this);
       }
     });
 
     const prodMachine = createMachine({ count: 0, mode: 'production' }, {
       increment: function() {
-        return createMachine({ count: this.count + 1, mode: this.mode }, this);
+        return createMachine({ count: this.context.count + 1, mode: this.context.mode }, this);
       }
     });
 
@@ -879,7 +879,7 @@ describe('type guards', () => {
   it('should identify middleware functions and conditional middlewares', () => {
     const machine = createMachine({ count: 0 }, {
       increment: function() {
-        return createMachine({ count: this.count + 1 }, this);
+        return createMachine({ count: this.context.count + 1 }, this);
       }
     });
 

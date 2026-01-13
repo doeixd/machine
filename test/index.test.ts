@@ -23,10 +23,10 @@ describe('createMachine - Functional Builder', () => {
       { count: 0 },
       (next) => ({
         increment() {
-          return next({ count: this.count + 1 });
+          return next({ count: this.context.count + 1 });
         },
         add(n: number) {
-          return next({ count: this.count + n });
+          return next({ count: this.context.count + n });
         }
       })
     );
@@ -43,7 +43,7 @@ describe('createMachine - Functional Builder', () => {
       { count: 0 },
       (next) => ({
         increment() {
-          return next({ count: this.count + 1 });
+          return next({ count: this.context.count + 1 });
         },
       })
     );
@@ -58,10 +58,10 @@ describe('createMachine - Functional Builder', () => {
   it('should handle multiple transitions with functional builder', () => {
     const machine = createMachine({ count: 0 }, (next) => ({
       increment() {
-        return next({ count: this.count + 1 });
+        return next({ count: this.context.count + 1 });
       },
       decrement() {
-        return next({ count: this.count - 1 });
+        return next({ count: this.context.count - 1 });
       },
       reset() {
         return next({ count: 0 });
@@ -81,12 +81,12 @@ describe('createMachine - Functional Builder', () => {
       { count: 0 },
       {
         add(n: number) {
-          return createMachine({ count: this.count + n }, this);
+          return createMachine({ count: this.context.count + n }, this);
         },
       }
     );
 
-    const nextMachine = machine.add.call(machine.context, 5);
+    const nextMachine = machine.add(5);
     expect(nextMachine.context.count).toBe(5);
   });
 });
@@ -95,10 +95,10 @@ describe('createMachine - Traditional API', () => {
   it('should create a machine with traditional object transitions', () => {
     const transitions = {
       increment(this: {count: number}) {
-        return createMachine({ count: this.count + 1 }, transitions);
+        return createMachine({ count: this.context.count + 1 }, transitions);
       },
       add(this: {count: number}, n: number) {
-        return createMachine({ count: this.count + n }, transitions);
+        return createMachine({ count: this.context.count + n }, transitions);
       }
     };
 
@@ -114,12 +114,12 @@ describe('createMachine - Traditional API', () => {
   it('should preserve immutability with traditional API', () => {
     const transitions = {
       increment(this: {count: number}) {
-        return createMachine({ count: this.count + 1 }, transitions);
+        return createMachine({ count: this.context.count + 1 }, transitions);
       }
     };
 
     const machine = createMachine({ count: 0 }, transitions);
-    const nextMachine = machine.increment.call(machine.context);
+    const nextMachine = machine.increment();
 
     expect(machine.context.count).toBe(0);
     expect(nextMachine.context.count).toBe(1);
@@ -149,12 +149,12 @@ describe('createAsyncMachine', () => {
       {
         async increment() {
           await new Promise(resolve => setTimeout(resolve, 10));
-          return createAsyncMachine({ value: this.value + 1 }, this);
+          return createAsyncMachine({ value: this.context.value + 1 }, this);
         },
       }
     );
 
-    const nextMachine = await machine.increment.call(machine.context);
+    const nextMachine = await machine.increment();
     expect(nextMachine.context.value).toBe(1);
   });
 
@@ -164,11 +164,11 @@ describe('createAsyncMachine', () => {
       (next) => ({
         async increment() {
           await new Promise(resolve => setTimeout(resolve, 10));
-          return next({ count: this.count + 1 });
+          return next({ count: this.context.count + 1 });
         },
         async add(n: number) {
           await new Promise(resolve => setTimeout(resolve, 10));
-          return next({ count: this.count + n });
+          return next({ count: this.context.count + n });
         }
       })
     );
@@ -183,7 +183,7 @@ describe('createAsyncMachine', () => {
       { count: 0 },
       {
         async increment() {
-          return createAsyncMachine({ count: this.count + 1 }, this);
+          return createAsyncMachine({ count: this.context.count + 1 }, this);
         }
       }
     );
@@ -201,7 +201,7 @@ describe('setContext', () => {
       { count: 0 },
       {
         increment() {
-          return createMachine({ count: this.count + 1 }, this);
+          return createMachine({ count: this.context.count + 1 }, this);
         },
       }
     );
@@ -218,7 +218,7 @@ describe('setContext', () => {
       { count: 5, name: 'test' },
       {
         increment() {
-          return createMachine({ count: this.count + 1, name: this.name }, this);
+          return createMachine({ count: this.context.count + 1, name: this.context.name }, this);
         },
       }
     );
@@ -238,10 +238,10 @@ describe('setContext', () => {
       { count: 0 },
       {
         increment() {
-          return createMachine({ count: this.count + 1 }, this);
+          return createMachine({ count: this.context.count + 1 }, this);
         },
         decrement() {
-          return createMachine({ count: this.count - 1 }, this);
+          return createMachine({ count: this.context.count - 1 }, this);
         },
       }
     );
@@ -259,7 +259,7 @@ describe('next', () => {
       { count: 0 },
       {
         increment() {
-          return createMachine({ count: this.count + 1 }, this);
+          return createMachine({ count: this.context.count + 1 }, this);
         },
       }
     );
@@ -275,7 +275,7 @@ describe('next', () => {
       { count: 0 },
       {
         increment() {
-          return createMachine({ count: this.count + 1 }, this);
+          return createMachine({ count: this.context.count + 1 }, this);
         },
       }
     );
@@ -292,18 +292,18 @@ describe('overrideTransitions', () => {
       { count: 0 },
       {
         increment() {
-          return createMachine({ count: this.count + 1 }, this);
+          return createMachine({ count: this.context.count + 1 }, this);
         },
       }
     );
 
     const overridden = overrideTransitions(machine, {
       increment() {
-        return createMachine({ count: this.count + 10 }, this);
+        return createMachine({ count: this.context.count + 10 }, this);
       },
     });
 
-    const result = overridden.increment.call(overridden.context);
+    const result = overridden.increment();
     expect(result.context.count).toBe(10);
   });
 
@@ -312,19 +312,19 @@ describe('overrideTransitions', () => {
       { count: 0 },
       {
         increment() {
-          return createMachine({ count: this.count + 1 }, this);
+          return createMachine({ count: this.context.count + 1 }, this);
         },
       }
     );
 
     const overridden = overrideTransitions(machine, {
       decrement() {
-        return createMachine({ count: this.count - 1 }, this);
+        return createMachine({ count: this.context.count - 1 }, this);
       },
     });
 
     expect(typeof overridden.decrement).toBe('function');
-    const result = overridden.decrement.call(overridden.context);
+    const result = overridden.decrement();
     expect(result.context.count).toBe(-1);
   });
 
@@ -333,19 +333,19 @@ describe('overrideTransitions', () => {
       { count: 0 },
       {
         increment() {
-          return createMachine({ count: this.count + 1 }, this);
+          return createMachine({ count: this.context.count + 1 }, this);
         },
       }
     );
 
     const overridden = overrideTransitions(machine, {
       increment() {
-        return createMachine({ count: this.count + 100 }, this);
+        return createMachine({ count: this.context.count + 100 }, this);
       },
     });
 
-    const original = machine.increment.call(machine.context);
-    const modified = overridden.increment.call(overridden.context);
+    const original = machine.increment();
+    const modified = overridden.increment();
 
     expect(original.context.count).toBe(1);
     expect(modified.context.count).toBe(100);
@@ -358,14 +358,14 @@ describe('extendTransitions', () => {
       { count: 0 },
       {
         increment() {
-          return createMachine({ count: this.count + 1 }, this);
+          return createMachine({ count: this.context.count + 1 }, this);
         },
       }
     );
 
     const extended = extendTransitions(machine, {
       decrement() {
-        return createMachine({ count: this.count - 1 }, this);
+        return createMachine({ count: this.context.count - 1 }, this);
       },
       reset() {
         return createMachine({ count: 0 }, this);
@@ -384,7 +384,7 @@ describe('createMachineBuilder', () => {
       { count: 0 },
       {
         increment() {
-          return createMachine({ count: this.count + 1 }, this);
+          return createMachine({ count: this.context.count + 1 }, this);
         },
       }
     );
@@ -404,10 +404,10 @@ describe('createMachineBuilder', () => {
       { count: 0 },
       {
         increment() {
-          return createMachine({ count: this.count + 1 }, this);
+          return createMachine({ count: this.context.count + 1 }, this);
         },
         add(n: number) {
-          return createMachine({ count: this.count + n }, this);
+          return createMachine({ count: this.context.count + n }, this);
         },
       }
     );
@@ -415,10 +415,10 @@ describe('createMachineBuilder', () => {
     const builder = createMachineBuilder(template);
     const machine = builder({ count: 5 });
 
-    const incremented = machine.increment.call(machine.context);
+    const incremented = machine.increment();
     expect(incremented.context.count).toBe(6);
 
-    const added = machine.add.call(machine.context, 10);
+    const added = machine.add(10);
     expect(added.context.count).toBe(15);
   });
 });
@@ -767,7 +767,7 @@ describe('Type extraction utilities', () => {
       { count: 0, name: 'test' },
       {
         increment() {
-          return createMachine({ count: this.count + 1, name: this.name }, this);
+          return createMachine({ count: this.context.count + 1, name: this.context.name }, this);
         },
       }
     );

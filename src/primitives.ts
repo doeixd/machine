@@ -354,6 +354,14 @@ export type GuardedTransition<
  * Creates a synchronous runtime guard that checks conditions before executing transitions.
  * This provides actual runtime protection with synchronous execution - use this for the majority of cases.
  *
+ * **IMPORTANT - Context-Bound Limitation:**
+ * Guards accept calls with either `this === machine` or `this === context`, but when called
+ * with context-only binding, the guard normalizes to `{ context }` before passing to the transition.
+ * This means:
+ * - ✅ Transitions can access `this.context`
+ * - ❌ Transitions CANNOT call `this.otherTransition()` (no transitions property)
+ * - Recommended: Use guards only with machine-bound transitions for full composition support
+ *
  * @template C - The context type
  * @template TSuccess - The transition return type when condition passes
  * @template TFailure - The fallback return type when condition fails (defaults to Machine<C>)
@@ -367,8 +375,10 @@ export type GuardedTransition<
  * const machine = createMachine({ balance: 100 }, {
  *   withdraw: guard(
  *     (ctx, amount) => ctx.balance >= amount,
- *     function(amount: number) {
- *       return createMachine({ balance: this.balance - amount }, this);
+ *     function(this: Machine<{balance: number}>, amount: number) {
+ *       // ✅ Can access this.context
+ *       return createMachine({ balance: this.context.balance - amount }, this);
+ *       // ❌ Cannot call this.otherTransition() if guard was called with context-only binding
  *     },
  *     { onFail: 'throw', errorMessage: 'Insufficient funds' }
  *   )
@@ -403,9 +413,9 @@ export function guard<
 
     if (conditionResult) {
       // Condition passed, execute the transition
-      // Transition functions expect 'this' to be the context
-      const contextForTransition = isMachine ? (this as Machine<C>).context : (this as C);
-      return transition.apply(contextForTransition, args);
+      // Transition functions expect 'this' to be the machine
+      const machineForTransition = isMachine ? (this as Machine<C>) : { context: this as C };
+      return transition.apply(machineForTransition, args);
     } else {
       // Condition failed, handle according to options
       if (onFail === 'throw') {
@@ -453,6 +463,14 @@ export function guard<
  * This provides actual runtime protection, unlike the `guarded` primitive which only adds metadata.
  * Use this when your condition or transition logic is asynchronous.
  *
+ * **IMPORTANT - Context-Bound Limitation:**
+ * Guards accept calls with either `this === machine` or `this === context`, but when called
+ * with context-only binding, the guard normalizes to `{ context }` before passing to the transition.
+ * This means:
+ * - ✅ Transitions can access `this.context`
+ * - ❌ Transitions CANNOT call `this.otherTransition()` (no transitions property)
+ * - Recommended: Use guards only with machine-bound transitions for full composition support
+ *
  * @template C - The context type
  * @template TSuccess - The transition return type when condition passes
  * @template TFailure - The fallback return type when condition fails (defaults to Machine<C>)
@@ -470,10 +488,12 @@ export function guard<
  *       await new Promise(resolve => setTimeout(resolve, 100));
  *       return ctx.balance >= amount;
  *     },
- *     async function(amount: number) {
+ *     async function(this: Machine<{balance: number}>, amount: number) {
  *       // Simulate API call to process withdrawal
  *       await new Promise(resolve => setTimeout(resolve, 100));
- *       return createMachine({ balance: this.balance - amount }, this);
+ *       // ✅ Can access this.context
+ *       return createMachine({ balance: this.context.balance - amount }, this);
+ *       // ❌ Cannot call this.otherTransition() if guard was called with context-only binding
  *     },
  *     { onFail: 'throw', errorMessage: 'Insufficient funds' }
  *   )
@@ -508,9 +528,9 @@ export function guardAsync<
 
     if (conditionResult) {
       // Condition passed, execute the transition
-      // Transition functions expect 'this' to be the context
-      const contextForTransition = isMachine ? (this as Machine<C>).context : (this as C);
-      return transition.apply(contextForTransition, args);
+      // Transition functions expect 'this' to be the machine
+      const machineForTransition = isMachine ? (this as Machine<C>) : { context: this as C };
+      return transition.apply(machineForTransition, args);
     } else {
       // Condition failed, handle according to options
       if (onFail === 'throw') {
@@ -571,7 +591,7 @@ export function guardAsync<
  *   withdraw: guardSync(
  *     (ctx, amount) => ctx.balance >= amount,
  *     function(amount: number) {
- *       return createMachine({ balance: this.balance - amount }, this);
+ *       return createMachine({ balance: this.context.balance - amount }, this);
  *     },
  *     { onFail: 'throw', errorMessage: 'Insufficient funds' }
  *   )
@@ -606,9 +626,9 @@ export function guardSync<
 
     if (conditionResult) {
       // Condition passed, execute the transition
-      // Transition functions expect 'this' to be the context
-      const contextForTransition = isMachine ? (this as Machine<C>).context : (this as C);
-      return transition.apply(contextForTransition, args);
+      // Transition functions expect 'this' to be the machine
+      const machineForTransition = isMachine ? (this as Machine<C>) : { context: this as C };
+      return transition.apply(machineForTransition, args);
     } else {
       // Condition failed, handle according to options
       if (onFail === 'throw') {

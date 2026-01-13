@@ -76,12 +76,12 @@ import { createMachine } from "@doeixd/machine";
 const counter = createMachine(
   { count: 0 }, // Initial state (s₀)
   (next) => ({
-    // Transitions (δ) - `this` is automatically typed
+    // Transitions (δ) - access state via this.context
     increment() {
-      return next({ count: this.count + 1 });
+      return next({ count: this.context.count + 1 });
     },
     add(n: number) {
-      return next({ count: this.count + n });
+      return next({ count: this.context.count + n });
     }
   })
 );
@@ -104,10 +104,10 @@ console.log(counter.context.count); // 0
 ```typescript
 const transitions = {
   increment: function() {
-    return createMachine({ count: this.count + 1 }, transitions);
+    return createMachine({ count: this.context.count + 1 }, transitions);
   },
   add: function(n: number) {
-    return createMachine({ count: this.count + n }, transitions);
+    return createMachine({ count: this.context.count + n }, transitions);
   }
 };
 const counter = createMachine({ count: 0 }, transitions);
@@ -474,11 +474,11 @@ Creates a synchronous state machine using the **Functional Builder** pattern. Th
 ```typescript
 const machine = createMachine({ count: 0 }, (next) => ({
   increment() {
-    // `this` is correctly inferred as Context
-    return next({ count: this.count + 1 });
+    // `this` points at the machine; read state via this.context
+    return next({ count: this.context.count + 1 });
   },
   add(n: number) {
-    return next({ count: this.count + n });
+    return next({ count: this.context.count + n });
   }
 }));
 ```
@@ -492,7 +492,7 @@ const machine = createMachine(
   { count: 0 },  // Context (state data)
   {              // Transitions (state transformations)
     increment: function() {
-      return createMachine({ count: this.count + 1 }, this);
+      return createMachine({ count: this.context.count + 1 }, this);
     }
   }
 );
@@ -505,11 +505,11 @@ Creates a synchronous state machine using the **Functional Builder** pattern. Th
 ```typescript
 const machine = createMachine({ count: 0 }, (transition) => ({
   increment() {
-    // `this` is correctly inferred as Context
-    return transition({ count: this.count + 1 });
+    // `this` points at the machine; read state via this.context
+    return transition({ count: this.context.count + 1 });
   },
   add(n: number) {
-    return transition({ count: this.count + n });
+    return transition({ count: this.context.count + n });
   }
 }));
 ```
@@ -616,45 +616,46 @@ const updated = next(counter, (ctx) => ({ count: ctx.count + 1 }));
 
 ### Transition Binding Helpers
 
-These utilities eliminate the need for `.call(m.context, ...)` boilerplate when invoking transitions.
+These utilities eliminate the need for `.call(m, ...)` boilerplate when invoking transitions.
 
-#### `call<C, F>(fn, context, ...args)`
+#### `call<M, F>(fn, machine, ...args)`
 
-Explicitly binds a transition function to a context and invokes it. Useful when you need to call a transition with proper `this` binding.
+Explicitly binds a transition function to a machine and invokes it. Useful when you need to call a transition with proper `this` binding.
 
 ```typescript
-import { call } from "@doeixd/machine";
+import { call, Machine } from "@doeixd/machine";
 
-type MyContext = { count: number };
-const increment = function(this: MyContext) { 
-  return { count: this.count + 1 }; 
+type MyMachine = Machine<{ count: number }>;
+const increment = function(this: MyMachine) { 
+  return { count: this.context.count + 1 }; 
 };
 
-const result = call(increment, { count: 5 }); // Returns { count: 6 }
+const machine = { context: { count: 5 } } as MyMachine;
+const result = call(increment, machine); // Returns { count: 6 }
 
 // Particularly useful with generator-based flows:
 const result = run(function* (m) {
-  m = yield* step(call(m.increment, m.context));
-  m = yield* step(call(m.add, m.context, 5));
+  m = yield* step(call(m.increment, m));
+  m = yield* step(call(m.add, m, 5));
   return m;
 }, counter);
 ```
 
 #### `bindTransitions<M>(machine)`
 
-Returns a Proxy that automatically binds all transition methods to the machine's context. Eliminates `.call(m.context, ...)` boilerplate entirely.
+Returns a Proxy that automatically binds all transition methods to the machine. Eliminates `.call(m, ...)` boilerplate entirely.
 
 ```typescript
-import { bindTransitions } from "@doeixd/machine";
+import { bindTransitions, Machine } from "@doeixd/machine";
 
 const counter = bindTransitions(createMachine(
   { count: 0 },
   {
-    increment(this: { count: number }) {
-      return createMachine({ count: this.count + 1 }, this);
+    increment(this: Machine<{ count: number }>) {
+      return createMachine({ count: this.context.count + 1 }, this);
     },
-    add(this: { count: number }, n: number) {
-      return createMachine({ count: this.count + n }, this);
+    add(this: Machine<{ count: number }>, n: number) {
+      return createMachine({ count: this.context.count + n }, this);
     }
   }
 ));
@@ -672,7 +673,7 @@ const result = run(function* (m) {
 ```
 
 **How it works:**
-The Proxy intercepts all property access on the machine. When a property is a function (transition method), it wraps it to automatically call `.apply(machine.context, args)` before invoking. Non-callable properties are returned as-is.
+The Proxy intercepts all property access on the machine. When a property is a function (transition method), it wraps it to automatically call `.apply(machine, args)` before invoking. Non-callable properties are returned as-is.
 
 **Note:** The Proxy preserves type safety while providing ergonomic syntax. Use this when writing generator-based flows or any code that frequently calls transitions.
 
@@ -796,7 +797,7 @@ const mocked = overrideTransitions(counter, {
 // Decorate with logging
 const logged = overrideTransitions(counter, {
   increment: function() {
-    console.log("Before:", this.count);
+    console.log("Before:", this.context.count);
     const next = counter.increment.call(this);
     console.log("After:", next.context.count);
     return next;
@@ -2139,7 +2140,7 @@ We avoid magic strings wherever possible. Instead, we use **typed object referen
 // ✅ Good: Typed method reference
 const counter = createMachine({ count: 0 }, {
   increment: function() {
-    return createMachine({ count: this.count + 1 }, this);
+    return createMachine({ count: this.context.count + 1 }, this);
   }
 });
 

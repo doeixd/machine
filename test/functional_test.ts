@@ -5,12 +5,12 @@ type Context = { count: number };
 const machine = createMachine({ count: 0 }, (next) => ({
   increment(this: Context) {
     // `this` is inferred as Context
-    console.log('Current count:', this.count);
+    console.log('Current count:', this.context.count);
     // `next` is a helper that returns a Machine with the same transitions
-    return next({ count: this.count + 1 });
+    return next({ count: this.context.count + 1 });
   },
   add(this: Context, n: number) {
-    return next({ count: this.count + n });
+    return next({ count: this.context.count + n });
   }
 }));
 
