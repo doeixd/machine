@@ -9,15 +9,15 @@
  * Think of this as the "standard library" of common machine patterns.
  */
 
+import { MachineBase } from './base'; // Import from base to avoid circular dependency
 import {
-  MachineBase,
   Machine,
   Transitions,
   // AsyncMachine,
   setContext,
   Context,
   // MaybePromise,
-} from './index'; // Assuming this is a sibling package or in the same project
+} from './index';
 
 // =============================================================================
 // SECTION 1: CUSTOM PRIMITIVES FOR COMPOSITION
