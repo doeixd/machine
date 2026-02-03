@@ -18,7 +18,47 @@ In traditional state machine libraries (including earlier versions of this one),
 ### 1. Minimal API (`@doeixd/machine/minimal`)
 A high-performance core optimized for Type-State Programming.
 - **Rationale**: The main library is powerful but can be heavy for simple components. Minimal provides "magic" inference where the entire state machine signature is derived from your implementation.
-- **Key Primitives**: `machine()`, `factory()`, `union()`.
+- **Key Primitives**: `machine()`, `factory()`, `union()`, `match()`.
+
+---
+
+## 🔬 Deep Dive: The Minimal API
+
+The `@doeixd/machine/minimal` submodule represents the most advanced expression of Type-State Programming in the library. It strips away the class-like abstractions of the main library to provide a pure, functional, and high-performance core.
+
+### 1. The `machine()` Factory
+This is the foundational unit of the minimal API. It creates a "flat" machine object where the context and transitions live side-by-side.
+
+**Why it's better**:
+- **Magic Inference**: You don't need to define a `Transitions` type. TypeScript automatically infers the return type of your factory function, mapping it directly onto the machine.
+- **Flat Structure**: Transitions are just properties on the object, making it faster and easier to debug.
+
+### 2. The `factory()` Blueprint
+Allows you to define the *logic* of a machine once and instantiate it many times.
+
+**Why it's better**:
+- **Decoupled Logic**: Separate the "how" (transitions) from the "what" (initial data).
+- **Middleware Support**: Factories can be wrapped in middleware (like logging or persistence) that applies to every instance created from them.
+
+### 3. The `union()` Dispatcher
+The ultimate tool for complex branching states. It eliminates `switch` and `if/else` guarded blocks in your machine definitions.
+
+**Why it's better**:
+- **Isolated States**: Each state gets its own dedicated factory function.
+- **Recursive `next()`**: The `next` function provided to each branch is union-aware. Transitioning from `idle` to `loading` correctly narrows the machine to the `loading` transitions.
+
+### 4. Exhaustive `match()`
+A lightweight utility for consuming machines in your UI or business logic.
+
+**Why it's better**:
+- **Total Coverage**: Ensures you handled every possible state tag in your union.
+- **Type-Safe Payloads**: Automatically narrows the state data within each match branch.
+
+### 5. `UnionOf<F>` Type Utility
+Extracts the full union of all possible machine states from a `union` factory.
+
+**Why it's better**:
+- **DRY Types**: You only define your state mapping once. `UnionOf` ensures your UI components or helper functions stay in sync with your machine logic perfectly.
 
 ### 2. State Mapping (`States<M>`)
 The most ergonomic way to define tagged unions.
