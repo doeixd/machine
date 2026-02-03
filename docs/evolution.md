@@ -79,6 +79,20 @@ The most ergonomic way to define tagged unions.
 ### 5. Multi-State Dispatch (`union`)
 - **Rationale**: Building branching logic within a single factory often leads to complex `if/else` or `switch` blocks. `union()` provides a declarative way to route transitions to specific sub-factories based on the state tag.
 
+### 6. The "Double Call" Pattern
+You'll notice `union<State>()({ ... })` uses two function calls.
+- **Rationale**: This is a TypeScript limitation workaround. TS cannot partially infer generic parameters. By using a "wrapper" call to capture the `State` union (`union<State>()`), we allow the second call to **perfectly infer** all your transition factories without you ever having to type them manually.
+
+---
+
+## 🏗 Choosing the Right Factory
+
+| Function | Use Case | Resulting Object |
+| :--- | :--- | :--- |
+| **`machine()`** | One-off machine, single state shape. | A single `Machine` instance. |
+| **`factory()`** | Reusable blueprint, same shape, different initial values. | A function that creates machines. |
+| **`union()`** | Multi-state blueprint with different shapes per state. | A function that creates narrowed machines. |
+
 ## 🔄 Before & After: The Shift in Ergonomics
 
 The following comparisons show how the new utilities significantly reduce boilerplate while improving type safety.

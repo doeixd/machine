@@ -9,61 +9,62 @@ The `@doeixd/machine/minimal` submodule provides the most lightweight and high-p
 - **High Performance**: Flat objects with no runtime interpretation overhead.
 - **Immutable by Design**: Pure transitions return new states.
 
-## Basic Usage
+---
 
-The core of the minimal API is the `machine` factory.
+## Choosing your Tool: `machine()` vs `union()`
 
-```typescript
-import { machine } from "@doeixd/machine/minimal";
+- **`machine()`** is for **Single-State** shapes. Use it when your machine has a consistent set of data and transitions throughout its life (like a simple Counter).
+- **`union()`** is for **Multi-State** shapes. Use it when different states have different data and different transitions (like a Fetch Flow or Auth Flow).
 
-const counter = machine({ count: 0 }, (ctx, next) => ({
-  inc: () => next({ count: ctx.count + 1 }),
-  dec: () => next({ count: ctx.count - 1 }),
-  add: (n: number) => next({ count: ctx.count + n })
-}));
+---
 
-// Transitions are perfectly inferred on the resulting machine
-const result = counter.inc().add(5);
-console.log(result.count); // 6
-```
+## 🔬 Full Lifecycle Example
 
-## Type-State Programming (Multi-State Machines)
-
-The `union` function is the primary tool for building multi-state machines. It routes to different transition factories based on the `tag` of the context, and provides a recursive `next` function that can transition to any state in the union.
+The following example demonstrates the complete journey: from defining the state mapping to instantiating with `union()`, performing transitions, and finally consuming the state with `match()`.
 
 ```typescript
-import { union, tag, type States } from "@doeixd/machine/minimal";
+import { union, tag, type States, match, type UnionOf } from "@doeixd/machine/minimal";
 
-// 1. Define your States (ergonomic mapping)
+// 1. Define States (the mapping)
 type State = States<{
   idle: {},
   loading: { url: string },
   success: { data: string }
 }>;
 
-// 2. Create factories
-const idle = tag.factory<State>()('idle');
-const loading = tag.factory<State>()('loading');
-const success = tag.factory<State>()('success');
-
-// 3. Create the Union Factory
+// 2. Define the Machine Blueprint
 const fetchFlow = union<State>()({
   idle: (ctx, next) => ({
-    fetch: (url: string) => next(loading({ url }))
+    fetch: (url: string) => next(tag('loading', { url }))
   }),
   loading: (ctx, next) => ({
-    succeed: (data: string) => next(success({ data })),
-    fail: () => next(idle({}))
+    succeed: (data: string) => next(tag('success', { data })),
+    fail: () => next(tag('idle'))
   }),
   success: (ctx, next) => ({
-    reset: () => next(idle({}))
+    reset: () => next(tag('idle'))
   })
 });
 
-// 4. Usage - Transitions are perfectly narrowed
-const s1 = fetchFlow(idle({}));
-const s2 = s1.fetch('/api'); 
-const s3 = s2.succeed('result');
+// 3. Instantiate
+// Pass the initial context to the union factory to get your machine instance
+const machine = fetchFlow(tag('idle'));
+
+// 4. Transition
+const loadingMachine = machine.fetch('/api/data');
+console.log(loadingMachine.tag); // 'loading'
+
+// 5. Match (Consume)
+const ui = match(loadingMachine, {
+  idle: () => "Ready",
+  loading: (s) => `Loading ${s.url}...`,
+  success: (s) => `Data: ${s.data}`
+});
+
+// 6. Type Utility: UnionOf<F>
+// AuthMachine is the union of all possible machine shapes returned by the factory.
+// It is NOT a union of contexts; it's a union of (Context & Transitions).
+type FetchMachine = UnionOf<typeof fetchFlow>;
 ```
 
 ## Reusable Factories

@@ -57,6 +57,32 @@ You can pick, omit, or rename transitions to avoid collisions or hide implementa
 ...delegate(ctx, 'child', next, { rename: { inc: 'incrementChild' } })
 ```
 
+### 1. Delegation with `union()`
+Delegation works perfectly with multi-state machines. When the child state changes, the parent's reference to the child is updated, and the parent machine is automatically narrowed to the transitions of the new child state.
+
+```typescript
+import { machine, union, tag } from "@doeixd/machine/minimal";
+import { delegate } from "@doeixd/machine/delegate";
+
+// Define a multi-state child
+type ChildState = { tag: 'idle' } | { tag: 'active'; count: number };
+const childFlow = union<ChildState>()({
+  idle: (c, next) => ({ activate: () => next(tag('active', { count: 0 })) }),
+  active: (c, next) => ({ inc: () => next(tag('active', { count: c.count + 1 })) })
+});
+
+// Parent delegating to the union machine
+const parent = machine({ 
+  child: childFlow(tag('idle')) 
+}, (ctx, next) => ({
+  ...delegate(ctx, 'child', next)
+}));
+
+// Transitions flow through automatically!
+const s1 = parent.activate(); // Parent is now in 'active' child state
+const s2 = s1.inc();          // parent.child.count is 1
+```
+
 ## Universal Compatibility
 
 The `delegate` module is **shape-agnostic**. It works perfectly with:
