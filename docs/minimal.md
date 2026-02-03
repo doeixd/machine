@@ -4,28 +4,27 @@ The `@doeixd/machine/minimal` submodule provides the most lightweight and high-p
 
 ## Key Features
 
-- **Perfect Inference**: No manual generic type parameters required. Everything is derived from your code.
-- **Zero Boilerplate**: Minimal surface area with just one core factory.
-- **High Performance**: Flat objects with no runtime interpretation overhead.
-- **Immutable by Design**: Pure transitions return new states.
+### 1. Magic Type Inference
+The library provides perfect type inference through its factory utilities. While the core `machine()` primitive uses `any` in its internal feedback loop to break recursion, the higher-level `factory()` and `union()` utilities implement a named recursive pattern that ensures transitions return the exact machine type—**no `any` in your transition chains.**
 
 ---
 
-## Choosing your Tool: `machine()` vs `union()`
+## Choosing your Tool: `machine()` vs `factory()` vs `union()`
 
-- **`machine()`** is for **Single-State** shapes. Use it when your machine has a consistent set of data and transitions throughout its life (like a simple Counter).
-- **`union()`** is for **Multi-State** shapes. Use it when different states have different data and different transitions (like a Fetch Flow or Auth Flow).
+- **`machine()`**: The 10-line primitive. Great for one-off machines where you don't need to chain transitions or where `any` in the return type is acceptable.
+- **`factory()`**: The recommended way to build **Single-State** machines. Provides perfect inference for chained transitions.
+- **`union()`**: The recommended way to build **Multi-State** machines. Provides perfect inference across all states.
 
 ---
 
-## 🔬 Full Lifecycle Example
+## 🔬 Full Type-Safe Example
 
-The following example demonstrates the complete journey: from defining the state mapping to instantiating with `union()`, performing transitions, and finally consuming the state with `match()`.
+The following example shows how to build a multi-state machine with perfect type safety using `union()` and `States`.
 
 ```typescript
 import { union, tag, type States, match, type UnionOf } from "@doeixd/machine/minimal";
 
-// 1. Define States (the mapping)
+// 1. Define Contexts
 type State = States<{
   idle: {},
   loading: { url: string },
@@ -33,6 +32,7 @@ type State = States<{
 }>;
 
 // 2. Define the Machine Blueprint
+// Transitions are perfectly typed! No 'any' here.
 const fetchFlow = union<State>()({
   idle: (ctx, next) => ({
     fetch: (url: string) => next(tag('loading', { url }))
@@ -46,41 +46,31 @@ const fetchFlow = union<State>()({
   })
 });
 
-// 3. Instantiate
-// Pass the initial context to the union factory to get your machine instance
-const machine = fetchFlow(tag('idle'));
+// 3. Perfect Inference in Action
+const m = fetchFlow(tag('idle'));
 
-// 4. Transition
-const loadingMachine = machine.fetch('/api/data');
-console.log(loadingMachine.tag); // 'loading'
-
-// 5. Match (Consume)
-const ui = match(loadingMachine, {
-  idle: () => "Ready",
-  loading: (s) => `Loading ${s.url}...`,
-  success: (s) => `Data: ${s.data}`
-});
-
-// 6. Type Utility: UnionOf<F>
-// AuthMachine is the union of all possible machine shapes returned by the factory.
-// It is NOT a union of contexts; it's a union of (Context & Transitions).
-type FetchMachine = UnionOf<typeof fetchFlow>;
+// m.fetch() returns a Machine of the 'loading' type.
+// You can chain transitions without losing type safety.
+const end = m.fetch('/api').succeed('Done').reset();
+console.log(end.tag); // 'idle'
 ```
 
-## Reusable Factories
+## Perfect Single-State Inference
 
-Use the `factory` utility to create reusable machine blueprints.
+For simple machines, use `factory()` to avoid `any` in your transitions.
 
 ```typescript
 import { factory } from "@doeixd/machine/minimal";
 
 const counterFactory = factory<{ count: number }>()((ctx, next) => ({
   inc: () => next({ count: ctx.count + 1 }),
-  reset: () => next({ count: 0 })
+  noop: () => next(ctx)
 }));
 
-const a = counterFactory({ count: 10 });
-const b = counterFactory({ count: 100 });
+const counter = counterFactory({ count: 0 });
+
+// Perfect chaining!
+const val = counter.inc().inc().noop().count; // 2
 ```
 
 ## Pattern Matching

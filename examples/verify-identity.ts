@@ -6,7 +6,7 @@ console.log('--- Verifying minimal machine identity optimization ---');
 const counterMinimal = machine({ count: 0 }, (ctx, next) => ({
   noop: () => next(ctx),
   inc: () => next({ count: ctx.count + 1 })
-}));
+}) as const);
 
 const s1Minimal = counterMinimal.noop();
 console.log('Minimal noop same instance:', s1Minimal === counterMinimal); // Expected: true

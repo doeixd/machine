@@ -211,9 +211,16 @@ export function withChildren<
 // Re-exports from types.ts are enough
 
 export function factory<C extends object>() {
-  return <T>(
-    transitionFactory: (ctx: C, next: (context: C) => any) => T
-  ) => (context: C): C & T => machine(context, transitionFactory);
+  return <T extends Record<string, Function>>(
+    transitionFactory: (ctx: C, next: (context: C) => C & T) => T
+  ) => {
+    type M = C & T;
+    const resultFactory = (context: C): M => {
+      const next = (c: C) => resultFactory(c);
+      return machine(context, (ctx: any) => transitionFactory(ctx, next as any)) as any;
+    };
+    return resultFactory;
+  };
 }
 
 /**
@@ -224,45 +231,19 @@ export type UnionOf<F extends (...args: any[]) => any> = ReturnType<F>;
 /**
  * Creates a union factory that routes to different transition factories based on a tag.
  * This is the primary way to define multi-state machines (Type-States) in the minimal API.
- * 
- * @param factories - A map of tags to transition factories.
- * @returns A single factory function that produces the correct machine based on the input context's tag.
- * 
- * @example
- * const auth = union({
- *   idle: (ctx, next) => ({ login: () => next({ tag: 'loggedIn', user: 'alice' }) }),
- *   loggedIn: (ctx, next) => ({ logout: () => next({ tag: 'idle' }) })
- * });
- * 
- * const m = auth({ tag: 'idle' });
- * const next = m.login(); // Transition to loggedIn state
- */
-/**
- * Creates a union factory that routes to different transition factories based on a tag.
- * This is the primary way to define multi-state machines (Type-States) in the minimal API.
- * 
- * @example
- * const auth = union<AuthState>()({
- *   idle: (ctx, next) => ({ login: () => next({ tag: 'loggedIn', user: 'alice' }) }),
- *   loggedIn: (ctx, next) => ({ logout: () => next({ tag: 'idle' }) })
- * });
- * 
- * const m = auth({ tag: 'idle' });
- * const next = m.login(); // Transition to loggedIn state
  */
 export function union<C extends Tagged>() {
   return <F extends { [K in TagOf<C>]: (ctx: Extract<C, { tag: K }>, next: (c: C) => any) => any }>(
     factories: F
   ) => {
-    type MachineMap = {
-      [K in TagOf<C> & keyof F]: F[K] extends (ctx: any, next: any) => infer T
-      ? Extract<C, { tag: K }> & T
-      : never
-    };
+    type MachineUnion = {
+      [K in TagOf<C> & keyof F]: Extract<C, { tag: K }> & ReturnType<F[K]>
+    }[TagOf<C> & keyof F];
 
-    const resultFactory = <T extends C>(context: T): MachineMap[T['tag'] & keyof MachineMap] => {
+    const resultFactory = <T extends C>(context: T): Extract<MachineUnion, { tag: T['tag'] }> => {
       const factoryFn = (factories as any)[(context as any).tag];
-      return machine(context as any, (ctx: any, _next: any) => factoryFn(ctx as any, resultFactory as any)) as any;
+      const next = (c: C) => resultFactory(c as any);
+      return machine(context as any, (ctx: any) => factoryFn(ctx as any, next as any)) as any;
     };
 
     return resultFactory;
