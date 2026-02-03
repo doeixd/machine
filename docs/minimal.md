@@ -139,22 +139,22 @@ const m = machine({ count: 0 } as Counter, (ctx, next: NextOf<Counter>) => ({
 
 ---
 
-## 🏛️ Object-Oriented Pattern (`BaseMachine`)
+## 🏛️ Object-Oriented Pattern (`Machine`)
 
-For users who prefer classes, the `BaseMachine` class provides a high-performance alternative that preserves the "flattened" type-state feel.
+For users who prefer classes, the `Machine` class provides a high-performance alternative that preserves the "flattened" type-state feel.
 
-### Why use `BaseMachine`?
+### Why use `Machine`?
 - **Built-in Inference**: No need for `factory()` or `Blueprint`; class members provide the scaffolding.
 - **Identity Optimization**: The `this.next()` method automatically returns `this` if the context hasn't changed.
 - **Flat Access**: You can access context properties directly on `this`.
 
 ### Example
 ```typescript
-import { BaseMachine } from "@doeixd/machine/minimal";
+import { Machine } from "@doeixd/machine/minimal";
 
 interface State { count: number }
 
-class Counter extends BaseMachine<State> {
+class Counter extends Machine<State> {
   // Use 'declare' to tell TS these properties exist on 'this'
   // (they are mapped from context at runtime)
   declare count: number;

@@ -9,7 +9,7 @@
 /**
  * A state machine combining context (state data) with transitions (methods).
  */
-export type Machine<C extends object, T> = C & T;
+export type StateMachine<C extends object, T> = C & T;
 
 // Re-export utilities
 export * from './types';
@@ -49,21 +49,34 @@ export function machine<C extends object, T>(
 }
 
 /**
- * A base class for state machines. 
- * Provides referential identity optimization via the 'next' method.
+ * A base class for Object-Oriented state machines.
+ * 
+ * This class provides a bridge between traditional class-based programming 
+ * and high-performance type-state transitions. It includes the referential 
+ * identity optimization: if a transition doesn't change the data, it returns 'this'.
  * 
  * @example
- * class Counter extends BaseMachine<{ count: number }> {
- *   declare count: number; // Use 'declare' for flat access
- *   inc() { return this.next({ count: this.count + 1 }); }
+ * interface State { count: number }
+ * 
+ * class Counter extends Machine<State> {
+ *   declare count: number; // Mapping context properties for flat access
+ *   
+ *   inc() {
+ *     return this.next({ count: this.count + 1 });
+ *   }
  * }
  */
-export abstract class BaseMachine<C extends object> {
+export abstract class Machine<C extends object> {
   constructor(public readonly context: C) {
     Object.assign(this, context);
   }
 
-  protected next<T extends BaseMachine<C>>(this: T, newContext: C): T {
+  /**
+   * Produces the next state instance.
+   * If the newContext is referentially identical to the current context,
+   * it returns 'this', avoiding an allocation.
+   */
+  protected next<T extends Machine<C>>(this: T, newContext: C): T {
     return newContext === (this.context as any) ? this : new (this.constructor as any)(newContext);
   }
 }
