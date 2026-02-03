@@ -88,7 +88,7 @@ export namespace tag {
    * @param name - The tag name
    * @example const idle = tag.factory<{ count: number }>('idle');
    */
-  export function factory<C extends object, T extends object = {}>(name: string): (props: C) => { readonly tag: string } & C & T;
+  export function factory<C extends object, T extends object = {}, K extends string = string>(name: K): (props: C) => { readonly tag: K } & C & T;
   /**
    * Creates a curried tag factory, ideal for use with the States utility.
    * @example const state = tag.factory<AppState>()('idle')({ count: 0 });
