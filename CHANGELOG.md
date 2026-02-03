@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.3.0](https://github.com/doeixd/machine/compare/v1.2.1...v1.3.0) (2026-02-03)
+
+
+### Features
+
+* implement referential identity optimization for no-op transitions ([8bd7f5a](https://github.com/doeixd/machine/commit/8bd7f5a3e654ac7c963593e8618ce564ac5f96e0))
+
 ### [1.2.1](https://github.com/doeixd/machine/compare/v1.2.0...v1.2.1) (2026-02-03)
 
 
