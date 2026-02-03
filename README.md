@@ -60,6 +60,7 @@ type Machine<C extends object> = {
 
 **Read more about our core principles:** [ 📖 Core Principles Guide ](./docs/principles.md)
 **Learn about our recent refinements and workflows:** [ 🚀 Evolution & Workflows ](./docs/evolution.md)
+**Prefer zero dependencies and no abstractions?** [ 🧘 The Minimalist's Manifesto (YAGNI) ](./docs/yagni.md)
 **Explore our utility helpers (tag, isState, tag.factory, States):** [ 🏷️ Tagged Helpers & Utilities ](./docs/tagged-helpers.md)
 
 ## Choosing the Right Pattern
