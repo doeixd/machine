@@ -137,45 +137,6 @@ const m = machine({ count: 0 } as Counter, (ctx, next: NextOf<Counter>) => ({
 }));
 ```
 
----
-
-## 🏛️ Object-Oriented Pattern (`Machine`)
-
-For users who prefer classes, the `Machine` class provides a high-performance alternative that preserves the "flattened" type-state feel.
-
-### Why use `Machine`?
-- **Built-in Inference**: No need for `factory()` or `Blueprint`; class members provide the scaffolding.
-- **Identity Optimization**: The `this.next()` method automatically returns `this` if the context hasn't changed.
-- **Flat Access**: You can access context properties directly on `this`.
-
-### Example
-```typescript
-import { Machine } from "@doeixd/machine/minimal";
-
-interface State { count: number }
-
-class Counter extends Machine<State> {
-  // Use 'declare' to tell TS these properties exist on 'this'
-  // (they are mapped from context at runtime)
-  declare count: number;
-
-  inc() {
-    return this.next({ count: this.count + 1 });
-  }
-
-  reset() {
-    return this.next({ count: 0 });
-  }
-}
-
-const c = new Counter({ count: 0 });
-const next = c.inc().inc(); 
-console.log(next.count); // 2
-```
-
-> [!IMPORTANT]
-> Always use the `declare` keyword for context properties. If you use `count!: number` without `declare`, newer versions of TypeScript/JavaScript might initialize the field to `undefined` after the base constructor runs, overwriting your data.
-
 ## Pattern Matching
 
 The minimal submodule includes a lightweight `match` utility for exhaustive checking of tagged unions.
