@@ -269,7 +269,10 @@ const formFlow = union<
   }),
   submitting: (ctx, next) => ({
     succeed: () => next({ tag: 'success' }),
-    fail: (message: string) => next({ tag: 'editing', ...ctx, errors: [{ field: 'form', message }] })
+    fail: (message: string) => {
+      const { tag: _, ...data } = ctx;
+      return next({ tag: 'editing', ...data, errors: [{ field: 'form', message }] });
+    }
   }),
   success: (ctx, next) => ({
     reset: () => next({ tag: 'editing', email: '', password: '', confirmPassword: '', errors: [] })

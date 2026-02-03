@@ -17,6 +17,32 @@ The library provides perfect type inference through its factory utilities. While
 
 ---
 
+## 🧩 Under the Hood: Generics
+
+The `machine()` function uses two primary generics to define its surface area:
+
+- **`C` (Context)**: The "State Data" (e.g., `{ count: number }`).
+- **`T` (Transitions)**: The "Actions" or methods returned by your factory (e.g., `{ inc: () => ... }`).
+
+While the library is designed for automatic inference, you can pass these generics manually for ultra-strict control:
+
+```typescript
+import { machine } from "@doeixd/machine/minimal";
+
+interface State { count: number }
+interface Actions { inc: () => State & Actions }
+
+// Manual passing: machine<C, T>(context, factory)
+const m = machine<State, Actions>({ count: 0 }, (ctx, next) => ({
+  inc: () => next({ count: ctx.count + 1 })
+}));
+```
+
+> [!TIP]
+> Manual passing is rarely needed if you use `factory()` or `Blueprint`, as they handle the generic coordination for you.
+
+---
+
 ## 🔬 Full Type-Safe Example
 
 The following example shows how to build a multi-state machine with perfect type safety using `union()` and `States`.
@@ -72,6 +98,83 @@ const counter = counterFactory({ count: 0 });
 // Perfect chaining!
 const val = counter.inc().inc().noop().count; // 2
 ```
+
+---
+
+## 🛠️ Explicit Typing (Breaking the Loop)
+
+If you prefer using the raw 10-line `machine()` primitive but want to avoid `any` in your transitions, you can "break the loop" by explicitly typing your blueprint. We provide two lightweight helpers for this:
+
+### 1. `Blueprint<C, T>`
+Defines the factory function signature upfront.
+
+```typescript
+import { machine, type Blueprint } from "@doeixd/machine/minimal";
+
+interface State { count: number }
+interface Actions { inc: () => State & Actions }
+
+// Define the logic separately
+const counter: Blueprint<State, Actions> = (ctx, next) => ({
+  inc: () => next({ count: ctx.count + 1 })
+});
+
+// Pass it to machine()
+const m = machine({ count: 0 }, counter);
+m.inc().inc().count; // Perfectly typed!
+```
+
+### 2. `NextOf<M>`
+Explicitly types the `next` callback within an inline factory.
+
+```typescript
+import { machine, type NextOf } from "@doeixd/machine/minimal";
+
+type Counter = { count: number } & { inc: () => Counter };
+
+const m = machine({ count: 0 } as Counter, (ctx, next: NextOf<Counter>) => ({
+  inc: () => next({ count: ctx.count + 1 })
+}));
+```
+
+---
+
+## 🏛️ Object-Oriented Pattern (`BaseMachine`)
+
+For users who prefer classes, the `BaseMachine` class provides a high-performance alternative that preserves the "flattened" type-state feel.
+
+### Why use `BaseMachine`?
+- **Built-in Inference**: No need for `factory()` or `Blueprint`; class members provide the scaffolding.
+- **Identity Optimization**: The `this.next()` method automatically returns `this` if the context hasn't changed.
+- **Flat Access**: You can access context properties directly on `this`.
+
+### Example
+```typescript
+import { BaseMachine } from "@doeixd/machine/minimal";
+
+interface State { count: number }
+
+class Counter extends BaseMachine<State> {
+  // Use 'declare' to tell TS these properties exist on 'this'
+  // (they are mapped from context at runtime)
+  declare count: number;
+
+  inc() {
+    return this.next({ count: this.count + 1 });
+  }
+
+  reset() {
+    return this.next({ count: 0 });
+  }
+}
+
+const c = new Counter({ count: 0 });
+const next = c.inc().inc(); 
+console.log(next.count); // 2
+```
+
+> [!IMPORTANT]
+> Always use the `declare` keyword for context properties. If you use `count!: number` without `declare`, newer versions of TypeScript/JavaScript might initialize the field to `undefined` after the base constructor runs, overwriting your data.
 
 ## Pattern Matching
 

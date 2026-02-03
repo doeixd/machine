@@ -15,6 +15,18 @@ export type Machine<C extends object, T> = C & T;
 export * from './types';
 import { type Tagged, type TagOf, type Cleanup } from './types';
 
+/**
+ * Helper to type the 'next' callback for a specific machine shape.
+ * @example next: NextOf<MyMachine>
+ */
+export type NextOf<M> = (context: any) => M;
+
+/**
+ * A blueprint for a machine's transitions. 
+ * Use this to explicitly type the factory function for raw 'machine()' calls.
+ */
+export type Blueprint<C, T> = (ctx: C, next: (context: C) => C & T) => T;
+
 // ============================================================================
 // CORE: machine()
 // ============================================================================
@@ -34,6 +46,26 @@ export function machine<C extends object, T>(
   const next = (newContext: C): any => (newContext === context ? self : machine(newContext, factory));
   self = Object.assign({}, context, factory(context, next)) as C & T;
   return self;
+}
+
+/**
+ * A base class for state machines. 
+ * Provides referential identity optimization via the 'next' method.
+ * 
+ * @example
+ * class Counter extends BaseMachine<{ count: number }> {
+ *   declare count: number; // Use 'declare' for flat access
+ *   inc() { return this.next({ count: this.count + 1 }); }
+ * }
+ */
+export abstract class BaseMachine<C extends object> {
+  constructor(public readonly context: C) {
+    Object.assign(this, context);
+  }
+
+  protected next<T extends BaseMachine<C>>(this: T, newContext: C): T {
+    return newContext === (this.context as any) ? this : new (this.constructor as any)(newContext);
+  }
 }
 
 // ============================================================================
