@@ -125,6 +125,24 @@
       "require": "./dist/cjs/production/extract.js",
       "import": "./dist/esm/production/extract.js"
     },
+    "./minimal": {
+      "types": "./dist/types/minimal.d.ts",
+      "development": {
+        "require": "./dist/cjs/development/minimal.js",
+        "import": "./dist/esm/development/minimal.js"
+      },
+      "require": "./dist/cjs/production/minimal.js",
+      "import": "./dist/esm/production/minimal.js"
+    },
+    "./delegate": {
+      "types": "./dist/types/delegate.d.ts",
+      "development": {
+        "require": "./dist/cjs/development/delegate.js",
+        "import": "./dist/esm/development/delegate.js"
+      },
+      "require": "./dist/cjs/production/delegate.js",
+      "import": "./dist/esm/production/delegate.js"
+    },
     "./react": {
       "types": "./dist/types/entry-react.d.ts",
       "development": {
@@ -142,6 +160,12 @@
       ],
       "extract": [
         "./dist/types/extract.d.ts"
+      ],
+      "minimal": [
+        "./dist/types/minimal.d.ts"
+      ],
+      "delegate": [
+        "./dist/types/delegate.d.ts"
       ],
       "react": [
         "./dist/types/entry-react.d.ts"

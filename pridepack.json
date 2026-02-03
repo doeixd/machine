@@ -4,6 +4,8 @@
     ".": "./src/index.ts",
     "./core": "./src/core.ts",
     "./extract": "./src/extract.ts",
+    "./minimal": "./src/minimal.ts",
+    "./delegate": "./src/delegate.ts",
     "./react": "./src/entry-react.ts"
   },
   "external": [

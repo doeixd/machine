@@ -1079,3 +1079,16 @@ export {
   isContextBound,
   type ContextBoundMachine
 } from './context-bound';
+
+// =============================================================================
+// SECTION: MINIMAL & DELEGATED API
+// =============================================================================
+
+export * as minimal from './minimal';
+export * as delegate from './delegate';
+
+// =============================================================================
+// SECTION: TAGGED HELPERS & UTILITIES
+// =============================================================================
+
+export * from './types';

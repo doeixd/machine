@@ -59,6 +59,7 @@ type Machine<C extends object> = {
 **Flexibility**: Unlike rigid FSM implementations, you can choose your level of immutability. Want to mutate? You can. Want pure functions? You can. Want compile-time state validation? Type-State Programming gives you that.
 
 **Read more about our core principles:** [ 📖 Core Principles Guide ](./docs/principles.md)
+**Explore our utility helpers:** [ 🏷️ Tagged Helpers & Utilities ](./docs/tagged-helpers.md)
 
 ## Choosing the Right Pattern
 
@@ -2379,6 +2380,53 @@ createMultiMachine<C extends object, T extends MultiMachineBase<C>>(
   getDiscriminant?: (context: C) => string  // Optional accessor function - refactor-safe
 ): C & T
 ```
+
+
+## 📦 Submodules
+
+For specialized use cases, you can import from specific submodules to reduce bundle size or use advanced inference features:
+
+- **`@doeixd/machine/minimal`**: Lightweight API with "magic" type inference. [📖 
+Guide](./docs/minimal.md)
+- **`@doeixd/machine/delegate`**: Utilities for composing machines via delegation. [📖 
+Guide](./docs/delegate.md)
+- **`@doeixd/machine/react`**: React integration (hooks and components).
+- **`@doeixd/machine/extract`**: Build-time statechart extraction tools.
+
+## 🚀 Minimal API & Perfect Inference
+
+The `@doeixd/machine/minimal` submodule is optimized for **Type-State Programming** with zero boilerplate. It features "magic" type inference, meaning you almost never have to write explicit generic types.
+
+```typescript
+import { machine } from "@doeixd/machine/minimal";
+
+// Transitions (inc, add) are automatically inferred!
+const counter = machine({ count: 0 }, (ctx, next) => ({
+  inc: () => next({ count: ctx.count + 1 }),
+  add: (n: number) => next({ count: ctx.count + n })
+}));
+
+const result = counter.inc().add(10);
+console.log(result.count); // 11
+```
+
+## 🤝 Machine Delegation
+
+Use `@doeixd/machine/delegate` to compose complex machines by delegating transitions to child machines.
+
+```typescript
+import { machine } from "@doeixd/machine/minimal";
+import { delegate } from "@doeixd/machine/delegate";
+
+const authMachine = machine({ status: 'out' }, (ctx, next) => ({
+  login: () => next({ status: 'in' })
+}));
+
+const rootMachine = machine({ auth: authMachine }, (ctx, next) => ({
+  // Automatically delegate 'login' to the 'auth' child!
+  ...delegate(ctx, 'auth', next)
+}));
+
 
 ## License
 
