@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.2.0](https://github.com/doeixd/machine/compare/v1.1.0...v1.2.0) (2026-02-03)
+
+
+### Features
+
+* add States ergonomic type utility and tag helpers documentation ([dd92071](https://github.com/doeixd/machine/commit/dd9207130f5b2d6f6ef4cf49cf6154446a5544c9))
+
 ## [1.1.0](https://github.com/doeixd/machine/compare/v1.0.3...v1.1.0) (2026-02-03)
 
 
