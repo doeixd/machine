@@ -384,13 +384,15 @@ export function createMachine<C extends object, M extends BaseMachine<C>>(
 
 export function createMachine(context: any, fnsOrFactory: any): any {
   if (typeof fnsOrFactory === 'function') {
+    let self: any;
     let transitions: any;
     const transition = (newContext: any) => {
-      return createMachine(newContext, transitions);
+      return newContext === context ? self : createMachine(newContext, transitions);
     };
     transitions = fnsOrFactory(transition);
 
-    return attachTransitions(Object.assign({ context }, transitions), transitions);
+    self = attachTransitions(Object.assign({ context }, transitions), transitions);
+    return self;
   }
 
   // If fns is a machine (has context property), extract just the transition functions

@@ -30,9 +30,10 @@ export function machine<C extends object, T>(
   context: C,
   factory: (ctx: C, next: (context: C) => any) => T
 ): C & T {
-  const next = (newContext: C) => machine(newContext, factory);
-  const transitions = factory(context, next);
-  return Object.assign({}, context, transitions) as C & T;
+  let self!: C & T;
+  const next = (newContext: C): any => (newContext === context ? self : machine(newContext, factory));
+  self = Object.assign({}, context, factory(context, next)) as C & T;
+  return self;
 }
 
 // ============================================================================

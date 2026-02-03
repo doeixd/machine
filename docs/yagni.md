@@ -27,8 +27,10 @@ function machine<C extends object, T extends object>(
   context: C,
   factory: (ctx: C, next: (c: C) => C & T) => T
 ): C & T {
-  const next = (c: C): C & T => machine(c, factory);
-  return Object.assign({}, context, factory(context, next));
+  let self!: C & T;
+  const next = (c: C): C & T => (c === context ? self : machine(c, factory));
+  self = Object.assign({}, context, factory(context, next));
+  return self;
 }
 ```
 
@@ -394,8 +396,10 @@ export function machine<C extends object, T extends object>(
   context: C,
   factory: (ctx: C, next: (c: C) => C & T) => T
 ): C & T {
-  const next = (c: C): C & T => machine(c, factory);
-  return Object.assign({}, context, factory(context, next));
+  let self!: C & T;
+  const next = (c: C): C & T => (c === context ? self : machine(c, factory));
+  self = Object.assign({}, context, factory(context, next));
+  return self;
 }
 
 // Types
@@ -618,8 +622,10 @@ function machine<C extends object, T extends object>(
   context: C,
   factory: (ctx: C, next: (c: C) => C & T) => T
 ): C & T {
-  const next = (c: C): C & T => machine(c, factory);
-  return Object.assign({}, context, factory(context, next));
+  let self!: C & T;
+  const next = (c: C): C & T => (c === context ? self : machine(c, factory));
+  self = Object.assign({}, context, factory(context, next));
+  return self;
 }
 ```
 
