@@ -59,7 +59,7 @@ type Machine<C extends object> = {
 **Flexibility**: Unlike rigid FSM implementations, you can choose your level of immutability. Want to mutate? You can. Want pure functions? You can. Want compile-time state validation? Type-State Programming gives you that.
 
 **Read more about our core principles:** [ 📖 Core Principles Guide ](./docs/principles.md)
-**Learn about our recent refinements:** [ 🚀 Evolution of Machine ](./docs/evolution.md)
+**Learn about our recent refinements and workflows:** [ 🚀 Evolution & Workflows ](./docs/evolution.md)
 **Explore our utility helpers (tag, isState, tag.factory, States):** [ 🏷️ Tagged Helpers & Utilities ](./docs/tagged-helpers.md)
 
 ## Choosing the Right Pattern

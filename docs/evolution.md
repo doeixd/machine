@@ -188,7 +188,90 @@ const fetch = union<State>()({
 
 ---
 
-## 🛠 Centralization and Type Safety
+## � Common Workflows
+
+Here is how the new primitives come together to solve common architectural challenges.
+
+### Workflow 1: Simple Component State
+For isolated features with a single data shape, use `machine()`. It’s low-overhead and perfectly inferred.
+
+```typescript
+import { machine } from '@doeixd/machine/minimal';
+
+const toggle = machine({ on: false }, (ctx, next) => ({
+  flip: () => next({ on: !ctx.on })
+}));
+
+const s1 = toggle.flip(); // on: true
+```
+
+### Workflow 2: Multi-Step Flow (The "Golden Path")
+For complex processes, combine `States`, `tag.factory`, and `union`. This is the most ergonomic and type-safe pattern in the library.
+
+```typescript
+import { union, tag, type States, match } from '@doeixd/machine/minimal';
+
+// 1. Define
+type State = States<{
+  idle: {},
+  loading: { url: string },
+  done: { data: string }
+}>;
+
+const loading = tag.factory<State>()('loading');
+const done = tag.factory<State>()('done');
+const idle = tag.factory<State>()('idle');
+
+const flow = union<State>()({
+  idle: (ctx, next) => ({
+    start: (url: string) => next(loading({ url }))
+  }),
+  loading: (ctx, next) => ({
+    finish: (data: string) => next(done({ data }))
+  }),
+  done: (ctx, next) => ({
+    reset: () => next(idle({}))
+  })
+});
+
+// 2. Use
+let state = flow(idle({}));
+state = state.start('/api').finish('result');
+
+// 3. Consume
+const message = match(state, {
+  idle: () => 'Ready',
+  loading: s => `Loading ${s.url}`,
+  done: s => `Got: ${s.data}`
+});
+```
+
+### Workflow 3: Nested Composition
+Use `delegate()` to scale up by composing small, focused machines into a larger parent.
+
+```typescript
+import { machine } from '@doeixd/machine/minimal';
+import { delegate } from '@doeixd/machine/delegate';
+
+const child = machine({ count: 0 }, (ctx, next) => ({
+  inc: () => next({ count: ctx.count + 1 })
+}));
+
+const parent = machine({ 
+  name: 'App',
+  child // Parent holds child machine in context
+}, (ctx, next) => ({
+  // Surface child's 'inc' transition directly on the parent
+  ...delegate(ctx, 'child', next)
+}));
+
+const result = parent.inc();
+console.log(result.child.count); // 1
+```
+
+---
+
+## �🛠 Centralization and Type Safety
 
 We consolidated the foundations into `src/types.ts`. This ensures:
 1. **Consistency**: `isState(m, 'tag')` works regardless of which module you use.
