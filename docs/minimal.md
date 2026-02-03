@@ -32,34 +32,38 @@ console.log(result.count); // 6
 The `union` function is the primary tool for building multi-state machines. It routes to different transition factories based on the `tag` of the context, and provides a recursive `next` function that can transition to any state in the union.
 
 ```typescript
-import { union } from "@doeixd/machine/minimal";
+import { union, tag, type States } from "@doeixd/machine/minimal";
 
-// 1. Define your States
-type State = 
-  | { tag: 'idle' }
-  | { tag: 'loading'; url: string }
-  | { tag: 'success'; data: string };
+// 1. Define your States (ergonomic mapping)
+type State = States<{
+  idle: {},
+  loading: { url: string },
+  success: { data: string }
+}>;
 
-// 2. Create the Union Factory
+// 2. Create factories
+const idle = tag.factory<State>()('idle');
+const loading = tag.factory<State>()('loading');
+const success = tag.factory<State>()('success');
+
+// 3. Create the Union Factory
 const fetchFlow = union<State>()({
   idle: (ctx, next) => ({
-    fetch: (url: string) => next({ tag: 'loading', url })
+    fetch: (url: string) => next(loading({ url }))
   }),
   loading: (ctx, next) => ({
-    succeed: (data: string) => next({ tag: 'success', data }),
-    fail: () => next({ tag: 'idle' })
+    succeed: (data: string) => next(success({ data })),
+    fail: () => next(idle({}))
   }),
   success: (ctx, next) => ({
-    reset: () => next({ tag: 'idle' })
+    reset: () => next(idle({}))
   })
 });
 
-// 3. Usage - Transitions are perfectly narrowed
-const idle = fetchFlow({ tag: 'idle' });
-const loading = idle.fetch('/api'); 
-
-// loading.fetch('/other'); // ❌ Error: fetch does not exist on 'loading' state
-const success = loading.succeed('result');
+// 4. Usage - Transitions are perfectly narrowed
+const s1 = fetchFlow(idle({}));
+const s2 = s1.fetch('/api'); 
+const s3 = s2.succeed('result');
 ```
 
 ## Reusable Factories
