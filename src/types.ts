@@ -72,6 +72,38 @@ export function tag<T extends string, O extends object>(
 }
 
 /**
+ * Namespace for tag factory utility.
+ */
+export namespace tag {
+  /**
+   * Creates a pre-bound tag factory for a specific state.
+   * 
+   * @typeParam C - Context (data) type
+   * @typeParam T - Transitions type (optional, for machine return types)
+   * @param name - The tag name for this state
+   * @returns A function that takes context data and returns a tagged object
+   * 
+   * @typeParam C - Context (data) type
+   * @typeParam T - Transitions type (optional)
+   * @param name - The tag name
+   * @example const idle = tag.factory<{ count: number }>('idle');
+   */
+  export function factory<C extends object, T extends object = {}>(name: string): (props: C) => { readonly tag: string } & C & T;
+  /**
+   * Creates a curried tag factory, ideal for use with the States utility.
+   * @example const state = tag.factory<AppState>()('idle')({ count: 0 });
+   */
+  export function factory<C extends object, T extends object = {}>(): <K extends string>(name: K) => (props: Omit<Extract<C, { tag: K }>, 'tag'>) => (Extract<C, { tag: K }> extends never ? { readonly tag: K } & C : Extract<C, { tag: K }>) & T;
+
+  export function factory(name?: string) {
+    if (name) {
+      return (props: any) => tag(name, props);
+    }
+    return (name: string) => (props: any) => tag(name, props);
+  }
+}
+
+/**
  * Type guard to check if a machine or object is in a specific state.
  */
 export function isState<M extends Tagged, Tag extends TagOf<M>>(

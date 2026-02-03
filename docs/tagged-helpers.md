@@ -26,6 +26,28 @@ You can also use it to ensure an existing object is treated as a literal tag.
 const state = tag({ tag: 'success', data: 'ok' });
 ```
 
+### `tag.factory()`
+
+Creates a reusable factory for a specific tagged state. This is highly ergonomic when you need to create the same state multiple times, particularly inside machine transitions.
+
+```typescript
+import { tag, type States } from "@doeixd/machine";
+
+// 1. Define your states
+type AppState = States<{
+  idle: { count: number };
+  active: { count: number; user: string };
+}>;
+
+// 2. Create factories (using the curried version for unions)
+const idle = tag.factory<AppState>()('idle');
+const active = tag.factory<AppState>()('active');
+
+// 3. Use in transitions
+const nextState = idle({ count: 10 }); 
+// { tag: 'idle', count: 10 }
+```
+
 ---
 
 ## `isState()`

@@ -1,0 +1,1 @@
+examples/reproduce-tag-multi.ts(12,7): error TS2741: Property 'count' is missing in type '{}' but required in type 'Omit<{ readonly tag: "idle"; } & { count: number; }, "tag">'.

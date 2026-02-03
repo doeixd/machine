@@ -1,0 +1,11 @@
+examples/verify-tag-factory.ts(16,17): error TS2345: Argument of type '{ count: number; }' is not assignable to parameter of type 'AppState'.
+  Type '{ count: number; }' is not assignable to type '{ readonly tag: "active"; } & { count: number; name: string; }'.
+    Property 'tag' is missing in type '{ count: number; }' but required in type '{ readonly tag: "active"; }'.
+examples/verify-tag-factory.ts(19,19): error TS2345: Argument of type '{ count: number; name: string; }' is not assignable to parameter of type 'AppState'.
+  Type '{ count: number; name: string; }' is not assignable to type '{ readonly tag: "active"; } & { count: number; name: string; }'.
+    Property 'tag' is missing in type '{ count: number; name: string; }' but required in type '{ readonly tag: "active"; }'.
+examples/verify-tag-factory.ts(22,18): error TS2345: Argument of type '{ message: string; }' is not assignable to parameter of type 'AppState'.
+  Type '{ message: string; }' is not assignable to type '{ readonly tag: "error"; } & { message: string; }'.
+    Property 'tag' is missing in type '{ message: string; }' but required in type '{ readonly tag: "error"; }'.
+examples/verify-tag-factory.ts(26,1): error TS2578: Unused '@ts-expect-error' directive.
+examples/verify-tag-factory.ts(29,1): error TS2578: Unused '@ts-expect-error' directive.
