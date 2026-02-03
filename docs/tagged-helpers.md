@@ -90,3 +90,20 @@ import { union, type UnionOf } from "@doeixd/machine/minimal";
 const auth = union<State>()({ ... });
 type AuthMachine = UnionOf<typeof auth>;
 ```
+
+### `States<M>`
+A powerful utility to define a tagged union from a mapping of tags to data objects. This is much more ergonomic than writing unions manually.
+
+```typescript
+import { type States } from "@doeixd/machine";
+
+type PickMode = States<{
+  idle: {},
+  active: { isCloseMode: boolean; timeoutId: number }
+}>;
+
+// Explicit union for comparison:
+// type PickMode = 
+//   | { readonly tag: "idle" }
+//   | { readonly tag: "active"; isCloseMode: boolean; timeoutId: number };
+```

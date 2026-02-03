@@ -23,6 +23,18 @@ export type Tagged<T extends string = string> = { readonly tag: T };
 export type TagOf<T extends Tagged> = T['tag'];
 
 /**
+ * Utility to define a union of tagged states from a mapping type.
+ * @example
+ * type PickMode = States<{
+ *   idle: {},
+ *   active: { isCloseMode: boolean; timeoutId: number }
+ * }>;
+ */
+export type States<M extends Record<string, object>> = {
+  [K in keyof M]: { readonly tag: K } & M[K]
+}[keyof M];
+
+/**
  * Cleanup function returned from onEnter.
  */
 export type Cleanup = () => void;
