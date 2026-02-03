@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.1.0](https://github.com/doeixd/machine/compare/v1.0.3...v1.1.0) (2026-02-03)
+
+
+### Features
+
+* refine type inference, consolidate architecture, and add submodules ([5ccc250](https://github.com/doeixd/machine/commit/5ccc25016075279e0bc90d5d5cf2fa4433a144f5))
+
 ### [1.0.3](https://github.com/doeixd/machine/compare/v1.0.2...v1.0.3) (2026-01-30)
 
 ### [1.0.2](https://github.com/doeixd/machine/compare/v1.0.1...v1.0.2) (2026-01-13)
