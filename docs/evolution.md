@@ -39,6 +39,86 @@ The most ergonomic way to define tagged unions.
 ### 5. Multi-State Dispatch (`union`)
 - **Rationale**: Building branching logic within a single factory often leads to complex `if/else` or `switch` blocks. `union()` provides a declarative way to route transitions to specific sub-factories based on the state tag.
 
+## 🔄 Before & After: The Shift in Ergonomics
+
+The following comparisons show how the new utilities significantly reduce boilerplate while improving type safety.
+
+### 1. Defining States
+The `States<M>` utility converts a flat mapping into a strict tagged union, making the intent much clearer.
+
+````carousel
+```typescript
+// ❌ BEFORE: Manual Union Boilerplate
+type AuthState = 
+  | { readonly tag: "out" }
+  | { readonly tag: "in"; user: string; role: 'admin' | 'user' }
+  | { readonly tag: "error"; message: string };
+```
+<!-- slide -->
+```typescript
+// ✅ AFTER: Ergonomic Mapping
+type AuthState = States<{
+  out: {},
+  in: { user: string; role: 'admin' | 'user' },
+  error: { message: string }
+}>;
+```
+````
+
+### 2. Creating State Objects
+`tag.factory` removes the need for magic strings and manual property spreading in your transitions.
+
+````carousel
+```typescript
+// ❌ BEFORE: Manual Tagging
+login: (user: string) => next({ 
+  tag: 'in', 
+  user, 
+  role: 'user' 
+})
+```
+<!-- slide -->
+```typescript
+// ✅ AFTER: Semantic Factories
+const authenticated = tag.factory<AuthState>()('in');
+
+login: (user: string) => next(authenticated({ 
+  user, 
+  role: 'user' 
+}))
+```
+````
+
+### 3. Multi-State Branching
+The `union` factory replaces manual routing logic with a declarative, narrowed structure.
+
+````carousel
+```typescript
+// ❌ BEFORE: Manual Routing
+const fetch = machine(ctx, (c, next) => {
+  if (isState(c, 'idle')) {
+    return { run: () => next(...) };
+  }
+  if (isState(c, 'loading')) {
+    return { stop: () => next(...) };
+  }
+  return {};
+});
+```
+<!-- slide -->
+```typescript
+// ✅ AFTER: Declarative Union
+const fetch = union<State>()({
+  idle: (c, next) => ({ 
+    run: () => next(...) 
+  }),
+  loading: (c, next) => ({ 
+    stop: () => next(...) 
+  })
+});
+```
+````
+
 ---
 
 ## 📊 Comparison: Main vs. Minimal
