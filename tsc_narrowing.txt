@@ -1,2 +1,0 @@
-verify-tag-narrowing.ts(9,40): error TS2339: Property 'tag' does not exist on type 'never'.
-verify-tag-narrowing.ts(13,7): error TS2322: Type 'string' is not assignable to type '"idle"'.
