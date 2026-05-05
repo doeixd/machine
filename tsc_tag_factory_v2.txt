@@ -1,2 +1,0 @@
-examples/verify-tag-factory.ts(26,1): error TS2578: Unused '@ts-expect-error' directive.
-examples/verify-tag-factory.ts(29,1): error TS2578: Unused '@ts-expect-error' directive.
