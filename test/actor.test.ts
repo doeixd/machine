@@ -177,6 +177,17 @@ describe('Actor', () => {
       expect(snap.context.data).toBe('hello');
     });
 
+    it('fromPromise should turn synchronous factory failures into rejections', async () => {
+      const failure = new Error('factory failed');
+      const actor = fromPromise<string>(() => { throw failure; });
+
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      const snap = actor.getSnapshot();
+      expect(snap.context.status).toBe('rejected');
+      expect(snap.context.error).toBe(failure);
+    });
+
     it('fromObservable should handle updates', () => {
       let nextObserver: any;
       const unsubscribe = vi.fn();
@@ -196,6 +207,21 @@ describe('Actor', () => {
 
       actor.stop();
       expect(unsubscribe).toHaveBeenCalledOnce();
+
+      actor.stop();
+      expect(unsubscribe).toHaveBeenCalledOnce();
+    });
+
+    it('fromObservable should turn synchronous subscription failures into error states', () => {
+      const failure = new Error('subscription failed');
+      const actor = fromObservable<number>({
+        subscribe() {
+          throw failure;
+        }
+      });
+
+      expect(actor.getSnapshot().context.status).toBe('error');
+      expect(actor.getSnapshot().context.error).toBe(failure);
     });
 
     it('isolates subscriber failures from mailbox processing', () => {

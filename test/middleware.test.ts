@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   createMachine,
   createAsyncMachine,
+  CANCEL,
   createMiddleware,
   withLogging,
   withAnalytics,
@@ -128,6 +129,83 @@ describe('createMiddleware', () => {
     const result = instrumented.double.call(instrumented);
 
     expect(result.context.count).toBe(10);
+  });
+
+  it('should report the current context after chained transitions', () => {
+    const beforeHook = vi.fn();
+    const afterHook = vi.fn();
+    const machine = createMachine({ count: 0 }, {
+      increment: function() {
+        return createMachine({ count: this.context.count + 1 }, this);
+      }
+    });
+
+    let instrumented = createMiddleware(machine, {
+      before: beforeHook,
+      after: afterHook,
+    });
+    instrumented = instrumented.increment.call(instrumented);
+    instrumented = instrumented.increment.call(instrumented);
+
+    expect(beforeHook.mock.calls.map(([call]) => call.context.count)).toEqual([0, 1]);
+    expect(afterHook.mock.calls.map(([call]) => call.prevContext.count)).toEqual([0, 1]);
+    expect(afterHook.mock.calls.map(([call]) => call.nextContext.count)).toEqual([1, 2]);
+  });
+
+  it('should wrap prototype transition methods across chained snapshots', () => {
+    class Counter {
+      constructor(readonly context: { count: number }) {}
+
+      increment() {
+        return new Counter({ count: this.context.count + 1 });
+      }
+    }
+
+    const afterHook = vi.fn();
+    let instrumented = createMiddleware(new Counter({ count: 0 }), { after: afterHook });
+    instrumented = instrumented.increment.call(instrumented);
+    instrumented = instrumented.increment.call(instrumented);
+
+    expect(instrumented.context.count).toBe(2);
+    expect(afterHook.mock.calls.map(([call]) => call.prevContext.count)).toEqual([0, 1]);
+  });
+
+  it('should return the current snapshot when a chained transition is canceled', () => {
+    const machine = createMachine({ count: 0 }, {
+      increment: function() {
+        return createMachine({ count: this.context.count + 1 }, this);
+      }
+    });
+
+    let cancel = false;
+    let instrumented = createMiddleware(machine, {
+      before: () => cancel ? CANCEL : undefined,
+    });
+    instrumented = instrumented.increment.call(instrumented);
+    cancel = true;
+
+    const canceled = instrumented.increment.call(instrumented);
+    expect(canceled).toBe(instrumented);
+    expect(canceled.context.count).toBe(1);
+  });
+
+  it('should return the current snapshot when an async hook cancels a chained transition', async () => {
+    const machine = createMachine({ count: 0 }, {
+      increment: function() {
+        return createMachine({ count: this.context.count + 1 }, this);
+      }
+    });
+
+    let cancel = false;
+    let instrumented = createMiddleware(machine, {
+      before: async () => cancel ? CANCEL : undefined,
+    });
+    instrumented = await instrumented.increment.call(instrumented);
+    cancel = true;
+
+    const canceled = await instrumented.increment.call(instrumented);
+    expect(canceled).toBe(instrumented);
+    expect(canceled.context.count).toBe(1);
   });
 
   it('should handle async transitions', async () => {

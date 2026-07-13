@@ -231,7 +231,9 @@ export class Actor<M extends BaseMachine<any>> implements ActorRef<M, Event<M>> 
 }
 
 function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
-  return value !== null && typeof value === 'object' && typeof (value as PromiseLike<T>).then === 'function';
+  return value !== null
+    && (typeof value === 'object' || typeof value === 'function')
+    && typeof (value as PromiseLike<T>).then === 'function';
 }
 
 function isMachineSnapshot(value: unknown): value is BaseMachine<object> {
@@ -280,7 +282,8 @@ export function fromPromise<T>(promiseFn: () => Promise<T>) {
 
   const actor = createActor(machine);
 
-  promiseFn()
+  Promise.resolve()
+    .then(promiseFn)
     .then(data => (actor.send as any).resolve(data))
     .catch(err => (actor.send as any).reject(err));
 
@@ -315,15 +318,24 @@ export function fromObservable<T>(observable: { subscribe: (next: (val: T) => vo
 
   const actor = createActor(machine);
 
-  const subscription = observable.subscribe(
-    (val) => (actor.send as any).next(val),
-    (err) => (actor.send as any).error(err),
-    () => (actor.send as any).complete()
-  );
+  let subscription: { unsubscribe: () => void } | undefined;
+  try {
+    subscription = observable.subscribe(
+      (val) => (actor.send as any).next(val),
+      (err) => (actor.send as any).error(err),
+      () => (actor.send as any).complete()
+    );
+  } catch (error) {
+    (actor.send as any).error(error);
+  }
 
   const stop = actor.stop.bind(actor);
+  let unsubscribed = false;
   actor.stop = () => {
-    subscription.unsubscribe();
+    if (!unsubscribed) {
+      unsubscribed = true;
+      subscription?.unsubscribe();
+    }
     stop();
   };
 

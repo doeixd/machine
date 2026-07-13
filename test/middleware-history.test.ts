@@ -162,6 +162,7 @@ describe('withTimeTravel', () => {
     expect(tracker.snapshots).toHaveLength(2);
     expect(tracker.history[0].transitionName).toBe('increment');
     expect(tracker.snapshots[0].before).toEqual({ count: 0 });
+    expect(tracker.snapshots[1].before).toEqual({ count: 1 });
     expect(tracker.snapshots[1].after).toEqual({ count: 6 });
   });
 

@@ -106,6 +106,8 @@ interface MiddlewareError<C extends object> {
 }
 ```
 
+Hooks always observe the snapshot on which a transition was invoked. This matters when calls are chained: the second `before` hook receives the first transition's context, and its `after` hook reports that context as `prevContext`. If a hook returns `CANCEL`, middleware returns that current snapshot unchanged. Both object-literal transitions and methods defined on a class prototype are intercepted.
+
 ### Execution Modes
 
 The middleware system supports three execution modes that control how synchronous and asynchronous operations are handled:

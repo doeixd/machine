@@ -295,6 +295,39 @@ describe('Runtime Metadata Extraction', () => {
       expect(Object.keys(stateNode.on)).toEqual(['transition']);
     });
 
+    it('should extract annotated prototype methods', () => {
+      class Target extends MachineBase<any> {}
+      class Source extends MachineBase<any> {
+        transition() {
+          return new Target({ status: 'target' });
+        }
+      }
+      transitionTo(Target, Source.prototype.transition);
+
+      const stateNode = extractStateNode(new Source({ status: 'source' }));
+      expect(stateNode.on.transition).toEqual({ target: 'Target' });
+    });
+
+    it('should preserve target and action metadata through runtime guards', () => {
+      class Target extends MachineBase<any> {}
+      class Source extends MachineBase<any> {
+        guardedTransition = guard(
+          () => true,
+          action(
+            { name: 'audit' },
+            transitionTo(Target, () => new Target({ status: 'target' })),
+          ),
+        );
+      }
+
+      const stateNode = extractStateNode(new Source({ status: 'source' }));
+      expect(stateNode.on.guardedTransition).toMatchObject({
+        target: 'Target',
+        cond: 'runtime_guard',
+        actions: ['audit'],
+      });
+    });
+
     it('should extract guarded transitions', () => {
       class Source extends MachineBase<any> {
         guardedTransition = guard(

@@ -80,7 +80,7 @@ Inspection events describe dispatch, not successful completion. Observe snapshot
 
 ## Promise and observable sources
 
-`fromPromise(() => promise)` starts immediately and returns an actor whose context moves from `pending` to `resolved` or `rejected`.
+`fromPromise(() => promise)` starts immediately and returns an actor whose context moves from `pending` to `resolved` or `rejected`. A synchronous exception thrown while creating the promise is captured as a `rejected` snapshot rather than escaping from `fromPromise`.
 
 ```ts
 import { fromPromise } from '@doeixd/machine';
@@ -94,7 +94,7 @@ user.subscribe(snapshot => {
 });
 ```
 
-`fromObservable(source)` subscribes immediately. Values produce `{ status: 'active', value }`; completion produces `done`, and errors produce `error`. Stopping the actor unsubscribes the source, including when it is stopped before the source completes.
+`fromObservable(source)` subscribes immediately. Values produce `{ status: 'active', value }`; completion produces `done`, and errors produce `error`. A synchronous exception from `subscribe` also produces an `error` snapshot. Stopping the actor unsubscribes the source exactly once, including when it is stopped before the source completes.
 
 These helpers adapt source lifecycles to actor snapshots. They do not add cancellation to the original promise; use an abort-aware transition or source when underlying work must be canceled.
 

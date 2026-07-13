@@ -101,6 +101,21 @@ export interface MiddlewareOptions {
  */
 export const CANCEL = Symbol('CANCEL');
 
+function collectFunctionKeys(value: object): string[] {
+  const keys = new Set<string>();
+  let current: object | null = value;
+
+  while (current && current !== Object.prototype) {
+    for (const key of Object.getOwnPropertyNames(current)) {
+      if (key === 'constructor' || key === 'context' || keys.has(key)) continue;
+      if (typeof (value as Record<string, unknown>)[key] === 'function') keys.add(key);
+    }
+    current = Object.getPrototypeOf(current);
+  }
+
+  return [...keys];
+}
+
 // =============================================================================
 // SECTION: CORE MIDDLEWARE FUNCTIONS
 // =============================================================================
@@ -123,6 +138,7 @@ export function createMiddleware<M extends BaseMachine<any>>(
 
   // Create a wrapped machine that intercepts all transition calls
   const wrappedMachine: any = { ...machine };
+  const transitionKeys = collectFunctionKeys(machine);
 
   // Copy any extra properties from the original machine (for middleware composition)
   for (const prop in machine) {
@@ -133,13 +149,12 @@ export function createMiddleware<M extends BaseMachine<any>>(
   }
 
   // Wrap each transition function
-  for (const prop in machine) {
-    if (!Object.prototype.hasOwnProperty.call(machine, prop)) continue;
-    const value = machine[prop];
+  for (const prop of transitionKeys) {
+    const value = (machine as Record<string, unknown>)[prop];
     if (typeof value === 'function' && prop !== 'context') {
       wrappedMachine[prop] = function (this: any, ...args: any[]) {
         const transitionName = prop;
-        const context = wrappedMachine.context;
+        const context = this.context;
 
         // Helper function to execute the transition and after hooks
         const executeTransition = () => {
@@ -179,11 +194,9 @@ export function createMiddleware<M extends BaseMachine<any>>(
               }
 
               // Also wrap the transition functions on the returned machine
-              for (const prop in machine) {
-                if (!Object.prototype.hasOwnProperty.call(machine, prop)) continue;
-                const value = machine[prop];
-                if (typeof value === 'function' && prop !== 'context' && wrappedMachine[prop]) {
-                  machine[prop] = wrappedMachine[prop];
+              for (const transitionKey of transitionKeys) {
+                if (typeof machine[transitionKey] === 'function' && wrappedMachine[transitionKey]) {
+                  machine[transitionKey] = wrappedMachine[transitionKey];
                 }
               }
             }
@@ -286,7 +299,7 @@ export function createMiddleware<M extends BaseMachine<any>>(
               // For async hooks, return a promise that executes the transition after
               return result.then((hookResult: any) => {
                 if (hookResult === CANCEL) {
-                  return wrappedMachine;
+                  return this;
                 }
                 return executeTransition();
               }).catch((error: Error) => {
@@ -299,7 +312,7 @@ export function createMiddleware<M extends BaseMachine<any>>(
 
             // Check if transition should be cancelled
             if (result === CANCEL) {
-              return wrappedMachine; // Return the same machine instance
+              return this; // Return the current machine instance
             }
           } catch (error) {
             if (!continueOnError) throw error;

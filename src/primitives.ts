@@ -205,6 +205,20 @@ function attachRuntimeMeta(value: object, metadata: Partial<RuntimeTransitionMet
   });
 }
 
+function guardedRuntimeMeta(
+  transition: object,
+  guard: { name: string; description: string },
+  description: string | undefined,
+  fallbackDescription: string,
+): Partial<RuntimeTransitionMeta> {
+  const inherited = (transition as { [RUNTIME_META]?: RuntimeTransitionMeta })[RUNTIME_META];
+  return {
+    ...inherited,
+    description: description || inherited?.description || fallbackDescription,
+    guards: [guard, ...(inherited?.guards ?? [])],
+  };
+}
+
 // =============================================================================
 // SECTION: ANNOTATION PRIMITIVES (THE DSL)
 // =============================================================================
@@ -525,10 +539,12 @@ export function guard<
   Object.defineProperty(guardedTransition, 'options', { value: fullOptions, enumerable: false });
 
   // Attach runtime metadata for statechart extraction
-  attachRuntimeMeta(guardedTransition, {
-    description: description || 'Synchronous guarded transition',
-    guards: [{ name: 'runtime_guard', description: description || 'Synchronous condition check' }]
-  });
+  attachRuntimeMeta(guardedTransition, guardedRuntimeMeta(
+    transition,
+    { name: 'runtime_guard', description: description || 'Synchronous condition check' },
+    description,
+    'Synchronous guarded transition',
+  ));
 
   return guardedTransition;
 }
@@ -640,10 +656,12 @@ export function guardAsync<
   Object.defineProperty(guardedTransition, 'options', { value: fullOptions, enumerable: false });
 
   // Attach runtime metadata for statechart extraction
-  attachRuntimeMeta(guardedTransition, {
-    description: description || 'Runtime guarded transition',
-    guards: [{ name: 'runtime_guard', description: description || 'Runtime condition check' }]
-  });
+  attachRuntimeMeta(guardedTransition, guardedRuntimeMeta(
+    transition,
+    { name: 'runtime_guard', description: description || 'Runtime condition check' },
+    description,
+    'Runtime guarded transition',
+  ));
 
   return guardedTransition as GuardedTransition<C, TSuccess, TFailure>;
 }
@@ -738,10 +756,12 @@ export function guardSync<
   Object.defineProperty(guardedTransition, 'options', { value: fullOptions, enumerable: false });
 
   // Attach runtime metadata for statechart extraction
-  attachRuntimeMeta(guardedTransition, {
-    description: description || 'Synchronous guarded transition',
-    guards: [{ name: 'runtime_guard_sync', description: description || 'Synchronous condition check' }]
-  });
+  attachRuntimeMeta(guardedTransition, guardedRuntimeMeta(
+    transition,
+    { name: 'runtime_guard_sync', description: description || 'Synchronous condition check' },
+    description,
+    'Synchronous guarded transition',
+  ));
 
   return guardedTransition as GuardedTransition<C, TSuccess, TFailure>;
 }

@@ -30,8 +30,17 @@ export function extractStateNode(stateInstance: any): any {
   const stateNode: any = { on: {} };
   const invoke: any[] = [];
 
-  // Iterate over all properties
-  for (const key in stateInstance) {
+  const keys = new Set<string>();
+  let current = stateInstance as object | null;
+  while (current && current !== Object.prototype) {
+    for (const key of Object.getOwnPropertyNames(current)) {
+      if (key !== 'constructor' && key !== 'context') keys.add(key);
+    }
+    current = Object.getPrototypeOf(current);
+  }
+
+  // Inspect own properties and class methods across the prototype chain.
+  for (const key of keys) {
     const value = stateInstance[key];
 
     if (typeof value !== 'function') {
