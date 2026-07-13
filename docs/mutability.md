@@ -184,7 +184,7 @@ Choosing mutability is not a compromise; it's a powerful architectural choice wi
 
 -   **Type-State Programming**: Works perfectly. `createMutableMachine` performs runtime checks to ensure only valid transitions for the current state can be called. With TypeScript's `if` or `switch` narrowing, you get compile-time safety on top of that. You get the safety of Type-State with the performance of mutation.
 
--   **DSL Primitives (`describe`, `guarded`, etc.)**: These primitives are identity functions at runtime and can still be used to wrap your transition implementations. This allows you to leverage the **runtime extraction** tools (`extractFromInstance`) to generate a statechart diagram from a live, mutable machine instance for debugging or documentation.
+-   **DSL Primitives (`describe`, `guarded`, etc.)**: These primitives preserve the wrapped function while attaching non-enumerable runtime metadata. This allows you to leverage the **runtime extraction** tools (`extractFromInstance`) to generate a statechart diagram from a live, mutable machine instance for debugging or documentation.
 
 ### Summary: Choosing Your Pattern
 

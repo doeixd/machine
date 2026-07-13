@@ -27,6 +27,41 @@ export type NextOf<M> = (context: any) => M;
  */
 export type Blueprint<C, T> = (ctx: C, next: (context: C) => C & T) => T;
 
+declare const NEXT_STATE: unique symbol;
+type NextState<C> = { readonly [NEXT_STATE]: C };
+type TransitionRecord = Record<string, (...args: any[]) => any>;
+
+/** The recursively typed result produced by {@link factory}. */
+export type FactoryMachine<C extends object, T extends TransitionRecord> = C & {
+  [K in keyof T]: T[K] extends (...args: infer A) => any
+    ? (...args: A) => FactoryMachine<C, T>
+    : never;
+};
+
+type UnionFactories<C extends Tagged> = {
+  [K in TagOf<C>]: (
+    context: Extract<C, { tag: K }>,
+    next: <N extends C>(context: N) => NextState<N>
+  ) => TransitionRecord;
+};
+
+type ResolveUnionNext<C extends Tagged, F extends UnionFactories<C>, R> =
+  R extends NextState<infer N extends C>
+    ? Extract<UnionMachine<C, F>, { tag: N['tag'] }>
+    : R;
+
+type UnionBranch<C extends Tagged, F extends UnionFactories<C>, K extends TagOf<C>> =
+  Extract<C, { tag: K }> & {
+    [P in keyof ReturnType<F[K]>]: ReturnType<F[K]>[P] extends (...args: infer A) => infer R
+      ? (...args: A) => ResolveUnionNext<C, F, R>
+      : never;
+  };
+
+/** The union of fully resolved typestate branches produced by {@link union}. */
+export type UnionMachine<C extends Tagged, F extends UnionFactories<C>> = {
+  [K in TagOf<C>]: UnionBranch<C, F, K>
+}[TagOf<C>];
+
 // ============================================================================
 // CORE: machine()
 // ============================================================================
@@ -80,6 +115,22 @@ export interface Lifecycle<E extends string = string> {
 
 export type Send<E extends string = string> = (event: E, ...args: unknown[]) => void;
 
+type TransitionNameOf<M> = M extends unknown ? {
+  [K in keyof M]-?: M[K] extends (...args: any[]) => any ? K : never
+}[keyof M] & string : never;
+
+type TransitionOf<M, K extends PropertyKey> = M extends unknown
+  ? K extends keyof M
+    ? Extract<M[K], (...args: any[]) => any>
+    : never
+  : never;
+
+/** A transition dispatcher derived from every branch in a machine union. */
+export type SendFor<M> = <K extends TransitionNameOf<M>>(
+  event: K,
+  ...args: Parameters<TransitionOf<M, K>>
+) => void;
+
 export type LifecycleMap<Tags extends string> = {
   [K in Tags]?: Lifecycle<string>;
 };
@@ -104,7 +155,7 @@ export function runnable<
 
 export interface Runner<M> {
   get: () => M;
-  send: Send<string>;
+  send: SendFor<M>;
   stop: () => void;
   subscribe: (listener: (state: M) => void) => () => void;
 }
@@ -129,11 +180,11 @@ export function run<M extends Tagged>(
     const tagValue = (current as Tagged).tag;
     const lifecycle = lifecycles?.[tagValue];
     if (lifecycle?.onEnter) {
-      cleanup = lifecycle.onEnter(send);
+      cleanup = lifecycle.onEnter(send as Send<string>);
     }
   };
 
-  const send: Send<string> = (event, ...args) => {
+  const send = ((event: string, ...args: unknown[]) => {
     const transition = (current as Record<string, unknown>)[event];
     if (typeof transition === 'function') {
       const nextValue = (transition as (...a: unknown[]) => unknown)(...args);
@@ -147,7 +198,7 @@ export function run<M extends Tagged>(
         notify();
       }
     }
-  };
+  }) as SendFor<M>;
 
   enter();
 
@@ -223,13 +274,13 @@ export function withChildren<
 // Re-exports from types.ts are enough
 
 export function factory<C extends object>() {
-  return <T extends Record<string, Function>>(
-    transitionFactory: (ctx: C, next: (context: C) => C & T) => T
+  return <T extends TransitionRecord>(
+    transitionFactory: (ctx: C, next: <N extends C>(context: N) => NextState<N>) => T
   ) => {
-    type M = C & T;
+    type M = FactoryMachine<C, T>;
     const resultFactory = (context: C): M => {
       const next = (c: C) => resultFactory(c);
-      return machine(context, (ctx: any) => transitionFactory(ctx, next as any)) as any;
+      return machine(context, (ctx: C) => transitionFactory(ctx, next as any)) as M;
     };
     return resultFactory;
   };
@@ -245,15 +296,13 @@ export type UnionOf<F extends (...args: any[]) => any> = ReturnType<F>;
  * This is the primary way to define multi-state machines (Type-States) in the minimal API.
  */
 export function union<C extends Tagged>() {
-  return <F extends { [K in TagOf<C>]: (ctx: Extract<C, { tag: K }>, next: (c: C) => any) => any }>(
+  return <F extends UnionFactories<C>>(
     factories: F
   ) => {
-    type MachineUnion = {
-      [K in TagOf<C> & keyof F]: Extract<C, { tag: K }> & ReturnType<F[K]>
-    }[TagOf<C> & keyof F];
+    type MachineUnion = UnionMachine<C, F>;
 
     const resultFactory = <T extends C>(context: T): Extract<MachineUnion, { tag: T['tag'] }> => {
-      const factoryFn = (factories as any)[(context as any).tag];
+      const factoryFn = factories[context.tag as TagOf<C>];
       const next = (c: C) => resultFactory(c as any);
       return machine(context as any, (ctx: any) => factoryFn(ctx as any, next as any)) as any;
     };

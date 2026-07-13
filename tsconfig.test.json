@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["test/typecheck"],
+  "exclude": ["node_modules"],
+  "compilerOptions": {
+    "rootDir": ".",
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "types": ["node", "vitest/globals"]
+  }
+}

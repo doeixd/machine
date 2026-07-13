@@ -3,10 +3,11 @@
   "version": "1.3.0",
   "files": [
     "dist",
-    "src"
+    "src",
+    "schemas"
   ],
   "engines": {
-    "node": ">=16"
+    "node": ">=18"
   },
   "license": "MIT",
   "keywords": [
@@ -31,7 +32,6 @@
     "state-pattern",
     "type-driven",
     "compile-time-safety",
-    "zero-runtime",
     "discriminated-unions"
   ],
   "peerDependencies": {
@@ -46,16 +46,17 @@
       "optional": true
     }
   },
-  "dependencies": {},
-  "devDependencies": {
-    "@types/node": "^22.10.2",
-    "@types/react": "^19.2.4",
+  "dependencies": {
     "ajv": "^8.17.1",
     "chalk": "^5.6.2",
     "chokidar": "^4.0.3",
-    "commander": "^14.0.2",
+    "commander": "^13.1.0",
     "ts-morph": "^27.0.2",
-    "tsx": "^4.20.6",
+    "tsx": "^4.20.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.2.4",
     "pridepack": "2.6.4",
     "react": "^19.2.0",
     "solid-js": "^1.8.22",
@@ -66,9 +67,10 @@
   },
   "scripts": {
     "release": "standard-version && git push --follow-tags origin main",
-    "prepublishOnly": "pridepack clean && pridepack build",
-    "build": "pridepack build",
-    "type-check": "pridepack check",
+    "prepublishOnly": "npm run build",
+    "build": "pridepack clean && pridepack build && npm run verify:package",
+    "verify:package": "tsx scripts/verify-package.ts",
+    "type-check": "tsc --noEmit && tsc -p tsconfig.test.json",
     "clean": "pridepack clean",
     "watch": "pridepack watch",
     "start": "pridepack start",
@@ -151,6 +153,159 @@
       },
       "require": "./dist/cjs/production/react.js",
       "import": "./dist/esm/production/react.js"
+    },
+    "./solid": {
+      "types": "./dist/types/entry-solid.d.ts",
+      "development": {
+        "require": "./dist/cjs/development/solid.js",
+        "import": "./dist/esm/development/solid.js"
+      },
+      "require": "./dist/cjs/production/solid.js",
+      "import": "./dist/esm/production/solid.js"
+    },
+    "./actor": {
+      "types": "./dist/types/actor.d.ts",
+      "development": {
+        "require": "./dist/cjs/development/actor.js",
+        "import": "./dist/esm/development/actor.js"
+      },
+      "require": "./dist/cjs/production/actor.js",
+      "import": "./dist/esm/production/actor.js"
+    },
+    "./adapters": {
+      "types": "./dist/types/adapters.d.ts",
+      "development": {
+        "require": "./dist/cjs/development/adapters.js",
+        "import": "./dist/esm/development/adapters.js"
+      },
+      "require": "./dist/cjs/production/adapters.js",
+      "import": "./dist/esm/production/adapters.js"
+    },
+    "./base": {
+      "types": "./dist/types/base.d.ts",
+      "development": {
+        "require": "./dist/cjs/development/base.js",
+        "import": "./dist/esm/development/base.js"
+      },
+      "require": "./dist/cjs/production/base.js",
+      "import": "./dist/esm/production/base.js"
+    },
+    "./context-bound": {
+      "types": "./dist/types/context-bound.d.ts",
+      "development": {
+        "require": "./dist/cjs/development/context-bound.js",
+        "import": "./dist/esm/development/context-bound.js"
+      },
+      "require": "./dist/cjs/production/context-bound.js",
+      "import": "./dist/esm/production/context-bound.js"
+    },
+    "./devtools": {
+      "types": "./dist/types/devtools.d.ts",
+      "development": {
+        "require": "./dist/cjs/development/devtools.js",
+        "import": "./dist/esm/development/devtools.js"
+      },
+      "require": "./dist/cjs/production/devtools.js",
+      "import": "./dist/esm/production/devtools.js"
+    },
+    "./functional-combinators": {
+      "types": "./dist/types/functional-combinators.d.ts",
+      "development": {
+        "require": "./dist/cjs/development/functional-combinators.js",
+        "import": "./dist/esm/development/functional-combinators.js"
+      },
+      "require": "./dist/cjs/production/functional-combinators.js",
+      "import": "./dist/esm/production/functional-combinators.js"
+    },
+    "./generators": {
+      "types": "./dist/types/generators.d.ts",
+      "development": {
+        "require": "./dist/cjs/development/generators.js",
+        "import": "./dist/esm/development/generators.js"
+      },
+      "require": "./dist/cjs/production/generators.js",
+      "import": "./dist/esm/production/generators.js"
+    },
+    "./higher-order": {
+      "types": "./dist/types/higher-order.d.ts",
+      "development": {
+        "require": "./dist/cjs/development/higher-order.js",
+        "import": "./dist/esm/development/higher-order.js"
+      },
+      "require": "./dist/cjs/production/higher-order.js",
+      "import": "./dist/esm/production/higher-order.js"
+    },
+    "./matcher": {
+      "types": "./dist/types/matcher.d.ts",
+      "development": {
+        "require": "./dist/cjs/development/matcher.js",
+        "import": "./dist/esm/development/matcher.js"
+      },
+      "require": "./dist/cjs/production/matcher.js",
+      "import": "./dist/esm/production/matcher.js"
+    },
+    "./middleware": {
+      "types": "./dist/types/middleware/index.d.ts",
+      "development": {
+        "require": "./dist/cjs/development/middleware.js",
+        "import": "./dist/esm/development/middleware.js"
+      },
+      "require": "./dist/cjs/production/middleware.js",
+      "import": "./dist/esm/production/middleware.js"
+    },
+    "./mixins": {
+      "types": "./dist/types/mixins.d.ts",
+      "development": {
+        "require": "./dist/cjs/development/mixins.js",
+        "import": "./dist/esm/development/mixins.js"
+      },
+      "require": "./dist/cjs/production/mixins.js",
+      "import": "./dist/esm/production/mixins.js"
+    },
+    "./multi": {
+      "types": "./dist/types/multi.d.ts",
+      "development": {
+        "require": "./dist/cjs/development/multi.js",
+        "import": "./dist/esm/development/multi.js"
+      },
+      "require": "./dist/cjs/production/multi.js",
+      "import": "./dist/esm/production/multi.js"
+    },
+    "./primitives": {
+      "types": "./dist/types/primitives.d.ts",
+      "development": {
+        "require": "./dist/cjs/development/primitives.js",
+        "import": "./dist/esm/development/primitives.js"
+      },
+      "require": "./dist/cjs/production/primitives.js",
+      "import": "./dist/esm/production/primitives.js"
+    },
+    "./runtime-extract": {
+      "types": "./dist/types/runtime-extract.d.ts",
+      "development": {
+        "require": "./dist/cjs/development/runtime-extract.js",
+        "import": "./dist/esm/development/runtime-extract.js"
+      },
+      "require": "./dist/cjs/production/runtime-extract.js",
+      "import": "./dist/esm/production/runtime-extract.js"
+    },
+    "./types": {
+      "types": "./dist/types/types.d.ts",
+      "development": {
+        "require": "./dist/cjs/development/types.js",
+        "import": "./dist/esm/development/types.js"
+      },
+      "require": "./dist/cjs/production/types.js",
+      "import": "./dist/esm/production/types.js"
+    },
+    "./utils": {
+      "types": "./dist/types/utils.d.ts",
+      "development": {
+        "require": "./dist/cjs/development/utils.js",
+        "import": "./dist/esm/development/utils.js"
+      },
+      "require": "./dist/cjs/production/utils.js",
+      "import": "./dist/esm/production/utils.js"
     }
   },
   "typesVersions": {
@@ -169,6 +324,57 @@
       ],
       "react": [
         "./dist/types/entry-react.d.ts"
+      ],
+      "solid": [
+        "./dist/types/entry-solid.d.ts"
+      ],
+      "actor": [
+        "./dist/types/actor.d.ts"
+      ],
+      "adapters": [
+        "./dist/types/adapters.d.ts"
+      ],
+      "base": [
+        "./dist/types/base.d.ts"
+      ],
+      "context-bound": [
+        "./dist/types/context-bound.d.ts"
+      ],
+      "devtools": [
+        "./dist/types/devtools.d.ts"
+      ],
+      "functional-combinators": [
+        "./dist/types/functional-combinators.d.ts"
+      ],
+      "generators": [
+        "./dist/types/generators.d.ts"
+      ],
+      "higher-order": [
+        "./dist/types/higher-order.d.ts"
+      ],
+      "matcher": [
+        "./dist/types/matcher.d.ts"
+      ],
+      "middleware": [
+        "./dist/types/middleware/index.d.ts"
+      ],
+      "mixins": [
+        "./dist/types/mixins.d.ts"
+      ],
+      "multi": [
+        "./dist/types/multi.d.ts"
+      ],
+      "primitives": [
+        "./dist/types/primitives.d.ts"
+      ],
+      "runtime-extract": [
+        "./dist/types/runtime-extract.d.ts"
+      ],
+      "types": [
+        "./dist/types/types.d.ts"
+      ],
+      "utils": [
+        "./dist/types/utils.d.ts"
       ]
     }
   },

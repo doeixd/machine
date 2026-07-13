@@ -253,6 +253,47 @@ function parseInvokeService(obj: Node): any {
   return service;
 }
 
+/** Merge an outer decorator with metadata already present on its inner value. */
+function mergeExtractedMetadata(outer: any, inner: any): any {
+  const merged = { ...inner, ...outer };
+
+  if (outer.guards || inner.guards) {
+    merged.guards = [...(outer.guards ?? []), ...(inner.guards ?? [])];
+  }
+  if (outer.actions || inner.actions) {
+    merged.actions = [...(outer.actions ?? []), ...(inner.actions ?? [])];
+  }
+
+  return merged;
+}
+
+/** Parse the curried decorator form used inside pipe(value, ...operators). */
+function extractPipeOperator(call: Node, verbose = false): any | null {
+  if (!Node.isCallExpression(call)) return null;
+
+  const expression = call.getExpression();
+  const fnName = Node.isIdentifier(expression) ? expression.getText() : null;
+  const args = call.getArguments();
+
+  if (fnName === 'guard' || fnName === 'guardAsync' || fnName === 'guardSync') {
+    const options = args[1] ? parseObjectLiteral(args[1]) : {};
+    const asynchronous = fnName === 'guardAsync';
+    const description = options.description || (asynchronous
+      ? 'Asynchronous condition check'
+      : 'Synchronous condition check');
+
+    return {
+      ...(options.description ? { description: options.description } : {}),
+      guards: [{
+        name: asynchronous ? 'runtime_guard_async' : 'runtime_guard',
+        description,
+      }],
+    };
+  }
+
+  return extractFromCallExpression(call, verbose);
+}
+
 /**
  * Recursively extracts metadata from a call expression chain
  * Handles nested DSL primitive calls like: describe(text, guarded(guard, transitionTo(...)))
@@ -273,6 +314,25 @@ function extractFromCallExpression(call: Node, verbose = false): any | null {
   const args = call.getArguments();
 
   switch (fnName) {
+    case 'pipe': {
+      // Args: (implementation, operator, operator, ...)
+      let pipedMetadata: any = {};
+
+      if (args[0] && Node.isCallExpression(args[0])) {
+        pipedMetadata = extractFromCallExpression(args[0], verbose) ?? {};
+      }
+
+      for (const operator of args.slice(1)) {
+        const operatorMetadata = extractPipeOperator(operator, verbose);
+        if (operatorMetadata) {
+          // Later operators are outer decorators, matching runtime pipe semantics.
+          pipedMetadata = mergeExtractedMetadata(operatorMetadata, pipedMetadata);
+        }
+      }
+
+      return Object.keys(pipedMetadata).length > 0 ? pipedMetadata : null;
+    }
+
     case 'transitionTo':
       // Args: (target, implementation)
       if (args[0]) {
@@ -291,7 +351,7 @@ function extractFromCallExpression(call: Node, verbose = false): any | null {
       if (args[1] && Node.isCallExpression(args[1])) {
         const nested = extractFromCallExpression(args[1], verbose);
         if (nested) {
-          Object.assign(metadata, nested);
+          return mergeExtractedMetadata(metadata, nested);
         }
       }
       break;
@@ -308,7 +368,7 @@ function extractFromCallExpression(call: Node, verbose = false): any | null {
       if (args[1] && Node.isCallExpression(args[1])) {
         const nested = extractFromCallExpression(args[1], verbose);
         if (nested) {
-          Object.assign(metadata, nested);
+          return mergeExtractedMetadata(metadata, nested);
         }
       }
       break;
@@ -335,7 +395,7 @@ function extractFromCallExpression(call: Node, verbose = false): any | null {
       if (args[1] && Node.isCallExpression(args[1])) {
         const nested = extractFromCallExpression(args[1], verbose);
         if (nested) {
-          Object.assign(metadata, nested);
+          return mergeExtractedMetadata(metadata, nested);
         }
       }
       break;
@@ -355,7 +415,7 @@ function extractFromCallExpression(call: Node, verbose = false): any | null {
       if (args[1] && Node.isCallExpression(args[1])) {
         const nested = extractFromCallExpression(args[1], verbose);
         if (nested) {
-          Object.assign(metadata, nested);
+          return mergeExtractedMetadata(metadata, nested);
         }
       }
       break;
@@ -375,8 +435,28 @@ function extractFromCallExpression(call: Node, verbose = false): any | null {
       if (args[1] && Node.isCallExpression(args[1])) {
         const nested = extractFromCallExpression(args[1], verbose);
         if (nested) {
-          Object.assign(metadata, nested);
+          return mergeExtractedMetadata(metadata, nested);
         }
+      }
+      break;
+
+    case 'guardSync':
+      if (args[2]) {
+        const options = parseObjectLiteral(args[2]);
+        if (options.description) metadata.description = options.description;
+      }
+      metadata.guards = [{ name: 'runtime_guard', description: metadata.description || 'Synchronous condition check' }];
+      if (args[1] && Node.isCallExpression(args[1])) {
+        const nested = extractFromCallExpression(args[1], verbose);
+        if (nested) return mergeExtractedMetadata(metadata, nested);
+      }
+      break;
+
+    case 'metadata':
+      if (args[0]) Object.assign(metadata, parseObjectLiteral(args[0]));
+      if (args[1] && Node.isCallExpression(args[1])) {
+        const nested = extractFromCallExpression(args[1], verbose);
+        if (nested) return mergeExtractedMetadata(metadata, nested);
       }
       break;
 

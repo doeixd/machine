@@ -1,152 +1,190 @@
 # Minimal API
 
-The `@doeixd/machine/minimal` submodule provides the most lightweight and high-performance way to build state machines in TypeScript. It is specifically designed for **Type-State Programming**, where states are represented by distinct types.
+`@doeixd/machine/minimal` is the small, flat-snapshot entry point. State data and transitions live on the same object, and every transition returns another snapshot.
 
-## Key Features
+Use it when typestate is the main requirement and you do not need the main package’s actors, async cancellation, middleware, or framework integrations.
 
-### 1. Magic Type Inference
-The library provides perfect type inference through its factory utilities. While the core `machine()` primitive uses `any` in its internal feedback loop to break recursion, the higher-level `factory()` and `union()` utilities implement a named recursive pattern that ensures transitions return the exact machine type—**no `any` in your transition chains.**
+```ts
+import { machine } from '@doeixd/machine/minimal';
 
----
-
-## Choosing your Tool: `machine()` vs `factory()` vs `union()`
-
-- **`machine()`**: The 10-line primitive. Great for one-off machines where you don't need to chain transitions or where `any` in the return type is acceptable.
-- **`factory()`**: The recommended way to build **Single-State** machines. Provides perfect inference for chained transitions.
-- **`union()`**: The recommended way to build **Multi-State** machines. Provides perfect inference across all states.
-
----
-
-## 🧩 Under the Hood: Generics
-
-The `machine()` function uses two primary generics to define its surface area:
-
-- **`C` (Context)**: The "State Data" (e.g., `{ count: number }`).
-- **`T` (Transitions)**: The "Actions" or methods returned by your factory (e.g., `{ inc: () => ... }`).
-
-While the library is designed for automatic inference, you can pass these generics manually for ultra-strict control:
-
-```typescript
-import { machine } from "@doeixd/machine/minimal";
-
-interface State { count: number }
-interface Actions { inc: () => State & Actions }
-
-// Manual passing: machine<C, T>(context, factory)
-const m = machine<State, Actions>({ count: 0 }, (ctx, next) => ({
-  inc: () => next({ count: ctx.count + 1 })
+const counter = machine({ count: 0 }, (state, next) => ({
+  increment: () => next({ count: state.count + 1 }),
 }));
+
+const updated = counter.increment();
+console.log(counter.count); // 0
+console.log(updated.count); // 1
 ```
 
-> [!TIP]
-> Manual passing is rarely needed if you use `factory()` or `Blueprint`, as they handle the generic coordination for you.
+## Choosing a constructor
 
----
+| Constructor | Use it for | Type behavior |
+| --- | --- | --- |
+| `machine(context, blueprint)` | A small one-off snapshot | Infers state and transition names, but the recursive `next` result is intentionally loose |
+| `factory<C>()(blueprint)` | A reusable machine with one state shape | Preserves transition parameters and same-state chaining |
+| `union<C>()(branches)` | A finite set of tagged typestates | Preserves the exact target branch returned through `next` |
 
-## 🔬 Full Type-Safe Example
+For application code, prefer `factory` or `union`. `machine` is the runtime primitive beneath both and is useful when recursive chaining is not important or when the blueprint is explicitly typed.
 
-The following example shows how to build a multi-state machine with perfect type safety using `union()` and `States`.
+## Reusable single-state machines
 
-```typescript
-import { union, tag, type States, match, type UnionOf } from "@doeixd/machine/minimal";
+`factory` separates the transition blueprint from its initial data. Its transitions always return the same machine shape.
 
-// 1. Define Contexts
-type State = States<{
-  idle: {},
-  loading: { url: string },
-  success: { data: string }
+```ts
+import { factory } from '@doeixd/machine/minimal';
+
+const createCounter = factory<{ count: number }>()((state, next) => ({
+  increment: () => next({ count: state.count + 1 }),
+  add: (amount: number) => next({ count: state.count + amount }),
+  reset: () => next({ count: 0 }),
+}));
+
+const counter = createCounter({ count: 0 });
+const updated = counter.increment().add(4);
+
+console.log(updated.count); // 5
+// counter.add(); // type error: amount is required
+```
+
+Snapshots are shallow objects. Returning a new context leaves the previous top-level snapshot unchanged, but nested values are not cloned or frozen automatically.
+
+## Tagged typestates
+
+Use `States` to define the state data, `tag` to construct variants, and `union` to define the transitions available from each variant.
+
+```ts
+import {
+  tag,
+  union,
+  type States,
+  type UnionOf,
+} from '@doeixd/machine/minimal';
+
+type FetchState = States<{
+  idle: {};
+  loading: { url: string };
+  success: { data: string };
 }>;
 
-// 2. Define the Machine Blueprint
-// Transitions are perfectly typed! No 'any' here.
-const fetchFlow = union<State>()({
-  idle: (ctx, next) => ({
-    fetch: (url: string) => next(tag('loading', { url }))
+const createFetch = union<FetchState>()({
+  idle: (_state, next) => ({
+    load: (url: string) => next(tag('loading', { url })),
   }),
-  loading: (ctx, next) => ({
-    succeed: (data: string) => next(tag('success', { data })),
-    fail: () => next(tag('idle'))
+  loading: (_state, next) => ({
+    resolve: (data: string) => next(tag('success', { data })),
+    cancel: () => next(tag('idle')),
   }),
-  success: (ctx, next) => ({
-    reset: () => next(tag('idle'))
-  })
+  success: (_state, next) => ({
+    reset: () => next(tag('idle')),
+  }),
 });
 
-// 3. Perfect Inference in Action
-const m = fetchFlow(tag('idle'));
+type FetchMachine = UnionOf<typeof createFetch>;
 
-// m.fetch() returns a Machine of the 'loading' type.
-// You can chain transitions without losing type safety.
-const end = m.fetch('/api').succeed('Done').reset();
-console.log(end.tag); // 'idle'
+const idle: FetchMachine = createFetch(tag('idle'));
+const loading = idle.load('/api/data');
+const success = loading.resolve('done');
+
+console.log(success.data); // done
+// loading.load('/again'); // type error: loading has no load transition
 ```
 
-## Perfect Single-State Inference
+The branch object must contain every tag in `FetchState`. A transition’s return type is selected from the tag passed to `next`, which is what makes unavailable transitions disappear after a state change.
 
-For simple machines, use `factory()` to avoid `any` in your transitions.
+## Exhaustive matching
 
-```typescript
-import { factory } from "@doeixd/machine/minimal";
+`match` consumes a tagged union. Every tag requires a handler, and each handler receives its narrowed state.
 
-const counterFactory = factory<{ count: number }>()((ctx, next) => ({
-  inc: () => next({ count: ctx.count + 1 }),
-  noop: () => next(ctx)
+```ts
+import { match } from '@doeixd/machine/minimal';
+
+const message = match(success, {
+  idle: () => 'Ready',
+  loading: state => `Fetching ${state.url}`,
+  success: state => `Received ${state.data}`,
+});
+```
+
+Keep a value typed as the complete machine union when you want the compiler to require every case. A value already narrowed to one branch naturally requires only that branch.
+
+## Entry lifecycles
+
+`runnable` attaches optional `onEnter` hooks to a tagged machine, and `run` owns the current snapshot. An entry hook may return a cleanup function; cleanup runs before the next entry and again on `stop()`.
+
+```ts
+import { run, runnable, tag } from '@doeixd/machine/minimal';
+
+const runner = run(runnable(createFetch(tag('idle')), {
+  loading: {
+    onEnter: () => {
+      console.log('request started');
+      return () => console.log('leaving loading');
+    },
+  },
 }));
 
-const counter = counterFactory({ count: 0 });
-
-// Perfect chaining!
-const val = counter.inc().inc().noop().count; // 2
-```
-
----
-
-## 🛠️ Explicit Typing (Breaking the Loop)
-
-If you prefer using the raw 10-line `machine()` primitive but want to avoid `any` in your transitions, you can "break the loop" by explicitly typing your blueprint. We provide two lightweight helpers for this:
-
-### 1. `Blueprint<C, T>`
-Defines the factory function signature upfront.
-
-```typescript
-import { machine, type Blueprint } from "@doeixd/machine/minimal";
-
-interface State { count: number }
-interface Actions { inc: () => State & Actions }
-
-// Define the logic separately
-const counter: Blueprint<State, Actions> = (ctx, next) => ({
-  inc: () => next({ count: ctx.count + 1 })
+const unsubscribe = runner.subscribe(snapshot => {
+  console.log(snapshot.tag);
 });
 
-// Pass it to machine()
-const m = machine({ count: 0 }, counter);
-m.inc().inc().count; // Perfectly typed!
+runner.send('load', '/api/data');
+console.log(runner.get().tag); // loading
+
+unsubscribe();
+runner.stop();
 ```
 
-### 2. `NextOf<M>`
-Explicitly types the `next` callback within an inline factory.
+This runner is deliberately synchronous and small. When the initial value is typed as the complete machine union, `send` accepts every transition name in that union with its corresponding arguments. At runtime it looks up the transition on the current snapshot; a transition that exists elsewhere in the union but is unavailable in the current state is ignored. Use the main entry’s `createActor` or `runMachine` when you need queued async work, cancellation, or strict unknown-event errors.
 
-```typescript
-import { machine, type NextOf } from "@doeixd/machine/minimal";
+## Child composition
 
-type Counter = { count: number } & { inc: () => Counter };
+`withChildren(parent, children)` namespaces child snapshots under a parent. Calling a child transition returns a new parent snapshot containing the updated child.
 
-const m = machine({ count: 0 } as Counter, (ctx, next: NextOf<Counter>) => ({
-  inc: () => next({ count: ctx.count + 1 })
-}));
+```ts
+import { withChildren } from '@doeixd/machine/minimal';
+
+const dashboard = withChildren(
+  { title: 'Overview' },
+  { counter: createCounter({ count: 0 }) },
+);
+
+const updatedDashboard = dashboard.counter.increment();
+
+console.log(dashboard.counter.count); // 0
+console.log(updatedDashboard.counter.count); // 1
 ```
 
-## Pattern Matching
+Composition is shallow. It does not schedule child effects or propagate events automatically.
 
-The minimal submodule includes a lightweight `match` utility for exhaustive checking of tagged unions.
+## Lower-level typing helpers
 
-```typescript
-import { match } from "@doeixd/machine/minimal";
+`Blueprint<C, T>` explicitly types a raw `machine` blueprint when inference needs a named recursive boundary:
 
-const message = match(currentMachine, {
-  idle: () => "Ready",
-  loading: (s) => `Fetching ${s.url}...`,
-  success: (s) => `Got ${s.data}`
+```ts
+import { machine, type Blueprint } from '@doeixd/machine/minimal';
+
+interface CountState { count: number }
+interface CountTransitions {
+  increment(): CountState & CountTransitions;
+}
+
+const blueprint: Blueprint<CountState, CountTransitions> = (state, next) => ({
+  increment: () => next({ count: state.count + 1 }),
 });
+
+const explicitCounter = machine({ count: 0 }, blueprint);
 ```
+
+`NextOf<M>` is available when an inline callback needs an explicitly named next-snapshot type. `Machine<C, T>`, `FactoryMachine<C, T>`, `UnionMachine<C, F>`, `UnionOf<F>`, `MatchCases<T, R>`, and `SendFor<M>` expose the corresponding inferred shapes.
+
+## Tagged utilities
+
+The minimal entry re-exports the tagged helpers from `@doeixd/machine/types`:
+
+- `tag(name, props?)` and `tag.factory<Union>()` create tagged values;
+- `isState(value, tag)` narrows a tagged union;
+- `States<Shape>` converts a tag-to-payload map into a union;
+- `Context<M>`, `Transitions<M>`, `InferMachine<F>`, and `MachineOf<F>` inspect types;
+- `freeze(value)` recursively freezes objects and arrays, handles cyclic object graphs, and returns a deeply readonly type.
+
+The main and minimal APIs use different snapshot shapes. Minimal state is read as `machine.count`; main-API state is read as `machine.context.count`.

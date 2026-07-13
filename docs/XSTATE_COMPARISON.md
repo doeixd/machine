@@ -816,7 +816,7 @@ Here are the questions a developer would likely ask when evaluating these two li
     *   **Selectors:** A robust, built-in system for efficiently subscribing to slices of the state.
 
 *   **`@doeixd/machine`:**
-    *   **Statechart Extraction:** Its standout feature. It can generate formal, visual diagrams of your logic flows directly from your type-safe code, with zero runtime cost.
+    *   **Statechart Extraction:** It can generate formal, visual diagrams from type-safe transition code without requiring a separate interpreted machine configuration. Runtime annotations have a small metadata-attachment cost; static extraction itself runs at build time.
     *   **Type-State Programming:** Guarantees logical correctness at compile time, eliminating an entire class of bugs.
     *   **Advanced Patterns:** Ships with built-in, advanced orchestration tools like `Runner` (for ergonomics) and `Ensemble` (for framework-agnostic composition).
 

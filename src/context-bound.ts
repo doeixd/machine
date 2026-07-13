@@ -1,4 +1,4 @@
-import type { Machine, Transitions } from './index';
+import type { Machine, TransitionArgs, TransitionNames, TransitionReturn } from './index';
 import { attachTransitions } from './internal-transitions';
 
 /**
@@ -44,7 +44,7 @@ import { attachTransitions } from './internal-transitions';
  */
 export function createContextBoundMachine<
   C extends object,
-  T extends Record<string, (this: C, ...args: any[]) => C>
+  T extends Record<string, (this: { readonly context: C }, ...args: any[]) => C>
 >(
   initialContext: C,
   transformers: T
@@ -124,12 +124,20 @@ export type ContextBoundMachine<
  * const result = callWithContext(machine, 'increment');
  * ```
  */
+export function callWithContext<M extends Machine<any>, K extends TransitionNames<M>>(
+  machine: M,
+  transitionName: K,
+  ...args: TransitionArgs<M, K>
+): TransitionReturn<M, K>;
 export function callWithContext<M extends Machine<any>>(
   machine: M,
-  transitionName: keyof Transitions<M>,
+  transitionName: TransitionNames<M>,
   ...args: any[]
-): any {
+): unknown {
   const fn = (machine as any)[transitionName];
+  if (typeof fn !== 'function') {
+    throw new TypeError(`Transition '${String(transitionName)}' is not available on this machine.`);
+  }
   const contextOnly = { context: machine.context } as Pick<Machine<any>, 'context'>;
   return fn.apply(contextOnly as any, args);
 }

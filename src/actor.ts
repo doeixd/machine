@@ -14,8 +14,8 @@ import {
 /**
  * A standard interface for interacting with any actor-like entity.
  */
-export interface ActorRef<T> {
-  dispatch: (event: any) => void;
+export interface ActorRef<T, E = unknown> {
+  dispatch: (event: E) => void;
   getSnapshot: () => T;
   subscribe: (observer: (state: T) => void) => () => void;
 }
@@ -25,9 +25,9 @@ export interface ActorRef<T> {
  */
 export type InspectionEvent = {
   type: '@actor/send'; // Extendable for lifecycle
-  actor: ActorRef<any>;
-  event: any;
-  snapshot: any;
+  actor: ActorRef<unknown, any>;
+  event: unknown;
+  snapshot: unknown;
 };
 
 // =============================================================================
@@ -38,11 +38,13 @@ export type InspectionEvent = {
  * A reactive container for a state machine that handles dispatching,
  * queueing of async transitions, and state observability.
  */
-export class Actor<M extends BaseMachine<any>> implements ActorRef<M> {
+export class Actor<M extends BaseMachine<any>> implements ActorRef<M, Event<M>> {
   private _state: M;
   private _observers: Set<(state: M) => void> = new Set();
   private _queue: Array<Event<M>> = [];
   private _processing = false;
+  private _stopped = false;
+  private _generation = 0;
 
   // Global inspector
   private static _inspector: ((event: InspectionEvent) => void) | null = null;
@@ -50,7 +52,7 @@ export class Actor<M extends BaseMachine<any>> implements ActorRef<M> {
   /**
    * Registers a global inspector.
    */
-  static inspect(inspector: (event: InspectionEvent) => void) {
+  static inspect(inspector: ((event: InspectionEvent) => void) | null) {
     Actor._inspector = inspector;
   }
 
@@ -117,6 +119,7 @@ export class Actor<M extends BaseMachine<any>> implements ActorRef<M> {
    * Starts the actor.
    */
   start(): this {
+    this._stopped = false;
     return this;
   }
 
@@ -124,6 +127,10 @@ export class Actor<M extends BaseMachine<any>> implements ActorRef<M> {
    * Stops the actor.
    */
   stop(): void {
+    this._stopped = true;
+    this._generation += 1;
+    this._queue.length = 0;
+    this._processing = false;
     this._observers.clear();
   }
 
@@ -132,14 +139,20 @@ export class Actor<M extends BaseMachine<any>> implements ActorRef<M> {
    * Handles both sync and async transitions.
    */
   dispatch(event: Event<M>): void {
+    if (this._stopped) return;
+
     // Inspection
     if (Actor._inspector) {
-      Actor._inspector({
-        type: '@actor/send',
-        actor: this,
-        event,
-        snapshot: this._state
-      });
+      try {
+        Actor._inspector({
+          type: '@actor/send',
+          actor: this,
+          event,
+          snapshot: this._state
+        });
+      } catch (error) {
+        console.error('[Actor] Inspector failed:', error);
+      }
     }
 
     if (this._processing) {
@@ -152,8 +165,10 @@ export class Actor<M extends BaseMachine<any>> implements ActorRef<M> {
     this._flush();
   }
 
-  private _flush() {
-    while (this._queue.length > 0) {
+  private _flush(): void {
+    if (this._stopped) return;
+
+    while (!this._stopped && this._queue.length > 0) {
       const event = this._queue[0];
       this._queue.shift();
 
@@ -173,18 +188,30 @@ export class Actor<M extends BaseMachine<any>> implements ActorRef<M> {
         continue;
       }
 
-      if (result instanceof Promise) {
-        result.then((nextState) => {
-          this._state = nextState;
+      if (isPromiseLike<M>(result)) {
+        const generation = this._generation;
+        Promise.resolve(result).then((nextState) => {
+          if (this._stopped || generation !== this._generation) return;
+          if (!isMachineSnapshot(nextState)) {
+            console.error(`[Actor] Transition '${String(event.type)}' did not return a machine with a context property.`);
+            this._flush();
+            return;
+          }
+          this._state = nextState as M;
           this._notify();
           this._flush();
         }).catch((error) => {
+          if (this._stopped || generation !== this._generation) return;
           console.error(`[Actor] Async error in transition '${String(event.type)}':`, error);
           this._flush();
         });
         return;
       } else {
-        this._state = result;
+        if (!isMachineSnapshot(result)) {
+          console.error(`[Actor] Transition '${String(event.type)}' did not return a machine with a context property.`);
+          continue;
+        }
+        this._state = result as M;
         this._notify();
       }
     }
@@ -193,8 +220,22 @@ export class Actor<M extends BaseMachine<any>> implements ActorRef<M> {
 
   private _notify() {
     const snapshot = this.getSnapshot();
-    this._observers.forEach(obs => obs(snapshot));
+    this._observers.forEach(observer => {
+      try {
+        observer(snapshot);
+      } catch (error) {
+        console.error('[Actor] Subscriber failed:', error);
+      }
+    });
   }
+}
+
+function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
+  return value !== null && typeof value === 'object' && typeof (value as PromiseLike<T>).then === 'function';
+}
+
+function isMachineSnapshot(value: unknown): value is BaseMachine<object> {
+  return value !== null && typeof value === 'object' && 'context' in value;
 }
 
 // =============================================================================
@@ -211,7 +252,7 @@ export function createActor<M extends BaseMachine<any>>(machine: M): Actor<M> {
 /**
  * Spawns an actor from a machine. Alias for createActor.
  */
-export function spawn<M extends BaseMachine<any>>(machine: M): ActorRef<M> {
+export function spawn<M extends BaseMachine<any>>(machine: M): ActorRef<M, Event<M>> {
   return createActor(machine);
 }
 
@@ -222,7 +263,7 @@ export function fromPromise<T>(promiseFn: () => Promise<T>) {
   type PromiseContext =
     | { status: 'pending'; data: undefined; error: undefined }
     | { status: 'resolved'; data: T; error: undefined }
-    | { status: 'rejected'; data: undefined; error: any };
+    | { status: 'rejected'; data: undefined; error: unknown };
 
   const initial: PromiseContext = { status: 'pending', data: undefined, error: undefined };
 
@@ -231,7 +272,7 @@ export function fromPromise<T>(promiseFn: () => Promise<T>) {
       resolve(data: T) {
         return next({ status: 'resolved' as const, data, error: undefined });
       },
-      reject(error: any) {
+      reject(error: unknown) {
         return next({ status: 'rejected' as const, error, data: undefined });
       }
     })
@@ -249,12 +290,12 @@ export function fromPromise<T>(promiseFn: () => Promise<T>) {
 /**
  * Creates an actor-like machine from an Observable.
  */
-export function fromObservable<T>(observable: { subscribe: (next: (val: T) => void, error?: (err: any) => void, complete?: () => void) => { unsubscribe: () => void } }) {
+export function fromObservable<T>(observable: { subscribe: (next: (val: T) => void, error?: (err: unknown) => void, complete?: () => void) => { unsubscribe: () => void } }) {
   type ObsContext =
     | { status: 'active'; value: undefined; error: undefined }
     | { status: 'active'; value: T; error: undefined }
     | { status: 'done'; value: undefined; error: undefined }
-    | { status: 'error'; value: undefined; error: any };
+    | { status: 'error'; value: undefined; error: unknown };
 
   const initial: ObsContext = { status: 'active', value: undefined, error: undefined };
 
@@ -263,7 +304,7 @@ export function fromObservable<T>(observable: { subscribe: (next: (val: T) => vo
       next(value: T) {
         return next({ status: 'active' as const, value, error: undefined });
       },
-      error(error: any) {
+      error(error: unknown) {
         return next({ status: 'error' as const, error, value: undefined });
       },
       complete() {
@@ -274,11 +315,17 @@ export function fromObservable<T>(observable: { subscribe: (next: (val: T) => vo
 
   const actor = createActor(machine);
 
-  observable.subscribe(
+  const subscription = observable.subscribe(
     (val) => (actor.send as any).next(val),
     (err) => (actor.send as any).error(err),
     () => (actor.send as any).complete()
   );
+
+  const stop = actor.stop.bind(actor);
+  actor.stop = () => {
+    subscription.unsubscribe();
+    stop();
+  };
 
   return actor;
 }

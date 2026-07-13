@@ -21,6 +21,7 @@ import {
   Machine,
   Context,
   TransitionArgs,
+  TransitionReturn,
   TransitionNames,
   // Transitions,
 } from './index';
@@ -50,7 +51,7 @@ import {
 export type BoundTransitions<M extends Machine<any>> = {
   [K in TransitionNames<M>]: (
     ...args: TransitionArgs<M, K>
-  ) => M[K] extends (...args: any[]) => infer R ? R : never;
+  ) => TransitionReturn<M, K>;
 };
 
 /**
@@ -199,9 +200,6 @@ export function createRunner<M extends Machine<any>>(
     onChange?.(newState);
   };
 
-  // Capture the original transitions from the initial machine
-  const { context: _initialContext, ...originalTransitions } = initialMachine;
-
   const actions = new Proxy({} as BoundTransitions<M>, {
     get(_target, prop: string) {
       const transition = (currentMachine as any)[prop];
@@ -212,14 +210,11 @@ export function createRunner<M extends Machine<any>>(
 
       return (...args: any[]) => {
         const nextState = transition.apply(currentMachine, args);
-        // Ensure the next state has all the original transitions
-        // by reconstructing it with the original transition functions
-        const nextStateWithTransitions = Object.assign(
-          { context: nextState.context },
-          originalTransitions
-        ) as M;
-        setState(nextStateWithTransitions);
-        return nextStateWithTransitions;
+        if (!nextState || typeof nextState !== 'object' || !('context' in nextState)) {
+          throw new TypeError(`Transition '${String(prop)}' did not return a machine with a context property.`);
+        }
+        setState(nextState as M);
+        return nextState;
       };
     },
   });

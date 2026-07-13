@@ -2,8 +2,7 @@
  * @file Solid.js integration entry point
  */
 
-// Re-export core functionality
-export * from './core';
-
-// Re-export Solid-specific functionality
+// Solid's reactive helpers intentionally use the names createMachine and
+// createAsyncMachine. Import core factories from the package root to avoid
+// ambiguous exports from this framework-specific entry point.
 export * from './solid';

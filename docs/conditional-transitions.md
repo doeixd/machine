@@ -82,9 +82,9 @@ delete = guarded(
 );
 ```
 
-- **Runtime Protection:** ❌ None (identity function)
+- **Runtime Protection:** ❌ None (annotation only)
 - **Static Analysis:** ✅ Adds metadata for statechart extraction
-- **Safety:** Zero runtime protection
+- **Safety:** No runtime condition enforcement; the helper attaches non-enumerable metadata
 - **Why Deprecated:** Split responsibility - separate code for runtime vs analysis
 
 ### `guard()` - **Runtime Protection + Static Analysis**

@@ -16,6 +16,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import chalk from 'chalk';
 import chokidar from 'chokidar';
+import Ajv, { type ErrorObject } from 'ajv';
+import { pathToFileURL } from 'url';
 import {
   extractMachine,
   extractMachines,
@@ -40,7 +42,7 @@ program
   .option('-o, --output <file>', 'Output file for the generated statechart')
   .option('-c, --config <file>', 'Configuration file path', '.statechart.config.ts')
   .option('-w, --watch', 'Watch mode - regenerate on file changes')
-  .option('-f, --format <type>', 'Output format: json, mermaid, or both', 'json')
+  .option('-f, --format <type>', 'Output format: json, mermaid, or both')
   .option('--validate', 'Validate output against XState JSON schema')
   .option('-v, --verbose', 'Verbose logging')
   .option('--id <id>', 'Machine ID (required with --input)')
@@ -50,15 +52,6 @@ program
 // =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
-
-/**
- * Converts a file path to a file:// URL compatible with dynamic import
- */
-function pathToFileURL(filePath: string): string {
-  // On Windows, convert backslashes and add file:// protocol
-  const normalized = path.resolve(filePath).replace(/\\/g, '/');
-  return `file:///${normalized}`;
-}
 
 /**
  * Loads configuration from a TypeScript or JSON file
@@ -76,8 +69,8 @@ async function loadConfig(configPath: string): Promise<ExtractionConfig | null> 
   // For TypeScript files, use dynamic import
   if (resolvedPath.endsWith('.ts')) {
     try {
-      // Convert to file:// URL for proper import on Windows
-      const fileUrl = pathToFileURL(resolvedPath);
+      // The query string avoids stale module-cache entries in watch mode.
+      const fileUrl = `${pathToFileURL(resolvedPath).href}?updated=${Date.now()}`;
       const config = await import(fileUrl);
       return config.default || config;
     } catch (error) {
@@ -104,21 +97,7 @@ async function loadConfig(configPath: string): Promise<ExtractionConfig | null> 
 /**
  * Writes output to file or stdout
  */
-function writeOutput(data: any, outputPath?: string, format: string = 'json'): void {
-  let output: string;
-
-  switch (format) {
-    case 'json':
-      output = JSON.stringify(data, null, 2);
-      break;
-    case 'mermaid':
-      output = generateMermaid(data);
-      break;
-    default:
-      output = JSON.stringify(data, null, 2);
-  }
-
-  if (outputPath) {
+function writeFile(output: string, outputPath: string): void {
     const resolvedPath = path.resolve(process.cwd(), outputPath);
     const dir = path.dirname(resolvedPath);
 
@@ -129,8 +108,36 @@ function writeOutput(data: any, outputPath?: string, format: string = 'json'): v
 
     fs.writeFileSync(resolvedPath, output, 'utf-8');
     console.error(chalk.green(`✅ Statechart written to: ${resolvedPath}`));
+}
+
+function outputPathForFormat(outputPath: string, format: 'json' | 'mermaid'): string {
+  const parsed = path.parse(outputPath);
+  const extension = format === 'json' ? '.json' : '.mmd';
+  return path.join(parsed.dir, `${parsed.name}${extension}`);
+}
+
+function writeOutput(
+  data: unknown,
+  outputPath?: string,
+  format: ExtractionConfig['format'] = 'json'
+): void {
+  const json = JSON.stringify(data, null, 2);
+  const mermaid = generateMermaid(data);
+
+  if (format === 'both') {
+    if (outputPath) {
+      writeFile(json, outputPathForFormat(outputPath, 'json'));
+      writeFile(mermaid, outputPathForFormat(outputPath, 'mermaid'));
+    } else {
+      console.log(`${json}\n\n${mermaid}`);
+    }
+    return;
+  }
+
+  const output = format === 'mermaid' ? mermaid : json;
+  if (outputPath) {
+    writeFile(output, outputPath);
   } else {
-    // Write to stdout
     console.log(output);
   }
 }
@@ -160,27 +167,36 @@ function generateMermaid(chart: any): string {
 }
 
 /**
- * Validates statechart against XState JSON schema
- * (Placeholder - needs actual schema and ajv integration)
+ * Validates a statechart against the bundled XState-compatible JSON schema.
  */
-function validateStatechart(chart: any): boolean {
-  // TODO: Implement actual validation with ajv and XState schema
-  console.error(chalk.yellow('⚠️ Validation not yet implemented'));
+function createStatechartValidator() {
+  const schemaPath = path.resolve(__dirname, '../schemas/xstate-schema.json');
+  const schema = JSON.parse(fs.readFileSync(schemaPath, 'utf-8'));
+  const ajv = new Ajv({ allErrors: true, strict: false });
+  return ajv.compile(schema);
+}
 
-  // Basic structure validation
-  if (!chart.id || !chart.initial || !chart.states) {
-    console.error(chalk.red('❌ Invalid statechart structure'));
-    return false;
+const validateAgainstSchema = createStatechartValidator();
+
+function formatValidationError(error: ErrorObject): string {
+  const location = error.instancePath || '/';
+  return `${location} ${error.message ?? 'is invalid'}`;
+}
+
+function validateStatechart(chart: unknown): boolean {
+  if (validateAgainstSchema(chart)) return true;
+
+  for (const error of validateAgainstSchema.errors ?? []) {
+    console.error(chalk.red(`  ${formatValidationError(error)}`));
   }
-
-  return true;
+  return false;
 }
 
 /**
  * Extracts machines based on CLI options or config
  */
 async function extract(options: any): Promise<void> {
-  const verbose = options.verbose || false;
+  const verbose = Boolean(options.verbose);
 
   // Try loading config file first
   let config: ExtractionConfig | null = null;
@@ -215,8 +231,8 @@ async function extract(options: any): Promise<void> {
     config = {
       machines: [machineConfig],
       verbose,
-      format: options.format,
-      validate: options.validate,
+      format: options.format ?? 'json',
+      validate: Boolean(options.validate),
     };
   }
 
@@ -226,9 +242,9 @@ async function extract(options: any): Promise<void> {
   }
 
   // Update config with CLI options (CLI overrides config file)
-  if (options.verbose !== undefined) config.verbose = options.verbose;
+  if (options.verbose) config.verbose = true;
   if (options.format) config.format = options.format;
-  if (options.validate !== undefined) config.validate = options.validate;
+  if (options.validate) config.validate = true;
 
   // Extract machines
   try {

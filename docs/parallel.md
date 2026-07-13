@@ -2,7 +2,7 @@
 
 In statechart terminology, **parallel (or orthogonal) states** are states that are active at the same time and are largely independent of each other. A common example is a text editor where font weight (`bold`/`normal`) and text decoration (`underline`/`none`) can be changed independently.
 
-`@doeixd/machine` does not have a built-in primitive for parallel states, but its flexible foundation allows you to model them in a few different ways. This guide will walk you through the patterns, from the naive to the advanced, and help you understand the trade-offs of each.
+The core entry does not interpret parallel statecharts. You can model independent regions as context, or compose two existing snapshots with `createParallelMachine` from `@doeixd/machine/higher-order`. This guide explains the trade-offs.
 
 ### The Challenge: Combinatorial Explosion
 
@@ -74,7 +74,7 @@ For situations where you need to compose pre-existing, independent machines or r
 
 This pattern involves a higher-level primitive, `createParallelMachine`, that merges two machines into a single entity with a fully inferred union type.
 
-**(Note: The `createParallelMachine` primitive is an advanced pattern you would build yourself, not a part of the core library. An implementation is shown in the library's source for reference.)**
+`createParallelMachine` is published from `@doeixd/machine/higher-order` rather than the core entry. It rejects duplicate context keys or transition names because either collision would make ownership ambiguous. See [Higher-order machines](higher-order.md) for the supported API.
 
 **Example: Composing Two Independent Machines**
 

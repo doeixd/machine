@@ -18,12 +18,13 @@ import {
   createSignal,
   createEffect,
   createMemo,
+  batch,
   onCleanup,
   type Accessor,
   type Setter
 } from 'solid-js';
 import { createStore, type SetStoreFunction, type Store } from 'solid-js/store';
-import { Machine, AsyncMachine, Event, Context, runMachine as runMachineCore } from './index';
+import { Machine, AsyncMachine, AsyncEvent, Context, runMachine as runMachineCore } from './index';
 
 // =============================================================================
 // SIGNAL-BASED MACHINE (for simple state)
@@ -82,20 +83,10 @@ export function createMachine<M extends Machine<any>>(
 ): [Accessor<M>, TransitionHandlers<M>] {
   const [machine, setMachine] = createSignal<M>(initialMachine());
 
-  // Extract all transition methods and bind them to update the signal
-  const { context, ...transitions } = machine();
-
-  const handlers = Object.fromEntries(
-    Object.entries(transitions).map(([key]) => [
-      key,
-      (...args: any[]) => {
-        const currentMachine = machine();
-        const nextMachine = (currentMachine as any)[key](...args);
-        setMachine(nextMachine);
-        return nextMachine;
-      }
-    ])
-  ) as TransitionHandlers<M>;
+  const handlers = createTransitionHandlers(
+    machine,
+    (nextMachine) => setMachine(() => nextMachine)
+  );
 
   return [machine, handlers];
 }
@@ -103,11 +94,40 @@ export function createMachine<M extends Machine<any>>(
 /**
  * Helper type to extract transition handlers from a machine.
  */
+type TransitionKeys<M> = M extends unknown
+  ? Exclude<{
+      [K in keyof M]: M[K] extends (...args: any[]) => any ? K : never
+    }[keyof M], 'context'>
+  : never;
+
+type TransitionAt<M, K extends PropertyKey> = M extends unknown
+  ? K extends keyof M ? M[K] : never
+  : never;
+
 type TransitionHandlers<M extends Machine<any>> = {
-  [K in keyof Omit<M, 'context'>]: M[K] extends (...args: infer Args) => infer R
-    ? (...args: Args) => R
+  [K in TransitionKeys<M>]: TransitionAt<M, K> extends (...args: infer Args) => infer Result
+    ? (...args: Args) => Result
     : never;
 };
+
+function createTransitionHandlers<M extends Machine<any>>(
+  getMachine: () => M,
+  updateMachine: (nextMachine: M) => void
+): TransitionHandlers<M> {
+  return new Proxy({} as TransitionHandlers<M>, {
+    get: (_target, key) => (...args: unknown[]) => {
+      const currentMachine = getMachine();
+      const transition = currentMachine[key as keyof M];
+      if (typeof transition !== 'function') {
+        throw new Error(`[Machine] Transition '${String(key)}' is not available on the current state.`);
+      }
+
+      const nextMachine = transition.apply(currentMachine, args) as M;
+      updateMachine(nextMachine);
+      return nextMachine;
+    }
+  });
+}
 
 // =============================================================================
 // STORE-BASED MACHINE (for complex context with fine-grained reactivity)
@@ -150,18 +170,10 @@ export function createMachineStore<M extends Machine<any>>(
   const initial = initialMachine();
   const [store, setStore] = createStore<M>(initial);
 
-  const { context, ...transitions } = initial;
-
-  const handlers = Object.fromEntries(
-    Object.entries(transitions).map(([key]) => [
-      key,
-      (...args: any[]) => {
-        const nextMachine = (store as any)[key](...args);
-        setStore(nextMachine);
-        return nextMachine;
-      }
-    ])
-  ) as TransitionHandlers<M>;
+  const handlers = createTransitionHandlers(
+    () => store as M,
+    (nextMachine) => setStore(nextMachine)
+  );
 
   return [store, setStore, handlers];
 }
@@ -234,15 +246,16 @@ export function createMachineStore<M extends Machine<any>>(
  */
 export function createAsyncMachine<M extends AsyncMachine<any>>(
   initialMachine: () => M
-): [Accessor<M>, (event: Event<M>) => Promise<M>] {
-  const [machine, setMachine] = createSignal<M>(initialMachine());
+): [Accessor<M>, (event: AsyncEvent<M>) => Promise<M>] {
+  const initial = initialMachine();
+  const [machine, setMachine] = createSignal<M>(initial);
 
   // Create the runner with signal update callback
-  const runner = runMachineCore(initialMachine(), (nextMachine) => {
+  const runner = runMachineCore(initial, (nextMachine) => {
     setMachine(() => nextMachine as M);
   });
 
-  const dispatch = async (event: Event<M>): Promise<M> => {
+  const dispatch = async (event: AsyncEvent<M>): Promise<M> => {
     const result = await runner.dispatch(event);
     return result as M;
   };
@@ -286,19 +299,13 @@ export function createMachineContext<C extends object, M extends Machine<C>>(
   let currentMachine = initialMachine();
   const [context, setContext] = createStore<C>(currentMachine.context);
 
-  const { context: _, ...transitions } = currentMachine;
-
-  const handlers = Object.fromEntries(
-    Object.entries(transitions).map(([key]) => [
-      key,
-      (...args: any[]) => {
-        const nextMachine = (currentMachine as any)[key](...args);
-        currentMachine = nextMachine;
-        setContext(nextMachine.context);
-        return nextMachine;
-      }
-    ])
-  ) as TransitionHandlers<M>;
+  const handlers = createTransitionHandlers(
+    () => currentMachine,
+    (nextMachine) => {
+      currentMachine = nextMachine;
+      setContext(nextMachine.context);
+    }
+  );
 
   return [context, setContext, handlers];
 }
@@ -379,8 +386,6 @@ export function batchTransitions<M extends Machine<any>>(
   setMachine: Setter<M>,
   ...transitions: Array<(m: M) => M>
 ): M {
-  const { batch } = require('solid-js');
-
   return batch(() => {
     const finalMachine = transitions.reduce((m, transition) => transition(m), machine);
     setMachine(() => finalMachine);
