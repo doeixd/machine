@@ -12,7 +12,7 @@ For the complete list of directly importable subpaths, see the [Published module
 - `AsyncMachine<C, T>` — the same shape for transitions that may return promises.
 - `TypeState<C, T>` and `AsyncTypeState<C, T>` — aliases for expressing explicit typestates.
 - `BaseMachine<C>` — the common `{ readonly context: C }` constraint.
-- `Context<M>`, `Transitions<M>`, `TransitionArgs<M, K>`, and `TransitionNames<M>` — machine introspection helpers.
+- `Context<M>`, `Transitions<M>`, `TransitionArgs<M, K>`, `TransitionReturn<M, K>`, and `TransitionNames<M>` — distributive machine introspection helpers that preserve typestate unions.
 - `Event<M>` — event union derived from transition names and parameters.
 - `AsyncEvent<M>` — event union used by `runMachine`; omits runner-supplied `TransitionOptions` from caller arguments.
 
@@ -72,7 +72,7 @@ actor.subscribe(listener);
 actor.stop();
 ```
 
-Actors serialize async work through a mailbox and notify subscribers after successful transitions. `spawn` is an alias returning the `ActorRef` interface. `fromPromise` and `fromObservable` adapt common async sources.
+Actors serialize sync, promise, and promise-like transition results through a mailbox and notify subscribers after successful transitions. `stop()` clears queued work and subscribers and prevents an in-flight async result from changing the snapshot; `start()` accepts new work again. `spawn` is an alias returning the smaller `ActorRef` interface. `fromPromise` and `fromObservable` adapt common async sources, and an observable subscription is disposed when its actor stops.
 
 ### Runners and ensembles
 
@@ -121,6 +121,16 @@ const login = pipe(
 The transition keeps its original parameter and return types. Direct nested calls remain supported for compatibility.
 
 Use `@doeixd/machine/extract` for `extractMachine`, `extractMachines`, and extraction configuration types.
+
+## Higher-order entry: `@doeixd/machine/higher-order`
+
+- `delegateToChild(name)` — create a parent transition that forwards to a machine stored at `context.child`.
+- `toggle(key)` — create a transition for a boolean context key; non-boolean runtime values throw.
+- `createFetchMachine(config)` — model fetch, retry, cancellation, success, and error as explicit typestates.
+- `createParallelMachine(left, right)` — combine two independent snapshots; duplicate context or transition keys throw.
+- `RemapTransitions<M, T>` — retain transition parameters while replacing their return type.
+
+See [Higher-order machines](higher-order.md) for lifecycle examples and collision rules.
 
 ## Minimal entry: `@doeixd/machine/minimal`
 

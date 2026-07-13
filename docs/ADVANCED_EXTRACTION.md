@@ -430,6 +430,6 @@ See "Configuration Types" section for complete interface documentation.
 
 ## See Also
 
-- [Statechart Extraction Architecture](./EXTRACTION_ARCHITECTURE.md)
+- [Statechart extraction guide](statechart-extraction.md)
 - [Type-State Programming Guide](../README.md)
-- [Configuration Reference](./CONFIGURATION.md)
+- [Supported API](api.md)

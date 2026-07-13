@@ -7,6 +7,8 @@ Start with the repository [README](../README.md) and [supported API](api.md). Th
 - [Minimal API](minimal.md)
 - [Published module guide](modules.md)
 - [Actors](actor.md)
+- [Event adapters](adapters.md)
+- [Higher-order machines](higher-order.md)
 - [Async cancellation](abort.md)
 - [Delegation](delegate.md)
 - [Middleware](middleware.md)
@@ -21,7 +23,6 @@ Start with the repository [README](../README.md) and [supported API](api.md). Th
 
 The following explain alternatives and design history. They may use a narrower style than the current recommended API and are not exhaustive API references:
 
-- `adapters.md`
 - `binding-strategies.md`
 - `combinators.md`
 - `evolution.md`

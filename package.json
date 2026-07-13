@@ -32,7 +32,6 @@
     "state-pattern",
     "type-driven",
     "compile-time-safety",
-    "zero-runtime",
     "discriminated-unions"
   ],
   "peerDependencies": {

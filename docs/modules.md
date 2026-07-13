@@ -64,7 +64,7 @@ Exports class and instance union/exclusion helpers: `MachineUnion`, `MachineExcl
 
 ### `@doeixd/machine/higher-order`
 
-Exports higher-level constructors such as child delegation, toggles, fetch machines, parallel machines, and transition remapping. These are convenience patterns built on the main machine shape rather than additional core semantics.
+Exports `delegateToChild`, `toggle`, `createFetchMachine`, `createParallelMachine`, and their public configuration and result types. Fetch attempts are explicit typestates: call `fetch`, await `loading.done()`, and call `retry` when the result is retryable. Parallel composition rejects duplicate context and transition keys instead of choosing one silently. See [Higher-order machines](higher-order.md).
 
 ### `@doeixd/machine/generators`
 
@@ -90,7 +90,7 @@ Exports the `ts-morph`-based static extractor and its configuration types. It re
 
 ### `@doeixd/machine/types`
 
-Exports shared tagged-state helpers including `tag`, `isState`, `States`, `Tagged`, `TagOf`, `freeze`, and type-introspection utilities. `freeze` is shallow.
+Exports shared tagged-state helpers including `tag`, `isState`, `States`, `Tagged`, `TagOf`, `freeze`, and type-introspection utilities. `freeze` recursively freezes objects and arrays and safely handles cycles.
 
 ### `@doeixd/machine/utils`
 

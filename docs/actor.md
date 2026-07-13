@@ -1,257 +1,103 @@
-# The Actor Model
+# Actors
 
-The `Actor` is a runtime container for a state machine. It provides a stable reference for interacting with a machine instance, managing its state transitions, handling asynchronous effects safely, and offering observability.
+An actor owns one machine snapshot behind a stable reference. Use one when events can arrive over time, async transitions must be serialized, or consumers need subscriptions. If a caller can simply retain the snapshot returned by each transition, the machine alone is enough.
 
-While a **Machine** defines the _logic_ (states, transitions, context), an **Actor** represents a _running instance_ of that logic.
+```ts
+import { createActor, createMachine } from '@doeixd/machine';
 
-## Why use an Actor?
-
-1.  **State Isolation**: Each actor maintains its own independent state. You can spawn multiple actors from the same machine definition.
-2.  **The Mailbox (Async Safety)**: The actor manages a queue of incoming events. If an event triggers an asynchronous transition, the actor buffers subsequent events until the async operation completes and the state settles. This prevents race conditions common in raw async code.
-3.  **Observability**: Actors provide a `subscribe` method to listen for state changes, making it easy to integrate with UI frameworks (React, Vue, etc.) or logging systems.
-4.  **Stable Reference**: The `actor.ref` provides a way to pass the capability to send events without exposing the entire actor API.
-
-## Getting Started
-
-First, define your machine, then create an actor from it.
-
-```typescript
-import { createMachine, createActor } from '@doeixd/machine';
-
-// 1. Define the Machine
-const counterMachine = createMachine({ count: 0 }, (next) => ({
+const counter = createMachine({ count: 0 }, next => ({
   increment() {
     return next({ count: this.context.count + 1 });
   },
   add(amount: number) {
     return next({ count: this.context.count + amount });
-  }
-}));
-
-// 2. Create the Actor
-const actor = createActor(counterMachine);
-
-// 3. Subscribe to changes
-actor.subscribe((state) => {
-  console.log('Current count:', state.context.count);
-});
-
-// 4. Send events
-actor.send.increment(); // Logs: Current count: 1
-actor.send.add(5);      // Logs: Current count: 6
-```
-
-## Core Concepts
-
-### Dispatch Patterns
-
-There are two main ways to send events to an actor.
-
-#### 1. The Proxy Dispatch (Recommended)
-The `actor.send` property is a proxy that maps method calls directly to event names. This feels like calling a standard method but actually dispatches a transition event.
-
-```typescript
-actor.send.increment();
-actor.send.add(10);
-```
-
-#### 2. The Event Object Dispatch
-If you need to pass an event object dynamically (e.g., from a serialized source or generic handler), use `actor.dispatch` or `actor.ref.send`.
-
-```typescript
-actor.dispatch({ type: 'increment', args: [] });
-// or
-actor.ref.send({ type: 'add', args: [10] });
-```
-
-### The Mailbox (Queue)
-
-One of the most powerful features of the Actor is its internal event queue. If a transition is asynchronous (returns a Promise), the actor enters a "processing" state. Any events sent during this time are queued and processed in order once the current transition completes.
-
-```typescript
-const asyncMachine = createAsyncMachine({ status: 'idle' }, (next) => ({
-  async saveData() {
-    await api.save(); // Takes 100ms
-    return next({ status: 'saved' });
   },
-  reset() {
-    return next({ status: 'idle' });
-  }
 }));
 
-const actor = createActor(asyncMachine);
-
-// These will be processed sequentially, not concurrently!
-actor.send.saveData(); 
-actor.send.reset();    // Will wait for saveData to finish before running
-```
-
-### Observability
-
-You can subscribe to all state changes or select specific parts of the state.
-
-```typescript
-// Subscribe to everything
-const unsubscribe = actor.subscribe((state) => {
-  console.log(state);
+const actor = createActor(counter);
+const unsubscribe = actor.subscribe(snapshot => {
+  console.log(snapshot.context.count);
 });
 
-// Select a specific value (snapshot at call time)
-const count = actor.select((state) => state.context.count);
+actor.send.increment();
+actor.send.add(4);
+console.log(actor.getSnapshot().context.count); // 5
+
+unsubscribe();
+actor.stop();
 ```
 
-## API Reference
+## Sending events
 
-### `createActor(machine)` / `spawn(machine)`
-Creates a new `Actor` instance. `spawn` is an alias for explicit actor hierarchies.
+The typed proxy is convenient when the transition is known at the call site:
 
-### `Actor` Class
+```ts
+actor.send.add(2);
+```
 
-| Member | Description |
-|---|---|
-| `send.[transitionName](...args)` | 	Dispatches a transition by name. |
-| `dispatch(event)` | Dispatches a raw event object `{ type, args }`. |
-| `getSnapshot()` | Returns the current immutable state of the machine. |
-| `subscribe(observer)` | Registers a callback that runs on every state change. Returns an unsubscription function. |
-| `select(selector)` | Helper to run a selector function against the current state. |
-| `start()` / `stop()` | Lifecycle methods. Currently `stop` clears observers. |
+Use an event object at dynamic boundaries:
 
-### Interop: Promises & Observables
+```ts
+actor.dispatch({ type: 'add', args: [2] });
+actor.ref.send({ type: 'increment', args: [] });
+```
 
-You can create actors from other sources to treat them uniformly.
+`actor.ref` exposes only event sending. `spawn(machine)` returns the smaller `ActorRef` interface with `dispatch`, `getSnapshot`, and `subscribe`.
 
-#### `fromPromise(promiseFn)`
-Creates an actor that represents the state of a promise. The state context will have a `status` ('pending', 'resolved', 'rejected'), `data`, and `error`.
+## Mailbox and async behavior
 
-```typescript
+Events are processed in arrival order. If a transition returns a promise or promise-like value, later events wait in the mailbox until it settles. Subscribers are notified only after a transition returns a valid machine snapshot.
+
+Transition failures are reported to `console.error` and the mailbox continues. An event unavailable in the current typestate is reported with `console.warn` and ignored. A bad transition result is rejected rather than replacing the actor's snapshot.
+
+## Lifecycle
+
+`stop()`:
+
+- ignores future events until `start()` is called;
+- clears queued events and subscribers;
+- invalidates an in-flight async result so it cannot update the snapshot later.
+
+`start()` accepts work again but does not restore cleared subscriptions. Subscribe again when restarting an actor.
+
+`subscribe` does not emit the current snapshot immediately; call `getSnapshot()` when an initial read is needed. Subscriber and global inspector errors are isolated so they cannot break event processing.
+
+## Inspection
+
+`Actor.inspect(listener)` registers one process-wide listener for dispatched events. Pass `null` to remove it.
+
+```ts
+import { Actor } from '@doeixd/machine/actor';
+
+Actor.inspect(event => {
+  console.log(event.event, event.snapshot);
+});
+
+Actor.inspect(null);
+```
+
+Inspection events describe dispatch, not successful completion. Observe snapshots with `subscribe` when completion matters.
+
+## Promise and observable sources
+
+`fromPromise(() => promise)` starts immediately and returns an actor whose context moves from `pending` to `resolved` or `rejected`.
+
+```ts
 import { fromPromise } from '@doeixd/machine';
 
-const userActor = fromPromise(() => fetchUser(123));
+const user = fromPromise(() => fetchUser(42));
 
-userActor.subscribe(state => {
-  if (state.context.status === 'resolved') {
-    console.log('User loaded:', state.context.data);
+user.subscribe(snapshot => {
+  if (snapshot.context.status === 'resolved') {
+    console.log(snapshot.context.data);
   }
 });
 ```
 
-#### `fromObservable(observable)`
-Creates an actor from an RxJS-like observable. Transitions `idle` -> `active` -> `done` or `error`.
+`fromObservable(source)` subscribes immediately. Values produce `{ status: 'active', value }`; completion produces `done`, and errors produce `error`. Stopping the actor unsubscribes the source, including when it is stopped before the source completes.
 
-```typescript
-import { fromObservable } from '@doeixd/machine';
-// import { interval } from 'rxjs'; // example
+These helpers adapt source lifecycles to actor snapshots. They do not add cancellation to the original promise; use an abort-aware transition or source when underlying work must be canceled.
 
-const timerActor = fromObservable(interval(1000));
-```
+## Actor versus runner
 
-### Global Inspection
-
-For debugging tools or logging, you can register a global inspector that receives all events sent to *any* actor.
-
-```typescript
-import { Actor } from '@doeixd/machine';
-
-Actor.inspect((inspectionEvent) => {
-  console.log('Event sent:', inspectionEvent.event.type);
-  console.log('Target actor:', inspectionEvent.actor);
-});
-```
-
-## React Integration
-
-Use the `@doeixd/machine/react` entry point to integrate actors with React components.
-
-### `useActor(actor)`
-
-Subscribes to an actor and returns its current snapshot.
-
-```tsx
-import { useActor } from '@doeixd/machine/react';
-
-function Counter({ actor }) {
-  const state = useActor(actor);
-  return <button>{state.context.count}</button>;
-}
-```
-
-### `useActorSelector(actor, selector, isEqual?)`
-
-Selects a specific value from the actor's state, only re-rendering when that value changes.
-
-```tsx
-import { useActorSelector } from '@doeixd/machine/react';
-
-function CountDisplay({ actor }) {
-  const count = useActorSelector(actor, (state) => state.context.count);
-  return <div>{count}</div>;
-}
-```
-
-## Actor vs. Runner (`runMachine`)
-
-You might notice a utility called `runMachine` in the core library. It is important to understand the difference between running a machine via an Actor versus a Runner.
-
-| Feature | Actor (`createActor`) | Runner (`runMachine`) |
-|---|---|---|
-| **Async Strategy** | **Mailbox (Queue)**. Events are buffered while an async transition is running. No data is lost; operations complete sequentially. | **Switch (Cancellation)**. If a new event arrives, the current async operation is **aborted** immediately. |
-| **Best For** | **Business Logic**. Critical processes where order matters (e.g., payments, user flows, database writes). | **UI Interactions**. "Latest wins" scenarios (e.g., type-ahead search, rapid toggles, tab switching). |
-| **API** | Full feature set: `subscribe`, `select`, `transient` refs, inspection. | Minimal: `dispatch` and `state`. |
-
-
-**Rule of Thumb**: Default to `Actor`. Use `runMachine` only when you specifically want the cancellation behavior for transient UI states.
-
-## The Runner (`runMachine`)
-
-The `runMachine` utility is a lower-level primitive often used internally by UI hooks (like `useMachine`). It provides "Switch Map" semantics for async transitions.
-
-### API
-
-```typescript
-import { runMachine } from '@doeixd/machine';
-
-const runner = runMachine(initialMachine, (state) => {
-  console.log('State changed:', state);
-});
-
-// 1. Dispatch an event
-runner.dispatch({ type: 'fetchData', args: [] });
-
-// 2. Get current state synchronously
-const state = runner.state;
-
-// 3. Stop (aborts any pending async transition)
-runner.stop();
-```
-
-### Cancellation Behavior
-
-When you dispatch an event to a runner while an async transition is already in progress, the runner **aborts** the previous transition. It does this by triggering the `AbortSignal` passed to the async function.
-
-```typescript
-const searchMachine = createAsyncMachine({ results: [] }, (next) => ({
-  async search(query: string, { signal }: TransitionOptions) {
-    const response = await fetch(\'/api/search?q=\${query}\', { signal });
-    const data = await response.json();
-    return next({ results: data });
-  }
-}));
-
-const runner = runMachine(searchMachine);
-
-// User types "A"
-runner.dispatch({ type: 'search', args: ['A'] }); 
-// -> Fetch for 'A' starts...
-
-// User types "B" immediately
-runner.dispatch({ type: 'search', args: ['B'] });
-// -> Fetch for 'A' is ABORTED. Fetch for 'B' starts.
-```
-
-This makes `runMachine` ideal for "latest wins" UI patterns like search autocompletion, tab switching, or rapid toggles where old requests should be discarded.
-
-## Gotchas & Philosophy
-
-- **Hot Start**: Actors are "hot" immediately upon creation; you generally don't *need* to call `start()`, though it's provided for lifecycle symmetry.
-- **Reference Equality**: Usage of `select` or `getSnapshot` returns the exact state object from the machine. Since machines produce immutable state updates, you can use `===` to check if state has changed.
-- **Async Errors**: Errors in async transitions are caught and logged by the actor to prevent crashing the process, but they might leave the actor in the previous state if not handled by the machine logic itself (e.g., try/catch inside the machine transition). Ideally, your machine should model error states explicitly.
+Use `createActor` for ordered mailboxes and subscriptions. Use `runMachine` for abort-latest async dispatch, where every new event cancels the previous transition through `AbortSignal`. Use `createRunner` for a small synchronous mutable controller and stable action functions.

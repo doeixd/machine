@@ -185,6 +185,6 @@ The minimal entry re-exports the tagged helpers from `@doeixd/machine/types`:
 - `isState(value, tag)` narrows a tagged union;
 - `States<Shape>` converts a tag-to-payload map into a union;
 - `Context<M>`, `Transitions<M>`, `InferMachine<F>`, and `MachineOf<F>` inspect types;
-- `freeze(value)` applies a shallow `Object.freeze` and returns a readonly type.
+- `freeze(value)` recursively freezes objects and arrays, handles cyclic object graphs, and returns a deeply readonly type.
 
 The main and minimal APIs use different snapshot shapes. Minimal state is read as `machine.count`; main-API state is read as `machine.context.count`.
