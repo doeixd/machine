@@ -19,12 +19,14 @@ import {
   createEffect,
   createMemo,
   batch,
+  getOwner,
   onCleanup,
+  untrack,
   type Accessor,
   type Setter
 } from 'solid-js';
-import { createStore, type SetStoreFunction, type Store } from 'solid-js/store';
-import { Machine, AsyncMachine, AsyncEvent, Context, runMachine as runMachineCore } from './index';
+import { createStore, reconcile, unwrap, type SetStoreFunction, type Store } from 'solid-js/store';
+import { Machine, AsyncMachine, AsyncEvent, Context, runMachine as runMachineCore, setContext as setMachineContext } from './index';
 
 // =============================================================================
 // SIGNAL-BASED MACHINE (for simple state)
@@ -122,9 +124,12 @@ function createTransitionHandlers<M extends Machine<any>>(
         throw new Error(`[Machine] Transition '${String(key)}' is not available on the current state.`);
       }
 
-      const nextMachine = transition.apply(currentMachine, args) as M;
-      updateMachine(nextMachine);
-      return nextMachine;
+      const nextMachine = transition.apply(currentMachine, args) as unknown;
+      if (nextMachine === null || typeof nextMachine !== 'object' || !('context' in nextMachine)) {
+        throw new TypeError(`Transition '${String(key)}' did not return a machine with a context property.`);
+      }
+      updateMachine(nextMachine as M);
+      return nextMachine as M;
     }
   });
 }
@@ -145,6 +150,7 @@ function createTransitionHandlers<M extends Machine<any>>(
  * @param initialMachine - A function that returns the initial machine state.
  * @returns A tuple of [store, actions] where:
  *   - store: Reactive store proxy for the machine
+ *   - setStore: Store setter that keeps the action machine's context synchronized
  *   - actions: Transition handlers that update the store
  *
  * @example
@@ -168,14 +174,23 @@ export function createMachineStore<M extends Machine<any>>(
   initialMachine: () => M
 ): [Store<M>, SetStoreFunction<M>, TransitionHandlers<M>] {
   const initial = initialMachine();
+  let currentMachine = initial;
   const [store, setStore] = createStore<M>(initial);
 
+  const setStoreAndMachine = ((...args: any[]) => {
+    (setStore as (...setterArgs: any[]) => void)(...args);
+    currentMachine = setMachineContext(currentMachine, unwrap(store).context) as M;
+  }) as SetStoreFunction<M>;
+
   const handlers = createTransitionHandlers(
-    () => store as M,
-    (nextMachine) => setStore(nextMachine)
+    () => currentMachine,
+    (nextMachine) => {
+      currentMachine = nextMachine;
+      setStore(reconcile(nextMachine));
+    }
   );
 
-  return [store, setStore, handlers];
+  return [store, setStoreAndMachine, handlers];
 }
 
 // =============================================================================
@@ -255,6 +270,10 @@ export function createAsyncMachine<M extends AsyncMachine<any>>(
     setMachine(() => nextMachine as M);
   });
 
+  if (getOwner()) {
+    onCleanup(() => runner.stop());
+  }
+
   const dispatch = async (event: AsyncEvent<M>): Promise<M> => {
     const result = await runner.dispatch(event);
     return result as M;
@@ -279,6 +298,7 @@ export function createAsyncMachine<M extends AsyncMachine<any>>(
  *
  * @param initialMachine - A function that returns the initial machine.
  * @returns A tuple of [context store, setContext, actions].
+ * Updates made through setContext are applied to the machine used by later actions.
  *
  * @example
  * ```tsx
@@ -299,6 +319,11 @@ export function createMachineContext<C extends object, M extends Machine<C>>(
   let currentMachine = initialMachine();
   const [context, setContext] = createStore<C>(currentMachine.context);
 
+  const setContextAndMachine = ((...args: any[]) => {
+    (setContext as (...setterArgs: any[]) => void)(...args);
+    currentMachine = setMachineContext(currentMachine, unwrap(context) as C) as M;
+  }) as SetStoreFunction<C>;
+
   const handlers = createTransitionHandlers(
     () => currentMachine,
     (nextMachine) => {
@@ -307,7 +332,7 @@ export function createMachineContext<C extends object, M extends Machine<C>>(
     }
   );
 
-  return [context, setContext, handlers];
+  return [context, setContextAndMachine, handlers];
 }
 
 // =============================================================================
@@ -442,11 +467,11 @@ export function createMachineEffect<M extends Machine<any>>(
 
     if (isInState && !wasInState) {
       // Entering state
-      onEnter(m);
+      untrack(() => onEnter(m));
       wasInState = true;
     } else if (!isInState && wasInState) {
       // Exiting state
-      onExit?.();
+      untrack(() => onExit?.());
       wasInState = false;
     }
   });
@@ -491,7 +516,7 @@ export function createMachineValueEffect<M extends Machine<any>, T>(
 ): void {
   createEffect(() => {
     const value = selector(machine().context);
-    effect(value);
+    untrack(() => effect(value));
   });
 }
 

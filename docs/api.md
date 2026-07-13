@@ -182,6 +182,8 @@ This entry exports Solid-specific helpers only:
 
 Import non-reactive machine factories from `@doeixd/machine`. Solid is an optional peer dependency.
 
+Store-backed actions are resolved against the latest immutable machine, not against transition properties retained by Solid's stable store proxy. Updates made through the returned store setters are synchronized back into that machine before the next action. Async runners are stopped when their Solid owner is disposed, and lifecycle callback bodies are untracked so incidental signal reads do not become extra effect dependencies.
+
 ## Stability notes
 
 The small creation APIs and their tests are the most established surface. Actors, middleware, extraction, framework adapters, mixins, generators, and multi-machine orchestration are larger optional layers. Prefer adopting those deliberately rather than importing the main entry and treating every export as required architecture.

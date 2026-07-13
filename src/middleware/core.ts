@@ -77,11 +77,14 @@ export interface MiddlewareHooks<C extends object> {
 
   /**
    * Called when a transition throws an error.
-   * Can be used for error reporting, recovery, etc.
+   * Return a machine (or a promise of one) to recover. Returning void or null
+   * preserves the original failure.
    *
    * @param error - Error context with transition details and error information
    */
-  error?: (error: MiddlewareError<C>) => void | Promise<void>;
+  error?: (
+    error: MiddlewareError<C>
+  ) => void | null | BaseMachine<C> | Promise<void | null | BaseMachine<C>>;
 }
 
 /**
@@ -100,6 +103,12 @@ export interface MiddlewareOptions {
  * Symbol used to cancel a transition from a before hook.
  */
 export const CANCEL = Symbol('CANCEL');
+
+function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
+  return value !== null
+    && (typeof value === 'object' || typeof value === 'function')
+    && typeof (value as PromiseLike<T>).then === 'function';
+}
 
 function collectFunctionKeys(value: object): string[] {
   const keys = new Set<string>();
@@ -158,30 +167,6 @@ export function createMiddleware<M extends BaseMachine<any>>(
 
         // Helper function to execute the transition and after hooks
         const executeTransition = () => {
-          // 2. Execute the actual transition
-          let nextMachine: any;
-          try {
-            nextMachine = value.apply(this, args);
-          } catch (error) {
-            // 3. Execute error hooks if transition failed
-            if (hooks.error) {
-              try {
-                // Error hooks are called synchronously for now
-                hooks.error({
-                  transitionName,
-                  context,
-                  args: [...args],
-                  error: error as Error
-                });
-              } catch (hookError) {
-                if (!continueOnError) throw hookError;
-                if (logErrors) console.error(`Middleware error hook error for ${transitionName}:`, hookError);
-                onError?.(hookError as Error, 'error', { transitionName, context, args, error });
-              }
-            }
-            throw error; // Re-throw the original error
-          }
-
           // Ensure the returned machine has the same extra properties as the wrapped machine
           const ensureMiddlewareProperties = (machine: any) => {
             if (machine && typeof machine === 'object' && machine.context) {
@@ -203,10 +188,54 @@ export function createMiddleware<M extends BaseMachine<any>>(
             return machine;
           };
 
+          const handleTransitionError = (error: unknown): any => {
+            if (!hooks.error) throw error;
+
+            const errorContext: MiddlewareError<Context<M>> = {
+              transitionName,
+              context,
+              args: [...args],
+              error: error as Error,
+            };
+
+            const recover = (fallback: void | null | BaseMachine<Context<M>>) => {
+              if (fallback && typeof fallback === 'object' && 'context' in fallback) {
+                return ensureMiddlewareProperties(fallback);
+              }
+              throw error;
+            };
+
+            const handleHookFailure = (hookError: unknown): never => {
+              if (!continueOnError) throw hookError;
+              if (logErrors) console.error(`Middleware error hook error for ${transitionName}:`, hookError);
+              onError?.(hookError as Error, 'error', errorContext);
+              throw error;
+            };
+
+            let hookResult: ReturnType<NonNullable<typeof hooks.error>>;
+            try {
+              hookResult = hooks.error(errorContext);
+            } catch (hookError) {
+              return handleHookFailure(hookError);
+            }
+
+            return isPromiseLike(hookResult)
+              ? Promise.resolve(hookResult).then(recover, handleHookFailure)
+              : recover(hookResult);
+          };
+
+          // 2. Execute the actual transition
+          let nextMachine: any;
+          try {
+            nextMachine = value.apply(this, args);
+          } catch (error) {
+            return handleTransitionError(error);
+          }
+
           // Check if the transition is async (returns a Promise)
-          if (nextMachine && typeof nextMachine.then === 'function') {
+          if (isPromiseLike(nextMachine)) {
             // For async transitions, we need to handle the after hooks after the promise resolves
-            const asyncResult = nextMachine.then((resolvedMachine: any) => {
+            const asyncResult = Promise.resolve(nextMachine).then((resolvedMachine: any) => {
               // Ensure middleware properties are attached
               ensureMiddlewareProperties(resolvedMachine);
 
@@ -221,8 +250,18 @@ export function createMiddleware<M extends BaseMachine<any>>(
                   });
 
                   // Handle async after hooks
-                  if (result && typeof result.then === 'function') {
-                    return result.then(() => resolvedMachine);
+                  if (isPromiseLike(result)) {
+                    return Promise.resolve(result).then(() => resolvedMachine).catch((error: Error) => {
+                      if (!continueOnError) throw error;
+                      if (logErrors) console.error(`Middleware after hook error for ${transitionName}:`, error);
+                      onError?.(error, 'after', {
+                        transitionName,
+                        prevContext: context,
+                        nextContext: resolvedMachine.context,
+                        args,
+                      });
+                      return resolvedMachine;
+                    });
                   }
                 } catch (error) {
                   if (!continueOnError) throw error;
@@ -236,7 +275,7 @@ export function createMiddleware<M extends BaseMachine<any>>(
                 }
               }
               return resolvedMachine;
-            });
+            }, handleTransitionError);
 
             return asyncResult;
           } else {
@@ -255,8 +294,8 @@ export function createMiddleware<M extends BaseMachine<any>>(
                 });
 
                 // Handle async after hooks
-                if (result && typeof result === 'object' && result && 'then' in result) {
-                  return result.then(() => nextMachine).catch((error: Error) => {
+                if (isPromiseLike(result)) {
+                  return Promise.resolve(result).then(() => nextMachine).catch((error: Error) => {
                     if (!continueOnError) throw error;
                     if (logErrors) console.error(`Middleware after hook error for ${transitionName}:`, error);
                     onError?.(error, 'after', {
@@ -295,14 +334,14 @@ export function createMiddleware<M extends BaseMachine<any>>(
             });
 
             // Handle async hooks
-            if (result && typeof result === 'object' && result && 'then' in result) {
+            if (isPromiseLike(result)) {
               // For async hooks, return a promise that executes the transition after
-              return result.then((hookResult: any) => {
+              return Promise.resolve(result).then((hookResult: any) => {
                 if (hookResult === CANCEL) {
                   return this;
                 }
                 return executeTransition();
-              }).catch((error: Error) => {
+              }, (error: Error) => {
                 if (!continueOnError) throw error;
                 if (logErrors) console.error(`Middleware before hook error for ${transitionName}:`, error);
                 onError?.(error, 'before', { transitionName, context, args });

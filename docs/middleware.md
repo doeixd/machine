@@ -63,7 +63,7 @@ after?: (result: MiddlewareResult<C>) => void | Promise<void>
 ```
 
 #### Error Hook
-Called when a transition throws an error. Can provide fallback states or transform errors.
+Called when a synchronous transition throws or an asynchronous transition rejects. Return a machine, directly or through a promise, to recover with that fallback snapshot. Returning `void` or `null` runs the hook for reporting and then preserves the original failure. Throwing from the hook replaces the failure unless `continueOnError` is enabled.
 
 ```typescript
 error?: (error: MiddlewareError<C>) => void | null | BaseMachine<C> | Promise<void | null | BaseMachine<C>>
@@ -794,10 +794,11 @@ type WithTimeTravel<M, C> = M & { /* history + snapshots + replay */ };
 
 ### Error Handling
 
-- Use `error` hooks for logging, never for business logic
+- Use `error` hooks for reporting or explicit fallback-state recovery
 - Prefer `before` hooks for validation over `error` hooks
 - Use `CANCEL` for silent prevention, `throw` for errors
-- Always handle async errors in async middleware
+- A logging-only error hook still rethrows the original transition error
+- Recovered fallback machines retain middleware across subsequent transitions
 
 ### Type Safety
 
@@ -821,11 +822,15 @@ const tracked = withAnalytics(machine, mockTrack);
 tracked.transition();
 expect(mockTrack).toHaveBeenCalledWith('state_transition.transition', expect.any(Object));
 
-// Test error handling
-const errorMachine = createMiddleware(machine, {
-  error: vi.fn()
+// Test fallback recovery
+const recoveredMachine = createMiddleware(machine, {
+  error: () => fallbackMachine
 });
-expect(() => errorMachine.failingTransition()).not.toThrow();
+expect(recoveredMachine.failingTransition()).toBe(fallbackMachine);
+
+// Reporting without a fallback preserves the failure
+const reportedMachine = createMiddleware(machine, { error: vi.fn() });
+expect(() => reportedMachine.failingTransition()).toThrow();
 ```
 
 ## Migration Guide

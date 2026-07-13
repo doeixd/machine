@@ -89,6 +89,89 @@ describe('createMiddleware', () => {
     expect(call.error.message).toBe('Test error');
   });
 
+  it('should recover from synchronous transition failures with a fallback machine', () => {
+    const machine = createMachine({ count: 0 }, {
+      fail() {
+        throw new Error('failed');
+      },
+      increment() {
+        return createMachine({ count: this.context.count + 1 }, this);
+      }
+    });
+    const instrumented = createMiddleware(machine, {
+      error: () => createMachine({ count: 10 }, machine),
+    });
+
+    const recovered = instrumented.fail.call(instrumented);
+    const next = recovered.increment.call(recovered);
+
+    expect(recovered.context.count).toBe(10);
+    expect(next.context.count).toBe(11);
+  });
+
+  it('should recover from rejected transitions with an async fallback', async () => {
+    const errorHook = vi.fn(async () => createAsyncMachine({ count: 10 }, machine));
+    const machine = createAsyncMachine({ count: 0 }, {
+      async fail() {
+        throw new Error('failed');
+      },
+      async increment() {
+        return createAsyncMachine({ count: this.context.count + 1 }, this);
+      }
+    });
+    const instrumented = createMiddleware(machine, { error: errorHook });
+
+    const recovered = await instrumented.fail.call(instrumented);
+    const next = await recovered.increment.call(recovered);
+
+    expect(errorHook).toHaveBeenCalledWith(expect.objectContaining({
+      transitionName: 'fail',
+      error: expect.objectContaining({ message: 'failed' }),
+    }));
+    expect(recovered.context.count).toBe(10);
+    expect(next.context.count).toBe(11);
+  });
+
+  it('should not retry a rejected transition as a before-hook failure', async () => {
+    let attempts = 0;
+    const machine = createAsyncMachine({ count: 0 }, {
+      async fail() {
+        attempts += 1;
+        throw new Error('failed');
+      }
+    });
+    const instrumented = createMiddleware(machine, {
+      before: async () => undefined,
+      error: () => undefined,
+    }, { continueOnError: true, logErrors: false });
+
+    await expect(instrumented.fail.call(instrumented)).rejects.toThrow('failed');
+    expect(attempts).toBe(1);
+  });
+
+  it('should apply continueOnError to async after hooks on async transitions', async () => {
+    const onError = vi.fn();
+    const machine = createAsyncMachine({ count: 0 }, {
+      async increment() {
+        return createAsyncMachine({ count: this.context.count + 1 }, this);
+      }
+    });
+    const instrumented = createMiddleware(machine, {
+      after: async () => {
+        throw new Error('after failed');
+      },
+    }, { continueOnError: true, logErrors: false, onError });
+
+    const result = await instrumented.increment.call(instrumented);
+
+    expect(result.context.count).toBe(1);
+    expect(onError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'after failed' }),
+      'after',
+      expect.objectContaining({ nextContext: { count: 1 } }),
+    );
+  });
+
   it('should pass arguments to hooks', async () => {
     const beforeHook = vi.fn();
     const machine = createMachine({ count: 0 }, {
