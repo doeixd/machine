@@ -1,10 +1,10 @@
 /**
  * @file Type-level primitives for formal state machine verification.
  * @description
- * This file provides a Domain Specific Language (DSL) of wrapper functions.
+ * This file provides a Domain Specific Language (DSL) of transition decorators.
  * These functions serve two purposes:
- * 1. At Runtime: They are identity functions (no-ops). They return your code exactly as is.
- * 2. At Design/Build Time: They "brand" your transition functions with rich type metadata.
+ * 1. At runtime, they preserve the transition function and attach non-enumerable metadata.
+ * 2. At design/build time, they brand transition functions with rich type metadata.
  *
  * This allows a static analysis tool (like `ts-morph`) to read your source code
  * and generate a formal Statechart (JSON) that perfectly matches your implementation,
@@ -29,8 +29,6 @@ export interface TransitionOptions {
  */
 export const META_KEY = Symbol("MachineMeta");
 
-/**
- * Runtime metadata symbol.
 /**
  * Non-enumerable property key for storing metadata on function objects at runtime.
  * @internal
@@ -111,6 +109,38 @@ export type WithMeta<
   M extends TransitionMeta
 > = F & { [META_KEY]: M };
 
+type AnyFunction = (...args: any[]) => any;
+
+/** Extracts annotation metadata already carried by a transition function. */
+export type MetadataOf<F> = F extends { [META_KEY]: infer M extends TransitionMeta }
+  ? M
+  : {};
+
+/** A unary function suitable for use with {@link pipe}. */
+export type Operator<Input, Output> = (value: Input) => Output;
+
+/** A reusable decorator that adds metadata without changing a transition's call signature. */
+export type MetadataOperator<M extends TransitionMeta> = <F extends AnyFunction>(
+  transition: F
+) => WithMeta<F, MetadataOf<F> & M>;
+
+/**
+ * Applies operators from left to right while preserving each intermediate type.
+ *
+ * This is deliberately a standalone function: machine snapshots stay plain values,
+ * and the same composition helper works for transition functions or other values.
+ */
+export function pipe<A>(value: A): A;
+export function pipe<A, B>(value: A, ab: Operator<A, B>): B;
+export function pipe<A, B, C>(value: A, ab: Operator<A, B>, bc: Operator<B, C>): C;
+export function pipe<A, B, C, D>(value: A, ab: Operator<A, B>, bc: Operator<B, C>, cd: Operator<C, D>): D;
+export function pipe<A, B, C, D, E>(value: A, ab: Operator<A, B>, bc: Operator<B, C>, cd: Operator<C, D>, de: Operator<D, E>): E;
+export function pipe<A, B, C, D, E, F>(value: A, ab: Operator<A, B>, bc: Operator<B, C>, cd: Operator<C, D>, de: Operator<D, E>, ef: Operator<E, F>): F;
+export function pipe<A, B, C, D, E, F, G>(value: A, ab: Operator<A, B>, bc: Operator<B, C>, cd: Operator<C, D>, de: Operator<D, E>, ef: Operator<E, F>, fg: Operator<F, G>): G;
+export function pipe(value: unknown, ...operators: Array<Operator<any, any>>): unknown {
+  return operators.reduce((current, operator) => operator(current), value);
+}
+
 // =============================================================================
 // SECTION: RUNTIME METADATA ATTACHMENT
 // =============================================================================
@@ -186,13 +216,19 @@ function attachRuntimeMeta(fn: any, metadata: Partial<RuntimeTransitionMeta>): v
  * @example
  * login = transitionTo(LoggedInMachine, (user) => new LoggedInMachine({ user }));
  */
-export function transitionTo<
-  T extends ClassConstructor,
-  F extends (...args: any[]) => any
->(
-  _target: T,
+export function transitionTo<T extends ClassConstructor>(target: T): MetadataOperator<{ target: T }>;
+export function transitionTo<T extends ClassConstructor, F extends AnyFunction>(
+  target: T,
   implementation: F
-): WithMeta<F, { target: T }> {
+): WithMeta<F, MetadataOf<F> & { target: T }>;
+export function transitionTo<T extends ClassConstructor, F extends AnyFunction>(
+  _target: T,
+  implementation?: F
+): WithMeta<F, MetadataOf<F> & { target: T }> | MetadataOperator<{ target: T }> {
+  if (implementation === undefined) {
+    return ((transition: AnyFunction) => transitionTo(_target, transition)) as MetadataOperator<{ target: T }>;
+  }
+
   // Attach runtime metadata with class name
   attachRuntimeMeta(implementation, {
     target: _target.name || _target.toString()
@@ -209,13 +245,19 @@ export function transitionTo<
  * @example
  * logout = describe("Logs the user out", transitionTo(LoggedOut, ...));
  */
-export function describe<
-  F extends (...args: any[]) => any,
-  M extends TransitionMeta
->(
+export function describe(text: string): MetadataOperator<{ description: string }>;
+export function describe<F extends AnyFunction>(
+  text: string,
+  transition: F
+): WithMeta<F, MetadataOf<F> & { description: string }>;
+export function describe<F extends AnyFunction>(
   _text: string,
-  transition: WithMeta<F, M>
-): WithMeta<F, M & { description: string }> {
+  transition?: F
+): WithMeta<F, MetadataOf<F> & { description: string }> | MetadataOperator<{ description: string }> {
+  if (transition === undefined) {
+    return ((value: AnyFunction) => describe(_text, value)) as MetadataOperator<{ description: string }>;
+  }
+
   // Attach runtime metadata
   attachRuntimeMeta(transition, {
     description: _text
@@ -234,13 +276,19 @@ export function describe<
  * @example
  * delete = guarded({ name: "isAdmin" }, transitionTo(Deleted, ...));
  */
-export function guarded<
-  F extends (...args: any[]) => any,
-  M extends TransitionMeta
->(
-  guard: GuardMeta,
-  transition: WithMeta<F, M>
-): WithMeta<F, M & { guards: [typeof guard] }> {
+export function guarded<G extends GuardMeta>(guard: G): MetadataOperator<{ guards: [G] }>;
+export function guarded<G extends GuardMeta, F extends AnyFunction>(
+  guard: G,
+  transition: F
+): WithMeta<F, MetadataOf<F> & { guards: [G] }>;
+export function guarded<G extends GuardMeta, F extends AnyFunction>(
+  guard: G,
+  transition?: F
+): WithMeta<F, MetadataOf<F> & { guards: [G] }> | MetadataOperator<{ guards: [G] }> {
+  if (transition === undefined) {
+    return ((value: AnyFunction) => guarded(guard, value)) as MetadataOperator<{ guards: [G] }>;
+  }
+
   // Attach runtime metadata
   // Note: guards is an array, will be merged by attachRuntimeMeta
   attachRuntimeMeta(transition, {
@@ -264,14 +312,32 @@ export function guarded<
  *   }
  * );
  */
-export function invoke<
-  D extends ClassConstructor,
-  E extends ClassConstructor,
-  F extends (options: { signal: AbortSignal }) => any
->(
-  service: { src: string; onDone: D; onError: E; description?: string },
+type InvokeService<D extends ClassConstructor, E extends ClassConstructor> = {
+  src: string;
+  onDone: D;
+  onError: E;
+  description?: string;
+};
+
+type InvokeOperator<D extends ClassConstructor, E extends ClassConstructor> = <F extends (options: { signal: AbortSignal }) => any>(
   implementation: F
-): WithMeta<F, { invoke: typeof service }> {
+) => WithMeta<F, MetadataOf<F> & { invoke: InvokeService<D, E> }>;
+
+export function invoke<D extends ClassConstructor, E extends ClassConstructor>(
+  service: InvokeService<D, E>
+): InvokeOperator<D, E>;
+export function invoke<D extends ClassConstructor, E extends ClassConstructor, F extends (options: { signal: AbortSignal }) => any>(
+  service: InvokeService<D, E>,
+  implementation: F
+): WithMeta<F, MetadataOf<F> & { invoke: InvokeService<D, E> }>;
+export function invoke<D extends ClassConstructor, E extends ClassConstructor, F extends (options: { signal: AbortSignal }) => any>(
+  service: InvokeService<D, E>,
+  implementation?: F
+): WithMeta<F, MetadataOf<F> & { invoke: InvokeService<D, E> }> | InvokeOperator<D, E> {
+  if (implementation === undefined) {
+    return ((value: F) => invoke(service, value)) as InvokeOperator<D, E>;
+  }
+
   // Attach runtime metadata with class names resolved
   attachRuntimeMeta(implementation, {
     invoke: {
@@ -294,17 +360,23 @@ export function invoke<
  * @example
  * click = action({ name: "trackClick" }, (ctx) => ...);
  */
-export function action<
-  F extends (...args: any[]) => any,
-  M extends TransitionMeta
->(
-  action: ActionMeta,
-  transition: WithMeta<F, M>
-): WithMeta<F, M & { actions: [typeof action] }> {
+export function action<A extends ActionMeta>(action: A): MetadataOperator<{ actions: [A] }>;
+export function action<A extends ActionMeta, F extends AnyFunction>(
+  actionMeta: A,
+  transition: F
+): WithMeta<F, MetadataOf<F> & { actions: [A] }>;
+export function action<A extends ActionMeta, F extends AnyFunction>(
+  actionMeta: A,
+  transition?: F
+): WithMeta<F, MetadataOf<F> & { actions: [A] }> | MetadataOperator<{ actions: [A] }> {
+  if (transition === undefined) {
+    return ((value: AnyFunction) => action(actionMeta, value)) as MetadataOperator<{ actions: [A] }>;
+  }
+
   // Attach runtime metadata
   // Note: actions is an array, will be merged by attachRuntimeMeta
   attachRuntimeMeta(transition, {
-    actions: [action]
+    actions: [actionMeta]
   });
 
   return transition as any;
@@ -771,7 +843,7 @@ export function whenGuardAsync<C extends object>(
  *
  * @param meta - Partial metadata object describing states, transitions, etc.
  * @param value - The value to annotate (machine, config, factory function, etc.)
- * @returns The value unchanged (identity function at runtime)
+ * @returns The value unchanged, or a reusable unary annotation when value is omitted
  *
  * @example
  * // Annotate a functional machine
@@ -790,8 +862,14 @@ export function whenGuardAsync<C extends object>(
  *   () => createMachine({ count: 0 }, { ... })
  * );
  */
-export function metadata<T>(_meta: Partial<TransitionMeta>, value: T): T {
+export function metadata(meta: Partial<TransitionMeta>): <T>(value: T) => T;
+export function metadata<T>(meta: Partial<TransitionMeta>, value: T): T;
+export function metadata<T>(_meta: Partial<TransitionMeta>, value?: T): T | (<V>(value: V) => V) {
+  if (arguments.length === 1) {
+    return <V>(annotated: V): V => annotated;
+  }
+
   // At runtime, this is a no-op identity function
   // At compile-time/static-analysis, the metadata can be extracted from the type signature
-  return value;
+  return value as T;
 }

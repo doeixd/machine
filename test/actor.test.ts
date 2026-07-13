@@ -132,6 +132,38 @@ describe('Actor', () => {
 
       expect(actor.getSnapshot().context.count).toBe(2);
     });
+
+    it('should await promise-like transition results', async () => {
+      const machine = createAsyncMachine({ count: 0 }, {
+        increment() {
+          const next = createAsyncMachine({ count: this.context.count + 1 }, this);
+          return { then: (resolve: (value: typeof next) => void) => resolve(next) };
+        },
+      });
+      const actor = createActor(machine);
+
+      actor.send.increment();
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      expect(actor.getSnapshot().context.count).toBe(1);
+    });
+
+    it('should ignore late async results after stop', async () => {
+      let resolve!: (machine: ReturnType<typeof createAsyncCounter>) => void;
+      const machine = createAsyncMachine({ count: 0, status: 'idle' }, {
+        delayed() {
+          return new Promise<ReturnType<typeof createAsyncCounter>>(done => { resolve = done; });
+        },
+      });
+      const actor = createActor(machine);
+
+      actor.send.delayed();
+      actor.stop();
+      resolve(createAsyncCounter());
+      await Promise.resolve();
+
+      expect(actor.getSnapshot()).toBe(machine);
+    });
   });
 
   describe('Advanced Features', () => {
@@ -147,10 +179,11 @@ describe('Actor', () => {
 
     it('fromObservable should handle updates', () => {
       let nextObserver: any;
+      const unsubscribe = vi.fn();
       const obs = {
         subscribe: (next: any) => {
           nextObserver = next;
-          return { unsubscribe: () => { } };
+          return { unsubscribe };
         }
       };
 
@@ -160,6 +193,25 @@ describe('Actor', () => {
 
       nextObserver(42);
       expect(actor.getSnapshot().context.value).toBe(42);
+
+      actor.stop();
+      expect(unsubscribe).toHaveBeenCalledOnce();
+    });
+
+    it('isolates subscriber failures from mailbox processing', () => {
+      const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const actor = createActor(createCounter());
+      const healthyObserver = vi.fn();
+      actor.subscribe(() => { throw new Error('subscriber failed'); });
+      actor.subscribe(healthyObserver);
+
+      actor.send.increment();
+      actor.send.increment();
+
+      expect(actor.getSnapshot().context.count).toBe(2);
+      expect(healthyObserver).toHaveBeenCalledTimes(2);
+      expect(error).toHaveBeenCalledWith('[Actor] Subscriber failed:', expect.any(Error));
+      error.mockRestore();
     });
 
     it('should support global inspection', () => {
@@ -177,7 +229,7 @@ describe('Actor', () => {
       }));
 
       // Cleanup
-      Actor.inspect(() => { });
+      Actor.inspect(null);
     });
   });
 });

@@ -39,6 +39,20 @@ export interface Observable<T> {
   subscribe(observer: Observer<T>): { unsubscribe: () => void };
 }
 
+function customEvent<T>(type: string, detail: T): CustomEvent<T> {
+  if (typeof CustomEvent === 'function') {
+    return new CustomEvent(type, { detail });
+  }
+
+  const event = new Event(type) as CustomEvent<T>;
+  Object.defineProperty(event, 'detail', { value: detail, enumerable: true });
+  return event;
+}
+
+function asError(value: unknown): Error {
+  return value instanceof Error ? value : new Error(String(value));
+}
+
 // =============================================================================
 // SECTION 1: EventTarget Adapter (for Browser Environments)
 // =============================================================================
@@ -110,8 +124,10 @@ export class MachineEventTarget<M extends Machine<any>> extends EventTarget {
   constructor(initialMachine: M) {
     super();
 
+    const originalDispatchEvent = this.dispatchEvent.bind(this);
+
     this.runner = createRunner(initialMachine, (newState) => {
-      this.dispatchEvent(new CustomEvent('statechange', { detail: { state: newState } }));
+      originalDispatchEvent(customEvent('statechange', { state: newState }));
     });
 
     const handleEvent = (event: Event) => {
@@ -121,15 +137,18 @@ export class MachineEventTarget<M extends Machine<any>> extends EventTarget {
       const action = (this.runner.actions as any)[type];
       if (typeof action === 'function') {
         const args = Array.isArray(detail) ? detail : [];
-        action(...args);
+        try {
+          action(...args);
+        } catch (error) {
+          originalDispatchEvent(customEvent('error', { error: asError(error) }));
+        }
       } else {
         const error = new Error(`Invalid event type "${type}" for current state "${(this.state.context as any).status || 'unknown'}".`);
-        this.dispatchEvent(new CustomEvent('error', { detail: { error } }));
+        originalDispatchEvent(customEvent('error', { error }));
       }
     };
 
     // Override dispatchEvent to intercept all events and route them.
-    const originalDispatchEvent = this.dispatchEvent.bind(this);
     this.dispatchEvent = (event: Event): boolean => {
       // The event is first handled by our logic, then passed to the native dispatcher.
       handleEvent(event);
@@ -174,7 +193,7 @@ export class MachineEventTarget<M extends Machine<any>> extends EventTarget {
     type: K,
     detail?: MachineEventDetail<M, K>
   ): void {
-    super.dispatchEvent(new CustomEvent(type, { detail }));
+    this.dispatchEvent(customEvent(type, detail));
   }
 }
 
@@ -287,7 +306,11 @@ export class MachineEventEmitter<M extends Machine<any>> extends EventEmitter {
     const action = (this.runner.actions as any)[eventName];
 
     if (typeof action === 'function') {
-      action(...args);
+      try {
+        action(...args);
+      } catch (error) {
+        this.emit('error', asError(error));
+      }
     } else {
       this.emit('error', new Error(`Invalid event "${String(eventName)}" for current state.`));
     }
@@ -324,6 +347,7 @@ export function asEventEmitter<M extends Machine<any>>(initialMachine: M): Machi
 export class MachineObservable<M extends Machine<any>> implements Observable<M> {
   private readonly runner: Runner<M>;
   private observers: Set<Observer<M>> = new Set();
+  private completed = false;
 
   public get state(): M {
     return this.runner.state;
@@ -348,6 +372,11 @@ export class MachineObservable<M extends Machine<any>> implements Observable<M> 
    * @returns A subscription object with an `unsubscribe` method.
    */
   public subscribe(observer: Observer<M>): { unsubscribe: () => void } {
+    if (this.completed) {
+      observer.complete?.();
+      return { unsubscribe: () => undefined };
+    }
+
     // Immediately provide the current state to the new subscriber.
     observer.next?.(this.runner.state);
 
@@ -372,9 +401,16 @@ export class MachineObservable<M extends Machine<any>> implements Observable<M> 
     eventName: K,
     ...args: M[K] extends (...args: infer A) => any ? A : never
   ): void {
+    if (this.completed) return;
+
     const action = (this.runner.actions as any)[eventName];
     if (typeof action === 'function') {
-      action(...args);
+      try {
+        action(...args);
+      } catch (error) {
+        const normalized = asError(error);
+        this.observers.forEach(observer => observer.error?.(normalized));
+      }
     } else {
       // Emit an error to all observers.
       const error = new Error(`Invalid event "${String(eventName)}" for current state.`);
@@ -387,6 +423,8 @@ export class MachineObservable<M extends Machine<any>> implements Observable<M> 
    * This is useful when the machine reaches a final state.
    */
   public complete(): void {
+    if (this.completed) return;
+    this.completed = true;
     this.observers.forEach(o => o.complete?.());
     this.observers.clear();
   }

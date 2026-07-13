@@ -10,7 +10,14 @@ export type Context<M> = M extends { readonly context: infer C } ? C : M;
 /**
  * Extracts the transitions type from a machine (works with regular and minimal machines).
  */
-export type Transitions<M> = M extends { readonly context: any } & infer T ? T : M;
+export type Transitions<M> = M extends { readonly context: any } ? Omit<M, 'context'> : M;
+
+/** Recursively marks object properties readonly. */
+export type DeepReadonly<T> = T extends (...args: any[]) => any
+  ? T
+  : T extends object
+    ? { readonly [K in keyof T]: DeepReadonly<T[K]> }
+    : T;
 
 /**
  * A discriminated union type representing an event that can be dispatched to a machine.
@@ -96,7 +103,7 @@ export namespace tag {
   export function factory<C extends object, T extends object = {}>(): <K extends string>(name: K) => (props: Omit<Extract<C, { tag: K }>, 'tag'>) => (Extract<C, { tag: K }> extends never ? { readonly tag: K } & C : Extract<C, { tag: K }>) & T;
 
   export function factory(name?: string) {
-    if (name) {
+    if (name !== undefined) {
       return (props: any) => tag(name, props);
     }
     return (name: string) => (props: any) => tag(name, props);
@@ -116,14 +123,19 @@ export function isState<M extends Tagged, Tag extends TagOf<M>>(
 /**
  * Recursively freezes an object and its properties.
  */
-export function freeze<T extends object>(obj: T): Readonly<T> {
-  Object.freeze(obj);
-  if (typeof (Object as any).values === 'function') {
-    for (const value of Object.values(obj)) {
-      if (value && typeof value === 'object') {
-        freeze(value);
-      }
+export function freeze<T extends object>(obj: T): DeepReadonly<T> {
+  deepFreeze(obj, new WeakSet<object>());
+  return obj as DeepReadonly<T>;
+}
+
+function deepFreeze(value: object, seen: WeakSet<object>): void {
+  if (seen.has(value)) return;
+  seen.add(value);
+
+  for (const nested of Object.values(value)) {
+    if (nested !== null && typeof nested === 'object') {
+      deepFreeze(nested, seen);
     }
   }
-  return obj;
+  Object.freeze(value);
 }

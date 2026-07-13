@@ -197,6 +197,23 @@ describe('createRunner', () => {
     (runner.actions as any).login('alice');
     expect(runner.state.context.status).toBe('loggedIn');
     expect((runner.state as any).context.username).toBe('alice');
+    expect((runner.actions as any).login).toBeUndefined();
+    expect(typeof (runner.actions as any).logout).toBe('function');
+
+    (runner.actions as any).logout();
+    expect(runner.state.context.status).toBe('loggedOut');
+  });
+
+  it('rejects transitions that do not return a machine', () => {
+    const machine = createMachine({ count: 0 }, {
+      invalid: (() => undefined) as any,
+    });
+    const runner = createRunner(machine);
+
+    expect(() => (runner.actions as any).invalid()).toThrow(
+      "Transition 'invalid' did not return a machine with a context property."
+    );
+    expect(runner.state).toBe(machine);
   });
 });
 

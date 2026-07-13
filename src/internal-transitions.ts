@@ -25,8 +25,20 @@ export function snapshotOwnTransitions(source: any): TransitionMap {
   if (!source || typeof source !== "object") {
     return {};
   }
-  const entries = Object.entries(source).filter(
-    ([key, value]) => key !== "context" && typeof value === "function"
-  );
-  return Object.fromEntries(entries) as TransitionMap;
+
+  const transitions: TransitionMap = {};
+  let current: object | null = source;
+
+  while (current && current !== Object.prototype) {
+    for (const key of Object.getOwnPropertyNames(current)) {
+      if (key === "constructor" || key === "context" || key in transitions) continue;
+      const descriptor = Object.getOwnPropertyDescriptor(current, key);
+      if (typeof descriptor?.value === "function") {
+        transitions[key] = descriptor.value;
+      }
+    }
+    current = Object.getPrototypeOf(current);
+  }
+
+  return transitions;
 }

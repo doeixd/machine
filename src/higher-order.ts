@@ -28,6 +28,10 @@ import {
  */
 type ChildMachine<P> = P extends MachineBase<{ child: infer C }> ? C : never;
 
+type BooleanKey<T> = {
+  [K in keyof T]-?: T[K] extends boolean ? K : never
+}[keyof T];
+
 /**
  * Creates a transition method that delegates a call to a child machine.
  *
@@ -74,7 +78,7 @@ export function delegateToChild<
     const child = this.context.child as any;
 
     if (typeof child[actionName] === 'function') {
-      const newChildState = child[actionName](...args);
+      const newChildState = child[actionName].apply(child, args);
       return setContext(this as any, { ...this.context, child: newChildState }) as P;
     }
     
@@ -103,14 +107,13 @@ export function delegateToChild<
  */
 export function toggle<
   M extends MachineBase<any>,
-  K extends keyof Context<M>
+  K extends BooleanKey<Context<M>>
 >(
   prop: K
 ): (this: M) => M {
   return function(this: M): M {
-    // Ensure the property is boolean-like for a sensible toggle
     if (typeof this.context[prop] !== 'boolean') {
-      console.warn(`[toggle primitive] Property '${String(prop)}' is not a boolean. Toggling may have unexpected results.`);
+      throw new TypeError(`Cannot toggle non-boolean context property '${String(prop)}'.`);
     }
     return setContext(this as any, {
       ...this.context,
@@ -133,98 +136,122 @@ export function toggle<
 
 // --- Types for the Fetch Machine ---
 
-export type Fetcher<T, _E = Error> = (params: any) => Promise<T>;
+export type Fetcher<T, P = unknown> = (
+  params: P,
+  options: { signal: AbortSignal }
+) => Promise<T>;
 export type OnSuccess<T> = (data: T) => void;
 export type OnError<E> = (error: E) => void;
 
-export interface FetchMachineConfig<T, E = Error> {
-  fetcher: Fetcher<T, E>;
-  initialParams?: any;
+export interface FetchMachineConfig<T, E = Error, P = unknown> {
+  fetcher: Fetcher<T, P>;
+  initialParams?: P;
   maxRetries?: number;
   onSuccess?: OnSuccess<T>;
   onError?: OnError<E>;
+  mapError?: (error: unknown) => E;
 }
 
 // --- Contexts for Fetch States ---
 type IdleContext = { status: 'idle' };
 type LoadingContext = { status: 'loading'; abortController: AbortController; attempts: number };
-type RetryingContext = { status: 'retrying'; error: any; attempts: number };
+type RetryingContext<E> = { status: 'retrying'; error: E; attempts: number };
 type SuccessContext<T> = { status: 'success'; data: T };
 type ErrorContext<E> = { status: 'error'; error: E };
 type CanceledContext = { status: 'canceled' };
 
 // --- Machine State Classes (internal) ---
 
-class IdleMachine<T, E> extends MachineBase<IdleContext> {
-  constructor(private config: FetchMachineConfig<T, E>) { super({ status: 'idle' }); }
-  fetch = (params?: any) => new LoadingMachine(this.config, params ?? this.config.initialParams, 1);
+class IdleMachine<T, E, P> extends MachineBase<IdleContext> {
+  constructor(private config: FetchMachineConfig<T, E, P>) { super({ status: 'idle' }); }
+  fetch = (params?: P) => new LoadingMachine(this.config, selectParams(params, this.config.initialParams), 1);
 }
 
-class LoadingMachine<T, E> extends MachineBase<LoadingContext> {
-  constructor(private config: FetchMachineConfig<T, E>, private params: any, attempts: number) {
+type LoadingResult<T, E, P> = SuccessMachine<T, E, P> | RetryingMachine<T, E, P> | ErrorMachine<T, E, P> | CanceledMachine<T, E, P>;
+
+class LoadingMachine<T, E, P> extends MachineBase<LoadingContext> {
+  private readonly completion: Promise<LoadingResult<T, E, P>>;
+
+  constructor(private config: FetchMachineConfig<T, E, P>, private params: P, attempts: number) {
     super({ status: 'loading', abortController: new AbortController(), attempts });
-    this.execute(); // Auto-execute on creation
+    this.completion = this.execute();
   }
 
-  private async execute() {
-    // This is a "fire-and-forget" call that transitions the machine internally.
-    // In a real implementation, this would be managed by an external runner.
-    // For this example, we assume an external mechanism calls `succeed`, `fail`, etc.
+  /** Resolves to the typestate produced by the configured fetch operation. */
+  done = (): Promise<LoadingResult<T, E, P>> => this.completion;
+
+  private async execute(): Promise<LoadingResult<T, E, P>> {
+    try {
+      const data = await this.config.fetcher(this.params, {
+        signal: this.context.abortController.signal,
+      });
+      if (this.context.abortController.signal.aborted) {
+        return new CanceledMachine(this.config);
+      }
+      return this.succeed(data);
+    } catch (cause) {
+      if (this.context.abortController.signal.aborted) {
+        return new CanceledMachine(this.config);
+      }
+      const error = this.config.mapError ? this.config.mapError(cause) : cause as E;
+      return this.fail(error);
+    }
   }
   
   succeed = (data: T) => {
     this.config.onSuccess?.(data);
-    return new SuccessMachine<T, E>(this.config, { status: 'success', data });
+    return new SuccessMachine<T, E, P>(this.config, { status: 'success', data });
   };
 
   fail = (error: E) => {
     const maxRetries = this.config.maxRetries ?? 3;
-    if (this.context.attempts < maxRetries) {
-      return new RetryingMachine<T, E>(this.config, this.params, error, this.context.attempts);
+    if (this.context.attempts <= maxRetries) {
+      return new RetryingMachine<T, E, P>(this.config, this.params, error, this.context.attempts);
     }
     this.config.onError?.(error);
-    return new ErrorMachine<T, E>(this.config, { status: 'error', error });
+    return new ErrorMachine<T, E, P>(this.config, { status: 'error', error });
   };
   
   cancel = () => {
     this.context.abortController.abort();
-    return new CanceledMachine<T, E>(this.config);
+    return new CanceledMachine<T, E, P>(this.config);
   };
 }
 
-class RetryingMachine<T, E> extends MachineBase<RetryingContext> {
-  constructor(private config: FetchMachineConfig<T, E>, private params: any, error: E, attempts: number) {
+class RetryingMachine<T, E, P> extends MachineBase<RetryingContext<E>> {
+  constructor(private config: FetchMachineConfig<T, E, P>, private params: P, error: E, attempts: number) {
     super({ status: 'retrying', error, attempts });
-    // In a real implementation, you'd have a delay here (e.g., exponential backoff)
-    // before transitioning to LoadingMachine again.
   }
   
-  // This would be called after a delay.
-  retry = (params?: any) => new LoadingMachine<T, E>(this.config, params ?? this.params, this.context.attempts + 1);
+  retry = (params?: P) => new LoadingMachine<T, E, P>(this.config, selectParams(params, this.params), this.context.attempts + 1);
 }
 
-class SuccessMachine<T, E> extends MachineBase<SuccessContext<T>> {
-  constructor(private config: FetchMachineConfig<T, E>, context: SuccessContext<T>) { super(context); }
-  refetch = (params?: any) => new LoadingMachine(this.config, params ?? this.config.initialParams, 1);
+class SuccessMachine<T, E, P> extends MachineBase<SuccessContext<T>> {
+  constructor(private config: FetchMachineConfig<T, E, P>, context: SuccessContext<T>) { super(context); }
+  refetch = (params?: P) => new LoadingMachine(this.config, selectParams(params, this.config.initialParams), 1);
 }
 
-class ErrorMachine<T, E> extends MachineBase<ErrorContext<E>> {
-  constructor(private config: FetchMachineConfig<T, E>, context: ErrorContext<E>) { super(context); }
-  retry = (params?: any) => new LoadingMachine(this.config, params ?? this.config.initialParams, 1);
+class ErrorMachine<T, E, P> extends MachineBase<ErrorContext<E>> {
+  constructor(private config: FetchMachineConfig<T, E, P>, context: ErrorContext<E>) { super(context); }
+  retry = (params?: P) => new LoadingMachine(this.config, selectParams(params, this.config.initialParams), 1);
 }
 
-class CanceledMachine<T, E> extends MachineBase<CanceledContext> {
-  constructor(private config: FetchMachineConfig<T, E>) { super({ status: 'canceled' }); }
-  refetch = (params?: any) => new LoadingMachine(this.config, params ?? this.config.initialParams, 1);
+class CanceledMachine<T, E, P> extends MachineBase<CanceledContext> {
+  constructor(private config: FetchMachineConfig<T, E, P>) { super({ status: 'canceled' }); }
+  refetch = (params?: P) => new LoadingMachine(this.config, selectParams(params, this.config.initialParams), 1);
 }
 
-export type FetchMachine<T, E = Error> =
-  | IdleMachine<T, E>
-  | LoadingMachine<T, E>
-  | RetryingMachine<T, E>
-  | SuccessMachine<T, E>
-  | ErrorMachine<T, E>
-  | CanceledMachine<T, E>;
+function selectParams<P>(provided: P | undefined, fallback: P | undefined): P {
+  return (provided === undefined ? fallback : provided) as P;
+}
+
+export type FetchMachine<T, E = Error, P = unknown> =
+  | IdleMachine<T, E, P>
+  | LoadingMachine<T, E, P>
+  | RetryingMachine<T, E, P>
+  | SuccessMachine<T, E, P>
+  | ErrorMachine<T, E, P>
+  | CanceledMachine<T, E, P>;
 
 /**
  * Creates a pre-built, highly configurable async data-fetching machine.
@@ -257,19 +284,26 @@ export type FetchMachine<T, E = Error> =
  * });
  *
  * // 3. Use it (e.g., in a React hook)
- * // let machine = userMachine;
- * // machine = await machine.fetch(123); // Transitions to Loading, then Success/Error
+ * if (userMachine.context.status === 'idle') {
+ *   const loading = userMachine.fetch(123);
+ *   const result = await loading.done();
+ * }
  * ```
  * 
  * @note This is a simplified example. For a real-world implementation, you would
  * typically use this machine with a runner (like `runMachine` or `useMachine`) to
  * manage the async transitions and state updates automatically.
  */
-export function createFetchMachine<T, E = Error>(
-  config: FetchMachineConfig<T, E>
-): FetchMachine<T, E> {
-  // A more robust implementation would validate the config here.
-  return new IdleMachine<T, E>(config);
+export function createFetchMachine<T, E = Error, P = unknown>(
+  config: FetchMachineConfig<T, E, P>
+): FetchMachine<T, E, P> {
+  if (typeof config.fetcher !== 'function') {
+    throw new TypeError('createFetchMachine requires a fetcher function.');
+  }
+  if (config.maxRetries !== undefined && (!Number.isInteger(config.maxRetries) || config.maxRetries < 0)) {
+    throw new RangeError('maxRetries must be a non-negative integer.');
+  }
+  return new IdleMachine<T, E, P>(config);
 }
 
 /**
@@ -307,9 +341,8 @@ export type ParallelMachine<
  * Transitions from either machine can be called, and they will only affect
  * their respective part of the combined state.
  *
- * NOTE: This primitive assumes that the transition names between the two
- * machines do not collide. If both machines have a transition named `next`,
- * the behavior is undefined.
+ * Transition names must be unique across the two machines. A collision throws
+ * instead of silently choosing one implementation.
  *
  * @param m1 The first machine instance.
  * @param m2 The second machine instance.
@@ -320,12 +353,19 @@ export function createParallelMachine<
   M2 extends Machine<any>
 >(m1: M1, m2: M2): ParallelMachine<M1, M2> {
   // 1. Combine the contexts
+  const contextCollision = Object.keys(m1.context).find(key => key in m2.context);
+  if (contextCollision) {
+    throw new Error(`Cannot compose parallel machines: context key '${contextCollision}' exists on both machines.`);
+  }
   const combinedContext = { ...m1.context, ...m2.context };
 
-  const transitions1 = { ...m1 } as Transitions<M1>;
-  const transitions2 = { ...m2 } as Transitions<M2>;
-  delete (transitions1 as any).context;
-  delete (transitions2 as any).context;
+  const transitions1 = collectTransitions(m1) as unknown as Transitions<M1>;
+  const transitions2 = collectTransitions(m2) as unknown as Transitions<M2>;
+
+  const collision = Object.keys(transitions1).find(key => key in transitions2);
+  if (collision) {
+    throw new Error(`Cannot compose parallel machines: transition '${collision}' exists on both machines.`);
+  }
 
   const combinedTransitions = {} as any;
 
@@ -353,6 +393,22 @@ export function createParallelMachine<
     context: combinedContext,
     ...combinedTransitions,
   } as ParallelMachine<M1, M2>;
+}
+
+function collectTransitions(machine: Machine<any>): Record<string, (...args: any[]) => any> {
+  const transitions: Record<string, (...args: any[]) => any> = {};
+  let current: object | null = machine;
+
+  while (current && current !== Object.prototype) {
+    for (const key of Object.getOwnPropertyNames(current)) {
+      if (key === 'constructor' || key === 'context' || key in transitions) continue;
+      const value = (machine as Record<string, unknown>)[key];
+      if (typeof value === 'function') transitions[key] = value as (...args: any[]) => any;
+    }
+    current = Object.getPrototypeOf(current);
+  }
+
+  return transitions;
 }
 
 // A mapped type that transforms the return types of a machine's transitions.

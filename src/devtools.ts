@@ -3,14 +3,14 @@
  * @description Connects state machines to browser extension for visualization and debugging
  */
 
-import { runMachine, Event, AsyncMachine } from './index';
+import { runMachine, type AsyncEvent, type AsyncMachine } from './index';
 
 /**
  * DevTools interface for browser extension communication
  */
-interface MachineDevTools {
-  init(context: any): void;
-  send(message: { type: string; payload: any }): void;
+export interface MachineDevTools {
+  init(context: unknown): void;
+  send(message: { type: string; payload: unknown }): void;
 }
 
 /**
@@ -25,9 +25,9 @@ declare global {
 /**
  * Extended runner type with lastEvent tracking
  */
-interface DevToolsRunner<M extends AsyncMachine<any>> extends ReturnType<typeof runMachine<any>> {
-  lastEvent?: Event<M>;
-}
+export type DevToolsRunner<M extends AsyncMachine<any>> = ReturnType<typeof runMachine<M>> & {
+  lastEvent?: AsyncEvent<M>;
+};
 
 /**
  * Connects a state machine to the browser DevTools extension
@@ -49,26 +49,39 @@ export function connectToDevTools<M extends AsyncMachine<any>>(
   // The key is the onChange handler
   const runner = runMachine(initialMachine, (nextState) => {
     // This is where we send data to the extension
-    devTools.send({
-      type: 'STATE_CHANGED',
-      payload: {
-        // We need the event that *caused* this change
-        event: (runner as DevToolsRunner<M>).lastEvent,
-        // We serialize the context, not the whole class instance
-        context: nextState.context,
-        // The name of the new state's class is our state identifier
-        currentState: nextState.constructor.name,
-      }
-    });
+    try {
+      devTools.send({
+        type: 'STATE_CHANGED',
+        payload: {
+          event: runner.lastEvent,
+          context: nextState.context,
+          currentState: stateName(nextState),
+        }
+      });
+    } catch (error) {
+      console.warn('[Machine DevTools] Failed to send state update:', error);
+    }
   }) as DevToolsRunner<M>;
 
   // We wrap the dispatch function to capture the event
   const originalDispatch = runner.dispatch.bind(runner);
-  runner.dispatch = ((event: any) => {
-    (runner as DevToolsRunner<M>).lastEvent = event; // Capture the event
+  runner.dispatch = ((event: AsyncEvent<M>) => {
+    runner.lastEvent = event;
     return originalDispatch(event);
   }) as typeof runner.dispatch;
 
-  devTools.init(initialMachine.context); // Send initial state
+  try {
+    devTools.init(initialMachine.context);
+  } catch (error) {
+    console.warn('[Machine DevTools] Failed to initialize:', error);
+  }
   return runner;
+}
+
+function stateName(machine: AsyncMachine<any>): string {
+  const context = machine.context as Record<string, unknown>;
+  for (const key of ['status', 'state', 'tag'] as const) {
+    if (typeof context[key] === 'string') return context[key];
+  }
+  return machine.constructor.name || 'Machine';
 }

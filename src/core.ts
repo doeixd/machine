@@ -17,6 +17,7 @@ export type {
   DeepReadonly,
   InferMachine,
   Event,
+  AsyncEvent,
   MachineLike,
   MachineResult
 } from './index';
@@ -29,6 +30,7 @@ export type {
   Context,
   Transitions,
   TransitionArgs,
+  TransitionReturn,
   TransitionNames
 } from './index';
 
@@ -86,10 +88,12 @@ export {
 // =============================================================================
 
 export {
+  pipe,
   transitionTo,
   describe,
   guarded,
   guard,
+  guardSync,
   guardAsync,
   whenGuard,
   whenGuardAsync,
@@ -103,6 +107,9 @@ export {
   type ActionMeta,
   type ClassConstructor,
   type WithMeta,
+  type MetadataOf,
+  type MetadataOperator,
+  type Operator,
   type GuardOptions,
   type GuardFallback,
   type GuardedTransition

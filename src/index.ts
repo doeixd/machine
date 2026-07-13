@@ -5,6 +5,26 @@
  */
 import { attachTransitions, getStoredTransitions, snapshotOwnTransitions } from './internal-transitions';
 
+function assertContext(value: unknown): asserts value is object {
+  if (value === null || typeof value !== 'object') {
+    throw new TypeError('Machine context must be a non-null object.');
+  }
+}
+
+function assertTransitionMap(value: unknown): asserts value is Record<string, (...args: any[]) => any> {
+  if (value === null || typeof value !== 'object') {
+    throw new TypeError('Machine transitions must be an object of functions.');
+  }
+  for (const [key, transition] of Object.entries(value)) {
+    if (key === 'context') {
+      throw new TypeError("'context' is reserved and cannot be used as a transition name.");
+    }
+    if (typeof transition !== 'function') {
+      throw new TypeError(`Transition '${key}' must be a function.`);
+    }
+  }
+}
+
 // =============================================================================
 // SECTION: CORE TYPES & INTERFACES
 // =============================================================================
@@ -56,10 +76,14 @@ export type AsyncMachine<
  * Utility type to extract the parameters of an async transition function,
  * which includes TransitionOptions as the last parameter.
  */
-export type AsyncTransitionArgs<M extends AsyncMachine<any, any>, K extends keyof M & string> =
-  M[K] extends (...a: infer A) => any
-  ? A extends [...infer Rest, TransitionOptions] ? Rest : A
-  : never;
+export type AsyncTransitionArgs<M extends AsyncMachine<any, any>, K extends string> =
+  M extends unknown
+    ? K extends keyof M
+      ? M[K] extends (...a: infer A) => any
+        ? A extends [...infer Rest, TransitionOptions] ? Rest : A
+        : never
+      : never
+    : never;
 
 /**
  * A helper type to define a distinct state in a state machine (a "typestate").
@@ -103,15 +127,27 @@ export type Context<M extends { context: any }> = M["context"];
  * Extracts the transition function signatures from a machine, excluding the context property.
  * @template M - The machine type.
  */
-export type Transitions<M extends BaseMachine<any>> = Omit<M, "context">;
+export type Transitions<M extends BaseMachine<any>> = M extends unknown ? Omit<M, "context"> : never;
 
 /**
  * Extracts the argument types for a specific transition function in a Machine.
  * @template M - The machine type.
  * @template K - The transition function name.
  */
-export type TransitionArgs<M extends Machine<any>, K extends keyof M & string> =
-  M[K] extends (...args: infer A) => any ? A : never;
+export type TransitionArgs<M extends BaseMachine<any>, K extends string> =
+  M extends unknown
+    ? K extends keyof M
+      ? M[K] extends (...args: infer A) => any ? A : never
+      : never
+    : never;
+
+/** Extracts the return type of a transition across every branch in a machine union. */
+export type TransitionReturn<M extends BaseMachine<any>, K extends string> =
+  M extends unknown
+    ? K extends keyof M
+      ? M[K] extends (...args: any[]) => infer R ? R : never
+      : never
+    : never;
 /**
  * Extracts the names of all transitions as a string union type.
  * @template M - The machine type.
@@ -119,7 +155,8 @@ export type TransitionArgs<M extends Machine<any>, K extends keyof M & string> =
  * type Names = TransitionNames<Machine<{ count: number }> & { increment: () => any }>
  * // Names = "increment"
  */
-export type TransitionNames<M extends BaseMachine<any>> = keyof Omit<M, "context"> & string;
+export type TransitionNames<M extends BaseMachine<any>> =
+  M extends unknown ? keyof Omit<M, "context"> & string : never;
 
 /**
  * Base machine type that both Machine and AsyncMachine extend from.
@@ -165,10 +202,16 @@ export type EventFromTransitions<T extends Record<string, (...args: any[]) => an
  * // CounterEvent = { type: "add"; args: [number] }
  */
 export type Event<M extends BaseMachine<any>> = {
-  [K in keyof Omit<M, "context"> & string]: M[K] extends (...args: infer A) => any
-  ? { type: K; args: A }
-  : never
-}[keyof Omit<M, "context"> & string];
+  [K in TransitionNames<M>]: { type: K; args: TransitionArgs<M, K> }
+}[TransitionNames<M>];
+
+/**
+ * Event union for `runMachine`. A trailing `TransitionOptions` parameter is
+ * supplied by the runner and is therefore omitted from the caller's args.
+ */
+export type AsyncEvent<M extends AsyncMachine<any>> = {
+  [K in TransitionNames<M>]: { type: K; args: AsyncTransitionArgs<M, K> }
+}[TransitionNames<M>];
 
 
 /**
@@ -383,6 +426,8 @@ export function createMachine<C extends object, M extends BaseMachine<C>>(
 ): Machine<C, Transitions<M>>;
 
 export function createMachine(context: any, fnsOrFactory: any): any {
+  assertContext(context);
+
   if (typeof fnsOrFactory === 'function') {
     let self: any;
     let transitions: any;
@@ -390,9 +435,14 @@ export function createMachine(context: any, fnsOrFactory: any): any {
       return newContext === context ? self : createMachine(newContext, transitions);
     };
     transitions = fnsOrFactory(transition);
+    assertTransitionMap(transitions);
 
     self = attachTransitions(Object.assign({ context }, transitions), transitions);
     return self;
+  }
+
+  if (fnsOrFactory === null || typeof fnsOrFactory !== 'object') {
+    throw new TypeError('Machine transitions must be an object or factory function.');
   }
 
   // If fns is a machine (has context property), extract just the transition functions
@@ -400,6 +450,7 @@ export function createMachine(context: any, fnsOrFactory: any): any {
   const transitions = stored ?? ('context' in fnsOrFactory
     ? snapshotOwnTransitions(fnsOrFactory)
     : fnsOrFactory);
+  assertTransitionMap(transitions);
 
   const machine = Object.assign({ context }, transitions);
   return attachTransitions(machine, transitions);
@@ -416,10 +467,10 @@ export function createMachine(context: any, fnsOrFactory: any): any {
  * @param factory - A function that receives a `transition` helper and returns the transitions object.
  * @returns A new async machine instance.
  */
-export function createAsyncMachine<C extends object, T extends Record<string, (this: C, ...args: any[]) => any>>(
+export function createAsyncMachine<C extends object, T extends Record<string, (this: AsyncMachine<C, T>, ...args: any[]) => any>>(
   context: C,
   factory: (transition: (newContext: C) => AsyncMachine<C, T>) => T
-): AsyncMachine<C, BindTransitions<T>>;
+): AsyncMachine<C, T>;
 
 /**
  * Creates an asynchronous state machine by copying context and transitions from an existing machine.
@@ -444,20 +495,27 @@ export function createAsyncMachine<C extends object, M extends BaseMachine<C>>(
  * @param fns - An object containing async transition function definitions.
  * @returns A new async machine instance.
  */
-export function createAsyncMachine<C extends object, T extends Record<string, (this: C, ...args: any[]) => any>>(
+export function createAsyncMachine<C extends object, T extends Record<string, (this: AsyncMachine<C, T>, ...args: any[]) => any>>(
   context: C,
   fns: T
 ): AsyncMachine<C, T>;
 
 export function createAsyncMachine(context: any, fnsOrFactory: any): any {
+  assertContext(context);
+
   if (typeof fnsOrFactory === 'function') {
     let transitions: any;
     const transition = (newContext: any) => {
       return createAsyncMachine(newContext, transitions);
     };
     transitions = fnsOrFactory(transition);
+    assertTransitionMap(transitions);
 
     return attachTransitions(Object.assign({ context }, transitions), transitions);
+  }
+
+  if (fnsOrFactory === null || typeof fnsOrFactory !== 'object') {
+    throw new TypeError('Machine transitions must be an object or factory function.');
   }
 
   // If fns is a machine (has context property), extract just the transition functions
@@ -465,6 +523,7 @@ export function createAsyncMachine(context: any, fnsOrFactory: any): any {
   const transitions = stored ?? ('context' in fnsOrFactory
     ? snapshotOwnTransitions(fnsOrFactory)
     : fnsOrFactory);
+  assertTransitionMap(transitions);
 
   const machine = Object.assign({ context }, transitions);
   return attachTransitions(machine, transitions);
@@ -495,7 +554,7 @@ export function createMachineFactory<C extends object>() {
       [K in keyof T]: (
         this: Machine<C>,
         ...args: T[K] extends (ctx: C, ...args: infer A) => C ? A : never
-      ) => MaybePromise<Machine<C>>;
+      ) => Machine<C>;
     };
 
     const fns = Object.fromEntries(
@@ -595,7 +654,8 @@ export function overrideTransitions<
   machine: M,
   overrides: T
 ): Machine<Context<M>> & Omit<Transitions<M>, keyof T> & T {
-  const { context, ...originalTransitions } = machine;
+  const context = machine.context;
+  const originalTransitions = getStoredTransitions(machine) ?? snapshotOwnTransitions(machine);
   const newTransitions = { ...originalTransitions, ...overrides };
   return createMachine(context, newTransitions as any) as any;
 }
@@ -617,7 +677,8 @@ export function extendTransitions<
     [K in keyof T]: K extends keyof M ? never : T[K];
   }
 >(machine: M, newTransitions: T): M & T {
-  const { context, ...originalTransitions } = machine;
+  const context = machine.context;
+  const originalTransitions = getStoredTransitions(machine) ?? snapshotOwnTransitions(machine);
   const combinedTransitions = { ...originalTransitions, ...newTransitions };
   return createMachine(context, combinedTransitions as any) as M & T;
 }
@@ -684,8 +745,13 @@ export function combineFactories<
     const combinedContext = { ...machine1.context, ...machine2.context };
 
     // Extract transitions from both machines
-    const { context: _, ...transitions1 } = machine1;
-    const { context: __, ...transitions2 } = machine2;
+    const transitions1 = getStoredTransitions(machine1) ?? snapshotOwnTransitions(machine1);
+    const transitions2 = getStoredTransitions(machine2) ?? snapshotOwnTransitions(machine2);
+
+    const transitionCollision = Object.keys(transitions1).find(key => key in transitions2);
+    if (transitionCollision) {
+      throw new Error(`Cannot combine factories: transition '${transitionCollision}' exists in both machines.`);
+    }
 
     // Combine transitions (TypeScript will catch conflicts at compile time)
     const combinedTransitions = { ...transitions1, ...transitions2 };
@@ -707,7 +773,7 @@ export function combineFactories<
 export function createMachineBuilder<M extends Machine<any>>(
   templateMachine: M
 ): (context: Context<M>) => M {
-  const { context, ...transitions } = templateMachine;
+  const transitions = getStoredTransitions(templateMachine) ?? snapshotOwnTransitions(templateMachine);
   return (newContext: Context<M>): M => {
     return createMachine(newContext, transitions as any) as M;
   };
@@ -813,7 +879,7 @@ export function runMachine<M extends AsyncMachine<any>>(
   // Keep track of the controller for the currently-running async transition.
   let activeController: AbortController | null = null;
 
-  async function dispatch<E extends Event<typeof current>>(event: E): Promise<M> {
+  async function dispatch<E extends AsyncEvent<typeof current>>(event: E): Promise<M> {
     // 1. If an async transition is already in progress, cancel it.
     if (activeController) {
       activeController.abort();
@@ -842,7 +908,11 @@ export function runMachine<M extends AsyncMachine<any>>(
         return current;
       }
 
-      current = nextState;
+      if (nextState === null || typeof nextState !== 'object' || !('context' in nextState)) {
+        throw new TypeError(`Transition '${String(event.type)}' did not return a machine with a context property.`);
+      }
+
+      current = nextState as M;
       onChange?.(current);
       return current;
 
@@ -956,10 +1026,12 @@ export {
 // =============================================================================
 
 export {
+  pipe,
   transitionTo,
   describe,
   guarded,
   guard,
+  guardSync,
   guardAsync,
   whenGuard,
   whenGuardAsync,
@@ -973,6 +1045,9 @@ export {
   type ActionMeta,
   type ClassConstructor,
   type WithMeta,
+  type MetadataOf,
+  type MetadataOperator,
+  type Operator,
   type GuardOptions,
   type GuardFallback,
   type GuardedTransition
