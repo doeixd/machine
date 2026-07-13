@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["examples/**/*.ts", "src/**/*.ts"],
+  "exclude": ["node_modules"],
+  "compilerOptions": {
+    "declaration": false,
+    "declarationMap": false,
+    "noEmit": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "rootDir": ".",
+    "target": "ES2022"
+  }
+}

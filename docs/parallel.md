@@ -101,7 +101,10 @@ class UnderlineState extends MachineBase<{ textDecoration: 'underline' }> {
 Now, compose them using the `createParallelMachine` primitive:
 
 ```typescript
-import { createParallelMachine, ParallelMachine } from './parallel-primitive';
+import {
+  createParallelMachine,
+  type ParallelMachine,
+} from '@doeixd/machine/higher-order';
 
 // Create the composed machine
 const editor = createParallelMachine(

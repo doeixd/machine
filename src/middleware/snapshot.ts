@@ -31,6 +31,23 @@ export interface ContextSnapshot<C extends object> {
   diff?: any;
 }
 
+type SnapshotResult<R> = R extends Promise<infer V>
+  ? V extends BaseMachine<any> ? Promise<SnapshotTrackedMachine<V>> : R
+  : R extends BaseMachine<any> ? SnapshotTrackedMachine<R> : R;
+
+type SnapshotMachine<M extends BaseMachine<any>> = {
+  [K in keyof M]: M[K] extends (...args: infer A) => infer R
+    ? (...args: A) => SnapshotResult<R>
+    : M[K];
+};
+
+/** A machine whose transitions retain snapshot tracking. */
+export type SnapshotTrackedMachine<M extends BaseMachine<any>> = SnapshotMachine<M> & {
+  snapshots: ContextSnapshot<Context<M>>[];
+  clearSnapshots: () => void;
+  restoreSnapshot: (context: Context<M>) => M;
+};
+
 // =============================================================================
 // SECTION: SNAPSHOT MIDDLEWARE
 // =============================================================================
@@ -70,11 +87,7 @@ export function withSnapshot<M extends BaseMachine<any>>(
     /** Only capture snapshots where context actually changed */
     onlyOnChange?: boolean;
   } = {}
-): M & {
-  snapshots: ContextSnapshot<Context<M>>[];
-  clearSnapshots: () => void;
-  restoreSnapshot: (snapshot: ContextSnapshot<Context<M>>['before']) => M;
-} {
+): SnapshotTrackedMachine<M> {
   const {
     maxSize,
     serializer,
@@ -149,5 +162,5 @@ export function withSnapshot<M extends BaseMachine<any>>(
     snapshots,
     clearSnapshots: () => { snapshots.length = 0; snapshotId = 0; },
     restoreSnapshot
-  });
+  }) as SnapshotTrackedMachine<M>;
 }

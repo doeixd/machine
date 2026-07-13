@@ -371,10 +371,10 @@ const machine = createMachine({ isAdmin: false, userId: 123 }, {
 });
 
 // Usage
-const adminMachine = createMachine({ isAdmin: true, userId: 123 }, machine.transitions);
+const adminMachine = createMachine({ isAdmin: true, userId: 123 }, machine);
 adminMachine.deleteUser(456); // ✅ Success path (synchronous)
 
-const userMachine = createMachine({ isAdmin: false, userId: 123 }, machine.transitions);
+const userMachine = createMachine({ isAdmin: false, userId: 123 }, machine);
 userMachine.deleteUser(456); // ❌ Error path (synchronous)
 ```
 
@@ -404,10 +404,10 @@ const machine = createMachine({ isAdmin: false, userId: 123 }, {
 });
 
 // Usage (requires async/await)
-const adminMachine = createMachine({ isAdmin: true, userId: 123 }, machine.transitions);
+const adminMachine = createMachine({ isAdmin: true, userId: 123 }, machine);
 await adminMachine.deleteUser(456); // ✅ Success path
 
-const userMachine = createMachine({ isAdmin: false, userId: 123 }, machine.transitions);
+const userMachine = createMachine({ isAdmin: false, userId: 123 }, machine);
 await userMachine.deleteUser(456); // ❌ Error path
 ```
 

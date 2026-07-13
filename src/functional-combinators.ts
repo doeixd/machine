@@ -196,9 +196,14 @@ type MachineTransitions<
   C extends object
 > = {
   [K in keyof T]: T[K] extends (ctx: C, ...args: infer A) => C
-    ? (this: Machine<C>, ...args: A) => Machine<C>
+    ? (this: FunctionalMachine<C, T>, ...args: A) => FunctionalMachine<C, T>
     : never;
 };
+
+type FunctionalMachine<
+  C extends object,
+  T extends Record<string, (ctx: C, ...args: any[]) => C>
+> = Machine<C> & MachineTransitions<T, C>;
 
 /**
  * Creates a complete, type-safe, functional state machine using a curried, two-step
@@ -240,7 +245,7 @@ export function createFunctionalMachine<C extends object>(initialContext: C) {
     T extends Record<string, (ctx: C, ...args: any[]) => C>
   >(
     transformers: T
-  ): Machine<C> & MachineTransitions<T, C> {
+  ): FunctionalMachine<C, T> {
     // 1. Create a placeholder object for the final transitions.
     const transitions: any = {};
 

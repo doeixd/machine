@@ -309,7 +309,7 @@ const start = describe(
 );
 ```
 
-Metadata belongs to a transition—the edge between snapshots—so the recommended API is the standalone `pipe(value, ...operators)`, not a `.pipe()` method added to every machine. The transition keeps its original call signature, while annotations are attached as non-enumerable runtime metadata and represented in its TypeScript type. Later pipe operators are the outer decorators; for repeated actions or guards, their metadata therefore appears first.
+Metadata usually belongs to a transition—the edge between snapshots—so the recommended API is the standalone `pipe(value, ...operators)`, not a `.pipe()` method added to every machine. Transition decorators keep the original call signature, while annotations are attached as non-enumerable runtime metadata and represented in the TypeScript type. The generic `metadata({...})` operator can annotate any object or function, including a complete machine snapshot, without changing its identity. Later pipe operators are the outer decorators; for repeated actions or guards, their metadata therefore appears first.
 
 Run the extractor in this repository with:
 

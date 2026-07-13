@@ -105,6 +105,8 @@ Middleware wraps transition functions and returns another machine. It is not par
 
 - `transitionTo`, `describe`, `guarded`, `invoke`, `action`, and `metadata` support both direct and curried annotation forms.
 - `pipe(value, ...operators)` applies curried decorators left to right without adding methods to machine snapshots.
+- `metadata({...})` accepts any object or function, including a complete snapshot; it preserves identity and attaches non-enumerable runtime metadata.
+- `Annotated<T, M>`, `WithMeta<F, M>`, and `MetadataOf<T>` expose the corresponding metadata brands for library authors.
 - `guard`, `guardSync`, and `guardAsync` enforce conditions at runtime; `whenGuard` and `whenGuardAsync` provide their fluent forms.
 - The helpers attach non-enumerable runtime metadata and also provide static syntax for the extractor.
 - They are not runtime no-ops: metadata attachment has a small runtime cost.

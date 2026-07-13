@@ -1,7 +1,13 @@
 import {
   createAsyncMachine,
   createMachine,
+  metadata,
   runMachine,
+  state,
+  withHistory,
+  withSnapshot,
+  withTimeTravel,
+  type MetadataOf,
   type TransitionOptions,
 } from '../../src';
 import { MachineBase } from '../../src/base';
@@ -14,6 +20,25 @@ const counter = createMachine({ count: 0 }, (next) => ({
 }));
 
 counter.increment().increment();
+
+const functionalCounter = state({ count: 0 })({
+  add: (context, amount: number) => ({ count: context.count + amount }),
+});
+functionalCounter.add(1).add(2);
+
+const historyCounter = withHistory(counter);
+historyCounter.increment().history;
+
+const snapshotCounter = withSnapshot(counter);
+snapshotCounter.increment().snapshots;
+
+const timeTravelCounter = withTimeTravel(counter);
+timeTravelCounter.increment().replayFrom(0);
+
+const annotatedCounter = metadata({ description: 'Counter' }, counter);
+type CounterMetadata = MetadataOf<typeof annotatedCounter>;
+const counterDescription: CounterMetadata['description'] = 'Counter';
+void counterDescription;
 
 const asyncCounter = createAsyncMachine({ count: 0 }, {
   async add(amount: number, { signal }: TransitionOptions) {

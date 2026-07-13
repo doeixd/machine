@@ -41,7 +41,7 @@ export const RUNTIME_META = Symbol('__machine_runtime_meta__');
  */
 type Machine<C extends object> = {
   readonly context: C;
-} & Record<string, (...args: any[]) => Machine<any>>;
+};
 
 /**
  * Helper type representing a Class Constructor.
@@ -107,7 +107,10 @@ export interface TransitionMeta {
 export type WithMeta<
   F extends (...args: any[]) => any,
   M extends TransitionMeta
-> = F & { [META_KEY]: M };
+> = Annotated<F, M>;
+
+/** A value carrying type-level metadata without changing its runtime shape. */
+export type Annotated<T, M extends TransitionMeta> = T & { [META_KEY]: M };
 
 type AnyFunction = (...args: any[]) => any;
 
@@ -162,16 +165,16 @@ export interface RuntimeTransitionMeta {
 }
 
 /**
- * Attaches runtime metadata to a function object.
+ * Attaches runtime metadata to an object or function.
  * Merges with existing metadata if present.
  *
- * @param fn - The function to attach metadata to
+ * @param value - The value to attach metadata to
  * @param metadata - Partial metadata to merge
  * @internal
  */
-function attachRuntimeMeta(fn: any, metadata: Partial<RuntimeTransitionMeta>): void {
+function attachRuntimeMeta(value: object, metadata: Partial<RuntimeTransitionMeta>): void {
   // Read existing metadata (may be undefined)
-  const existing = fn[RUNTIME_META] || {};
+  const existing = (value as { [RUNTIME_META]?: RuntimeTransitionMeta })[RUNTIME_META] || {};
 
   // Shallow merge for simple properties
   const merged: any = { ...existing, ...metadata };
@@ -194,7 +197,7 @@ function attachRuntimeMeta(fn: any, metadata: Partial<RuntimeTransitionMeta>): v
   // Last invoke wins (this matches XState semantics)
 
   // Define or redefine the metadata property
-  Object.defineProperty(fn, RUNTIME_META, {
+  Object.defineProperty(value, RUNTIME_META, {
     value: merged,
     enumerable: false,
     writable: false,
@@ -862,14 +865,33 @@ export function whenGuardAsync<C extends object>(
  *   () => createMachine({ count: 0 }, { ... })
  * );
  */
-export function metadata(meta: Partial<TransitionMeta>): <T>(value: T) => T;
-export function metadata<T>(meta: Partial<TransitionMeta>, value: T): T;
-export function metadata<T>(_meta: Partial<TransitionMeta>, value?: T): T | (<V>(value: V) => V) {
+export function metadata<M extends Partial<TransitionMeta>>(meta: M): <T extends object>(value: T) => Annotated<T, M>;
+export function metadata<M extends Partial<TransitionMeta>, T extends object>(meta: M, value: T): Annotated<T, M>;
+export function metadata<M extends Partial<TransitionMeta>, T extends object>(
+  meta: M,
+  value?: T,
+): Annotated<T, M> | (<V extends object>(value: V) => Annotated<V, M>) {
   if (arguments.length === 1) {
-    return <V>(annotated: V): V => annotated;
+    return <V extends object>(annotated: V): Annotated<V, M> => metadata(meta, annotated);
   }
 
-  // At runtime, this is a no-op identity function
-  // At compile-time/static-analysis, the metadata can be extracted from the type signature
-  return value as T;
+  if (value === undefined) {
+    throw new TypeError('metadata requires an object or function to annotate.');
+  }
+
+  const runtimeMeta: Partial<RuntimeTransitionMeta> = {};
+  if (meta.target) runtimeMeta.target = meta.target.name;
+  if (meta.description !== undefined) runtimeMeta.description = meta.description;
+  if (meta.guards) runtimeMeta.guards = meta.guards;
+  if (meta.actions) runtimeMeta.actions = meta.actions;
+  if (meta.invoke) {
+    runtimeMeta.invoke = {
+      ...meta.invoke,
+      onDone: meta.invoke.onDone.name,
+      onError: meta.invoke.onError.name,
+    };
+  }
+
+  attachRuntimeMeta(value, runtimeMeta);
+  return value as Annotated<T, M>;
 }

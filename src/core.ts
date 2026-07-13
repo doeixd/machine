@@ -106,6 +106,7 @@ export {
   type InvokeMeta,
   type ActionMeta,
   type ClassConstructor,
+  type Annotated,
   type WithMeta,
   type MetadataOf,
   type MetadataOperator,
