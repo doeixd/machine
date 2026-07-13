@@ -72,6 +72,38 @@ describe('event adapters', () => {
     expect(late.complete).toHaveBeenCalledOnce();
   });
 
+  it('registers Observable subscribers before the initial emission', () => {
+    const observable = asObservable(createCounter());
+    const counts: number[] = [];
+
+    observable.subscribe({
+      next(state) {
+        counts.push(state.context.count);
+        if (state.context.count === 0) observable.dispatch('increment');
+      }
+    });
+
+    expect(counts).toEqual([0, 1]);
+  });
+
+  it('isolates Observable subscribers from each other', () => {
+    const observable = asObservable(createCounter());
+    const errors = vi.fn();
+    const healthy = vi.fn();
+    observable.subscribe({
+      next(state) {
+        if (state.context.count === 1) throw new Error('subscriber failed');
+      },
+      error: errors,
+    });
+    observable.subscribe({ next: healthy });
+
+    observable.dispatch('increment');
+
+    expect(errors).toHaveBeenCalledWith(expect.objectContaining({ message: 'subscriber failed' }));
+    expect(healthy).toHaveBeenLastCalledWith(expect.objectContaining({ context: { count: 1 } }));
+  });
+
   it('uses the returned typestate transition set', () => {
     type LoggedOut = ReturnType<typeof loggedOut>;
     type LoggedIn = ReturnType<typeof loggedIn>;

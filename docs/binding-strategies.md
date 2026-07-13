@@ -45,7 +45,7 @@ const result = run(function* (m) {
 - **Minimal syntax** - Just call transitions directly
 - **Low overhead** - Simple Proxy wrapper with no extra objects
 - **Backward compatible** - Transparent drop-in wrapper
-- **Auto re-wrapping** - Returned machines are automatically re-wrapped
+- **Auto re-wrapping** - Returned machines, including machines resolved from promises, are automatically re-wrapped
 
 ### Disadvantages
 
@@ -56,8 +56,8 @@ const result = run(function* (m) {
 
 The Proxy intercepts property access and:
 1. Checks if the property is a function (transition method)
-2. Wraps it to call `.apply(target.context, args)`
-3. Recursively re-wraps any returned machines to maintain binding across chains
+2. Wraps it to call `.apply(target, args)`, preserving the library's full-machine `this` contract
+3. Recursively re-wraps returned or asynchronously resolved machines to maintain binding across chains
 4. Returns non-function properties unchanged
 
 ```typescript
@@ -68,7 +68,14 @@ export function bindTransitions<M extends { context: any }>(machine: M): M {
       
       if (typeof value === 'function') {
         return function(...args: any[]) {
-          const result = value.apply(target.context, args);
+          const result = value.apply(target, args);
+          if (result && typeof result.then === 'function') {
+            return Promise.resolve(result).then(resolved =>
+              resolved && typeof resolved === 'object' && 'context' in resolved
+                ? bindTransitions(resolved)
+                : resolved
+            );
+          }
           // Recursively wrap returned machines
           if (result && typeof result === 'object' && 'context' in result) {
             return bindTransitions(result);
@@ -105,7 +112,7 @@ const result = run(function* (m) {
 
 - **Full type safety** - TypeScript verifies binding correctness
 - **Better IDE support** - Autocompletion and hover information preserved
-- **Auto re-wrapping** - Returned machines are automatically re-wrapped
+- **Auto re-wrapping** - Returned and asynchronously resolved machines are automatically re-wrapped
 - **Explicit** - Clear that you're using a wrapper
 
 ### Disadvantages

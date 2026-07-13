@@ -25,6 +25,31 @@ import {
  */
 type ClassConstructor = new (...args: any[]) => any;
 
+function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
+  return value !== null
+    && (typeof value === 'object' || typeof value === 'function')
+    && typeof (value as PromiseLike<T>).then === 'function';
+}
+
+function isMachineLike(value: unknown): value is { context: any } {
+  return value !== null && typeof value === 'object' && 'context' in value;
+}
+
+function collectTransitionNames(machine: object): string[] {
+  const names = new Set<string>();
+  let current: object | null = machine;
+
+  while (current && current !== Object.prototype) {
+    for (const name of Object.getOwnPropertyNames(current)) {
+      if (name === 'constructor' || name === 'context' || names.has(name)) continue;
+      if (typeof (machine as Record<string, unknown>)[name] === 'function') names.add(name);
+    }
+    current = Object.getPrototypeOf(current);
+  }
+
+  return [...names];
+}
+
 /**
  * A type-safe way to check if a machine is in a specific state, acting as a Type Guard.
  * This is the preferred way to do state checking when using class-based machines.
@@ -316,8 +341,13 @@ export function bindTransitions<M extends { context: any }>(machine: M): M {
       if (typeof value === 'function') {
         return function(...args: any[]) {
           const result = value.apply(target, args);
+          if (isPromiseLike(result)) {
+            return Promise.resolve(result).then(resolved =>
+              isMachineLike(resolved) ? bindTransitions(resolved) : resolved
+            );
+          }
           // Recursively wrap returned machines to maintain binding
-          if (result && typeof result === 'object' && 'context' in result) {
+          if (isMachineLike(result)) {
             return bindTransitions(result);
           }
           return result;
@@ -387,8 +417,13 @@ export class BoundMachine<M extends { context: any }> {
         if (typeof value === 'function') {
           return (...args: any[]) => {
             const result = value.apply(this.wrappedMachine, args);
+            if (isPromiseLike(result)) {
+              return Promise.resolve(result).then(resolved =>
+                isMachineLike(resolved) ? new BoundMachine(resolved) : resolved
+              );
+            }
             // Recursively wrap returned machines
-            if (result && typeof result === 'object' && 'context' in result) {
+            if (isMachineLike(result)) {
               return new BoundMachine(result);
             }
             return result;
@@ -435,10 +470,7 @@ function createSequenceMachine<
     });
 
     // Override all methods to add advancement logic
-    const originalProto = Object.getPrototypeOf(machine);
-    const methodNames = Object.getOwnPropertyNames(originalProto).filter(name =>
-      name !== 'constructor' && name !== 'context' && typeof (machine as any)[name] === 'function'
-    );
+    const methodNames = collectTransitionNames(machine);
 
     for (const methodName of methodNames) {
       const methodKey = methodName as keyof any;
@@ -452,8 +484,8 @@ function createSequenceMachine<
         };
 
         // If the result is a Promise, handle it asynchronously
-        if (result && typeof (result as any).then === 'function') {
-          return (result as Promise<unknown>).then(handleResult);
+        if (isPromiseLike(result)) {
+          return Promise.resolve(result).then(handleResult);
         }
 
         // Otherwise, handle synchronously

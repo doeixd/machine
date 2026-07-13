@@ -42,7 +42,6 @@
 import {
   useState,
   useRef,
-  useEffect,
   useMemo,
   createContext,
   useContext,
@@ -53,15 +52,17 @@ import {
 
 import {
   Machine,
-  runMachine, // Was createRunner
+  createRunner,
   createEnsemble,
   type Ensemble,
   type StateStore,
   type Actor,
+  type BoundTransitions,
   BaseMachine
 } from './index';
 
-export type Runner<M extends Machine<any>> = ReturnType<typeof runMachine<M>>;
+export type Runner<M extends Machine<any>> = ReturnType<typeof createRunner<M>>;
+type TransitionHandlers<M extends Machine<any>> = BoundTransitions<M>;
 
 // =============================================================================
 // HOOK 1: useMachine (Ergonomic local state)
@@ -86,13 +87,13 @@ export type Runner<M extends Machine<any>> = ReturnType<typeof runMachine<M>>;
  */
 export function useMachine<M extends Machine<any>>(
   machineFactory: () => M
-): [M, Record<string, (...args: any[]) => void>] {
+): [M, TransitionHandlers<M>] {
   // useState holds the machine state, triggering re-renders.
   const [machine, setMachine] = useState(machineFactory);
 
   // useMemo creates a stable runner instance that survives re-renders.
   const runner = useMemo(
-    () => runMachine(machine, (newState) => {
+    () => createRunner(machine, (newState) => {
       setMachine(newState);
     }),
     []
@@ -103,10 +104,14 @@ export function useMachine<M extends Machine<any>>(
     return new Proxy({} as any, {
       get: (_target, prop) => {
         return (...args: any[]) => {
-          runner.dispatch({ type: prop as any, args: args as any } as any);
+          const action = runner.actions[prop as keyof typeof runner.actions];
+          if (typeof action !== 'function') {
+            throw new Error(`[Machine] Transition '${String(prop)}' is not available on the current state.`);
+          }
+          return (action as (...args: any[]) => unknown)(...args);
         };
       }
-    });
+    }) as TransitionHandlers<M>;
   }, [runner]);
 
   return [machine, actions];
@@ -139,24 +144,15 @@ export function useMachineSelector<M extends Machine<any>, T>(
   selector: (state: M) => T,
   isEqual: (a: T, b: T) => boolean = Object.is
 ): T {
-  // Store the selected value in local state.
-  const [selectedValue, setSelectedValue] = useState(() => selector(machine));
-
-  // Keep refs to the latest selector and comparison functions.
-  const selectorRef = useRef(selector);
-  const isEqualRef = useRef(isEqual);
-  selectorRef.current = selector;
-  isEqualRef.current = isEqual;
-
-  // Effect to update the selected value only when it actually changes.
-  useEffect(() => {
-    const nextValue = selectorRef.current(machine);
-    if (!isEqualRef.current(selectedValue, nextValue)) {
-      setSelectedValue(nextValue);
-    }
-  }, [machine, selectedValue]); // Re-run only when the machine or the slice changes.
-
-  return selectedValue;
+  const selectedRef = useRef<{ initialized: boolean; value: T }>({
+    initialized: false,
+    value: undefined as T,
+  });
+  const nextValue = selector(machine);
+  if (!selectedRef.current.initialized || !isEqual(selectedRef.current.value, nextValue)) {
+    selectedRef.current = { initialized: true, value: nextValue };
+  }
+  return selectedRef.current.value;
 }
 
 // =============================================================================
@@ -286,7 +282,7 @@ export function useActor<M extends BaseMachine<any>>(actor: Actor<M>): M {
   const subscribe = useMemo(() => actor.subscribe.bind(actor), [actor]);
   const getSnapshot = useMemo(() => actor.getSnapshot.bind(actor), [actor]);
 
-  return useSyncExternalStore(subscribe, getSnapshot);
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
 /**
@@ -302,34 +298,25 @@ export function useActorSelector<M extends BaseMachine<any>, T>(
   selector: (state: M) => T,
   isEqual: (a: T, b: T) => boolean = Object.is
 ): T {
-  const getSnapshot = useMemo(() => actor.getSnapshot.bind(actor), [actor]);
+  const selectorRef = useRef(selector);
+  const isEqualRef = useRef(isEqual);
+  selectorRef.current = selector;
+  isEqualRef.current = isEqual;
 
-  const getSelection = () => selector(getSnapshot());
+  const subscribe = useMemo(() => actor.subscribe.bind(actor), [actor]);
+  const getSelection = useMemo(() => {
+    let initialized = false;
+    let selection: T;
 
-  const [selection, setSelection] = useState(getSelection);
-
-  // Custom selector logic since useSyncExternalStoreWithSelector is not available directly
-  // and we want to avoid extra deps.
-  // Actually, we can just use useSyncExternalStore and manage the selection stability,
-  // but useSyncExternalStore triggers if the result of getSnapshot changes (strict eq).
-  // If we wrap getSnapshot to return the selection, standard useSyncExternalStore handles it?
-  // No, useSyncExternalStore calls getSnapshot continuously during render to check for tearing.
-  // It needs to be cheap and consistent.
-
-  // Simple implementation: Subscribe and update local state only on change.
-  useEffect(() => {
-    const checkUpdate = () => {
-      const nextSelection = selector(actor.getSnapshot());
-      setSelection(prev => isEqual(prev, nextSelection) ? prev : nextSelection);
+    return () => {
+      const nextSelection = selectorRef.current(actor.getSnapshot());
+      if (!initialized || !isEqualRef.current(selection, nextSelection)) {
+        initialized = true;
+        selection = nextSelection;
+      }
+      return selection;
     };
+  }, [actor]);
 
-    // Check immediately in case it changed between render and effect
-    checkUpdate();
-
-    return actor.subscribe(() => {
-      checkUpdate();
-    });
-  }, [actor, selector, isEqual]);
-
-  return selection;
+  return useSyncExternalStore(subscribe, getSelection, getSelection);
 }

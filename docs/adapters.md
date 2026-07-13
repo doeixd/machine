@@ -74,7 +74,9 @@ observable.dispatch('add', 3);
 subscription.unsubscribe();
 ```
 
-Subscription emits the current snapshot immediately, then emits after every successful transition. Dispatch failures call each observer's optional `error` handler but do not complete the stream.
+Subscription emits the current snapshot immediately, then emits after every successful transition. The observer is registered before that initial emission, so a transition dispatched from its first `next` callback is observed normally. Dispatch failures call each observer's optional `error` handler but do not complete the stream.
+
+Observers are notified independently. An exception from one `next` callback is sent to that observer's `error` callback (or logged when it has none) without preventing the remaining observers from receiving the snapshot. Completion callbacks are isolated in the same way.
 
 `complete()` is terminal and idempotent: it notifies current observers, clears them, and ignores later dispatches. A subscriber added after completion receives `complete` immediately and no snapshot.
 

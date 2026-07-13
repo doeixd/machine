@@ -447,6 +447,40 @@ describe('BoundMachine (typed alternative to bindTransitions)', () => {
     // 0 + 1 + 2 + 3 = 6
     expect(result).toBe(6);
   });
+
+  it('should re-wrap machines returned by async transitions', async () => {
+    const machine = createMachine({ count: 0 }, {
+      async increment() {
+        await Promise.resolve();
+        return createMachine({ count: this.context.count + 1 }, this);
+      }
+    });
+
+    const bound = new BoundMachine(machine);
+    const next = await bound.increment();
+    const detachedIncrement = next.increment;
+    const final = await detachedIncrement();
+
+    expect(final.context.count).toBe(2);
+  });
+});
+
+describe('bindTransitions async transitions', () => {
+  it('should preserve binding after an async transition resolves', async () => {
+    const machine = createMachine({ count: 0 }, {
+      async increment() {
+        await Promise.resolve();
+        return createMachine({ count: this.context.count + 1 }, this);
+      }
+    });
+
+    const bound = bindTransitions(machine);
+    const next = await bound.increment();
+    const detachedIncrement = next.increment;
+    const final = await detachedIncrement();
+
+    expect(final.context.count).toBe(2);
+  });
 });
 
 describe('Complex generator scenarios', () => {

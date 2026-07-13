@@ -359,7 +359,7 @@ export class MachineObservable<M extends Machine<any>> implements Observable<M> 
   constructor(initialMachine: M) {
     this.runner = createRunner(initialMachine, (newState) => {
       // When the runner's state changes, push the new state to all subscribers.
-      this.observers.forEach(observer => observer.next?.(newState));
+      this.emitNext(newState);
     });
 
     // We can also forward errors from the runner if we enhance it to do so.
@@ -377,10 +377,10 @@ export class MachineObservable<M extends Machine<any>> implements Observable<M> 
       return { unsubscribe: () => undefined };
     }
 
-    // Immediately provide the current state to the new subscriber.
-    observer.next?.(this.runner.state);
-
     this.observers.add(observer);
+
+    // Register before emitting so a transition dispatched by this callback is not missed.
+    this.notifyNext(observer, this.runner.state);
     
     return {
       unsubscribe: () => {
@@ -408,13 +408,12 @@ export class MachineObservable<M extends Machine<any>> implements Observable<M> 
       try {
         action(...args);
       } catch (error) {
-        const normalized = asError(error);
-        this.observers.forEach(observer => observer.error?.(normalized));
+        this.emitError(asError(error));
       }
     } else {
       // Emit an error to all observers.
       const error = new Error(`Invalid event "${String(eventName)}" for current state.`);
-      this.observers.forEach(o => o.error?.(error));
+      this.emitError(error);
     }
   }
   
@@ -425,8 +424,46 @@ export class MachineObservable<M extends Machine<any>> implements Observable<M> 
   public complete(): void {
     if (this.completed) return;
     this.completed = true;
-    this.observers.forEach(o => o.complete?.());
+    for (const observer of [...this.observers]) {
+      try {
+        observer.complete?.();
+      } catch (error) {
+        this.notifyError(observer, asError(error));
+      }
+    }
     this.observers.clear();
+  }
+
+  private emitNext(state: M): void {
+    for (const observer of [...this.observers]) {
+      this.notifyNext(observer, state);
+    }
+  }
+
+  private notifyNext(observer: Observer<M>, state: M): void {
+    try {
+      observer.next?.(state);
+    } catch (error) {
+      this.notifyError(observer, asError(error));
+    }
+  }
+
+  private emitError(error: Error): void {
+    for (const observer of [...this.observers]) {
+      this.notifyError(observer, error);
+    }
+  }
+
+  private notifyError(observer: Observer<M>, error: Error): void {
+    if (!observer.error) {
+      console.error('[MachineObservable] Observer failed:', error);
+      return;
+    }
+    try {
+      observer.error(error);
+    } catch (observerError) {
+      console.error('[MachineObservable] Observer error handler failed:', observerError);
+    }
   }
 }
 

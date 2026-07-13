@@ -645,6 +645,7 @@ These are combinators that take simple configuration and return a full transitio
       (machine) => machine.context.isValid
     );
     ```
+    Transitions may be prototype methods, class fields, or functions on machines returned by `createMachine`. Promise-returning transitions are awaited before the completion predicate is evaluated.
 
 ### Middleware Composition
 

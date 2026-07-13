@@ -439,6 +439,38 @@ describe('sequence', () => {
       sequence([], () => true);
     }).toThrow('Sequence must contain at least one machine');
   });
+
+  it('should delegate transitions defined as class fields', () => {
+    class Step {
+      constructor(readonly context: { done: boolean; step: number }) {}
+
+      complete = () => new Step({ ...this.context, done: true });
+    }
+
+    const wizard = sequence(
+      [new Step({ done: false, step: 1 }), new Step({ done: false, step: 2 })],
+      machine => machine.context.done,
+    );
+
+    const second = wizard.complete();
+    expect(second.context).toEqual({ done: false, step: 2 });
+  });
+
+  it('should delegate transitions on functional machines', () => {
+    const createStep = (step: number, done = false) => createMachine({ step, done }, {
+      complete() {
+        return createStep(this.context.step, true);
+      }
+    });
+
+    const wizard = sequence(
+      [createStep(1), createStep(2)],
+      machine => machine.context.done,
+    );
+
+    const second = wizard.complete();
+    expect(second.context).toEqual({ step: 2, done: false });
+  });
 });
 
 describe('createTransition', () => {

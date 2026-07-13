@@ -166,6 +166,8 @@ This entry re-exports the core API and adds:
 
 React is an optional peer dependency.
 
+`useMachine` is synchronous: each action runs against the current snapshot through `createRunner` and schedules the resulting snapshot in React state. Use `useActor` for ordered promise-returning transitions. Actor hooks use `useSyncExternalStore` with server snapshots, and selector hooks retain the previous selection when a custom equality function considers the next value equivalent.
+
 ## Solid entry: `@doeixd/machine/solid`
 
 This entry exports Solid-specific helpers only:
