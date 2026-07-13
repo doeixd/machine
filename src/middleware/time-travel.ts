@@ -36,7 +36,17 @@ export type WithSnapshot<M extends BaseMachine<any>> = M & {
 /**
  * A machine enhanced with time travel capabilities.
  */
-export type WithTimeTravel<M extends BaseMachine<any>> = M & {
+type TimeTravelResult<R> = R extends Promise<infer V>
+  ? V extends BaseMachine<any> ? Promise<WithTimeTravel<V>> : R
+  : R extends BaseMachine<any> ? WithTimeTravel<R> : R;
+
+type TimeTravelMachine<M extends BaseMachine<any>> = {
+  [K in keyof M]: M[K] extends (...args: infer A) => infer R
+    ? (...args: A) => TimeTravelResult<R>
+    : M[K];
+};
+
+export type WithTimeTravel<M extends BaseMachine<any>> = TimeTravelMachine<M> & {
   /** History of all transitions */
   history: HistoryEntry[];
   /** Snapshots of context before/after each transition */

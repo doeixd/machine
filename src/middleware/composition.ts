@@ -19,9 +19,9 @@ import {
   withPerformanceMonitoring,
   withRetry
 } from './core';
-import { withHistory, type HistoryEntry, type Serializer } from './history';
-import { withSnapshot } from './snapshot';
-import { withTimeTravel, type WithTimeTravel, type WithHistory, type WithSnapshot } from './time-travel';
+import { withHistory, type HistoryEntry, type HistoryTrackedMachine, type Serializer } from './history';
+import { withSnapshot, type SnapshotTrackedMachine } from './snapshot';
+import { withTimeTravel, type WithTimeTravel } from './time-travel';
 
 // =============================================================================
 // SECTION: COMPOSITION TYPES
@@ -778,17 +778,17 @@ export class MiddlewareBuilder<M extends BaseMachine<any>> {
   /**
    * Add history tracking middleware with type-safe configuration.
    */
-  withHistory(options?: HistoryOptions): MiddlewareBuilder<WithHistory<M>> {
+  withHistory(options?: HistoryOptions): MiddlewareBuilder<HistoryTrackedMachine<M>> {
     this.middlewares.push((machine: M) => withHistory(machine, options));
-    return this as unknown as MiddlewareBuilder<WithHistory<M>>;
+    return this as unknown as MiddlewareBuilder<HistoryTrackedMachine<M>>;
   }
 
   /**
    * Add snapshot tracking middleware with type-safe configuration.
    */
-  withSnapshot(options?: SnapshotOptions): MiddlewareBuilder<WithSnapshot<M>> {
+  withSnapshot(options?: SnapshotOptions): MiddlewareBuilder<SnapshotTrackedMachine<M>> {
     this.middlewares.push((machine: M) => withSnapshot(machine, options));
-    return this as unknown as MiddlewareBuilder<WithSnapshot<M>>;
+    return this as unknown as MiddlewareBuilder<SnapshotTrackedMachine<M>>;
   }
 
   /**
@@ -934,7 +934,7 @@ export function createMiddlewareFactory<M extends BaseMachine<any>>(
 /**
  * Common middleware combination types for better DX.
  */
-export type WithDebugging<M extends BaseMachine<any>> = WithTimeTravel<WithSnapshot<WithHistory<M>>>;
+export type WithDebugging<M extends BaseMachine<any>> = WithTimeTravel<SnapshotTrackedMachine<HistoryTrackedMachine<M>>>;
 
 /**
  * Convenience function for the most common debugging middleware stack.

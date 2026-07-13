@@ -64,9 +64,31 @@ suite('pipeable metadata', () => {
     expect(piped[RUNTIME_META]?.actions?.map(item => item.name)).toEqual(['outer', 'inner']);
   });
 
-  it('supports metadata as a generic curried identity operator', () => {
+  it('annotates an object without changing its identity', () => {
     const value = { status: 'idle' as const };
-    expect(pipe(value, metadata({ description: 'Initial state' }))).toBe(value);
+    const annotated = pipe(value, metadata({ description: 'Initial state' }));
+
+    expect(annotated).toBe(value);
+    expect(annotated[RUNTIME_META]).toEqual({ description: 'Initial state' });
+    expect(Object.keys(annotated)).toEqual(['status']);
+
+    type ValueMeta = MetadataOf<typeof annotated>;
+    expectTypeOf<ValueMeta>().toMatchTypeOf<{ description: string }>();
+  });
+
+  it('normalizes class references in generic runtime metadata', () => {
+    class Success {}
+    class Failure {}
+
+    const transition = metadata({
+      target: Success,
+      invoke: { src: 'load', onDone: Success, onError: Failure },
+    }, () => new Success());
+
+    expect(transition[RUNTIME_META]).toMatchObject({
+      target: 'Success',
+      invoke: { src: 'load', onDone: 'Success', onError: 'Failure' },
+    });
   });
 
   it('extracts piped decorators statically', () => {

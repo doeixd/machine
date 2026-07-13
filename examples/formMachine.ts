@@ -60,7 +60,7 @@ interface ValidationErrorContext {
   step: 'validationError';
   errors: string[];
   currentStep: 'personal' | 'address' | 'preferences';
-  partialData: Partial<Step3Context>;
+  partialData: Partial<Omit<Step3Context, 'step'>>;
 }
 
 // =============================================================================
@@ -108,7 +108,7 @@ export class PersonalInfoMachine extends MachineBase<Step1Context> {
         step: 'validationError',
         errors,
         currentStep: 'personal',
-        partialData: { step: 'personal', ...this.context },
+        partialData: { ...this.context },
       });
     })
   );
@@ -134,8 +134,8 @@ export class AddressMachine extends MachineBase<Step2Context> {
       },
       transitionTo(PreferencesMachine, (street: string, city: string, zipCode: string) => {
         return new PreferencesMachine({
-          step: 'preferences',
           ...this.context,
+          step: 'preferences',
           street,
           city,
           zipCode,
@@ -195,8 +195,8 @@ export class PreferencesMachine extends MachineBase<Step3Context> {
         const confirmationId = `CONF-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
 
         return new CompleteMachine({
-          step: 'complete',
           ...this.context,
+          step: 'complete',
           newsletter,
           notifications,
           submittedAt: Date.now(),

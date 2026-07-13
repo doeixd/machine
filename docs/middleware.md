@@ -498,10 +498,7 @@ const tracked = withSnapshot(counter, {
   captureSnapshot: (before, after) => ({
     changed: JSON.stringify(before) !== JSON.stringify(after)
   }),
-  onlyIfChanged: true,             // Only snapshot when context changes
-  filter: (name) => name !== 'view', // Skip certain transitions
-  onSnapshot: (snapshot) =>        // Callback for new snapshots
-    console.log('State changed:', snapshot.transitionName)
+  onlyOnChange: true // Skip snapshots when the context is unchanged
 });
 
 tracked.increment();

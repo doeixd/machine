@@ -70,7 +70,7 @@
     "prepublishOnly": "npm run build",
     "build": "pridepack clean && pridepack build && npm run verify:package",
     "verify:package": "tsx scripts/verify-package.ts",
-    "type-check": "tsc --noEmit && tsc -p tsconfig.test.json",
+    "type-check": "tsc --noEmit && tsc -p tsconfig.test.json && tsc -p tsconfig.examples.json",
     "clean": "pridepack clean",
     "watch": "pridepack watch",
     "start": "pridepack start",

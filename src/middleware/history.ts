@@ -33,6 +33,22 @@ export interface Serializer<T = any> {
   deserialize: (str: string) => T;
 }
 
+type HistoryResult<R> = R extends Promise<infer V>
+  ? V extends BaseMachine<any> ? Promise<HistoryTrackedMachine<V>> : R
+  : R extends BaseMachine<any> ? HistoryTrackedMachine<R> : R;
+
+type HistoryMachine<M extends BaseMachine<any>> = {
+  [K in keyof M]: M[K] extends (...args: infer A) => infer R
+    ? (...args: A) => HistoryResult<R>
+    : M[K];
+};
+
+/** A machine whose transitions retain history tracking. */
+export type HistoryTrackedMachine<M extends BaseMachine<any>> = HistoryMachine<M> & {
+  history: HistoryEntry[];
+  clearHistory: () => void;
+};
+
 // =============================================================================
 // SECTION: HISTORY MIDDLEWARE
 // =============================================================================
@@ -63,7 +79,7 @@ export function withHistory<M extends BaseMachine<any>>(
     /** Callback when a transition occurs */
     onEntry?: (entry: HistoryEntry) => void;
   } = {}
-): M & { history: HistoryEntry[]; clearHistory: () => void } {
+): HistoryTrackedMachine<M> {
   const { maxSize, serializer, onEntry } = options;
   const history: HistoryEntry[] = [];
   let entryId = 0;
@@ -100,5 +116,5 @@ export function withHistory<M extends BaseMachine<any>>(
   return Object.assign(instrumentedMachine, {
     history,
     clearHistory: () => { history.length = 0; entryId = 0; }
-  });
+  }) as HistoryTrackedMachine<M>;
 }

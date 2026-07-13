@@ -173,7 +173,7 @@ export class LoggedInMachine extends MachineBase<LoggedInContext> {
   deleteAccount = describe(
     'Delete the user account (admin only)',
     guard(
-      (ctx) => ctx.permissions.includes('admin'), // Synchronous permission check
+      (ctx: LoggedInContext) => ctx.permissions.includes('admin'), // Synchronous permission check
       action(
         { name: 'logAccountDeletion', description: 'Audit log for account deletion' },
         transitionTo(LoggedOutMachine, () => {
