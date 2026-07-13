@@ -578,6 +578,42 @@ export function createMachineFactory<C extends object>() {
 // SECTION: ADVANCED CREATION & IMMUTABLE HELPERS
 // =============================================================================
 
+function cloneMachineWithContext<M extends Machine<any>>(
+  machine: M,
+  context: Context<M>
+): M {
+  const clone = Object.create(Object.getPrototypeOf(machine));
+  let copiedContext = false;
+
+  for (const key of Reflect.ownKeys(machine)) {
+    const descriptor = Object.getOwnPropertyDescriptor(machine, key);
+    if (!descriptor) continue;
+
+    if (key === 'context') {
+      Object.defineProperty(clone, key, {
+        value: context,
+        enumerable: descriptor.enumerable,
+        configurable: descriptor.configurable,
+        writable: 'writable' in descriptor ? descriptor.writable : false,
+      });
+      copiedContext = true;
+    } else {
+      Object.defineProperty(clone, key, descriptor);
+    }
+  }
+
+  if (!copiedContext) {
+    Object.defineProperty(clone, 'context', {
+      value: context,
+      enumerable: true,
+      configurable: true,
+      writable: false,
+    });
+  }
+
+  return clone as M;
+}
+
 /**
  * Creates a new machine instance with an updated context, preserving all original transitions.
  * This is the primary, type-safe utility for applying state changes.
@@ -592,14 +628,12 @@ export function setContext<M extends Machine<any>>(
   newContextOrFn: Context<M> | ((ctx: Readonly<Context<M>>) => Context<M>)
 ): M {
   const currentContext = machine.context;
-  const transitions =
-    getStoredTransitions(machine) ?? snapshotOwnTransitions(machine);
   const newContext =
     typeof newContextOrFn === "function"
       ? (newContextOrFn as (ctx: Readonly<Context<M>>) => Context<M>)(currentContext)
       : newContextOrFn;
 
-  return createMachine(newContext, transitions as any) as M;
+  return cloneMachineWithContext(machine, newContext);
 }
 
 /**
@@ -649,7 +683,7 @@ export function createContext<C extends object>(
  */
 export function overrideTransitions<
   M extends Machine<any>,
-  T extends Record<string, (this: Context<M>, ...args: any[]) => any>
+  T extends Record<string, (this: M & T, ...args: any[]) => any>
 >(
   machine: M,
   overrides: T
@@ -673,7 +707,7 @@ export function overrideTransitions<
  */
 export function extendTransitions<
   M extends Machine<any>,
-  T extends Record<string, (this: Context<M>, ...args: any[]) => any> & {
+  T extends Record<string, (this: M & T, ...args: any[]) => any> & {
     [K in keyof T]: K extends keyof M ? never : T[K];
   }
 >(machine: M, newTransitions: T): M & T {
@@ -773,9 +807,8 @@ export function combineFactories<
 export function createMachineBuilder<M extends Machine<any>>(
   templateMachine: M
 ): (context: Context<M>) => M {
-  const transitions = getStoredTransitions(templateMachine) ?? snapshotOwnTransitions(templateMachine);
   return (newContext: Context<M>): M => {
-    return createMachine(newContext, transitions as any) as M;
+    return cloneMachineWithContext(templateMachine, newContext);
   };
 }
 
@@ -958,11 +991,11 @@ export { MachineBase } from './base';
  * @example
  * const updated = next(counter, (ctx) => ({ count: ctx.count + 1 }));
  */
-export function next<C extends object>(
-  m: Machine<C>,
-  update: (ctx: Readonly<C>) => C
-): Machine<C> {
-  return setContext(m, (ctx) => update(ctx)) as Machine<C>;
+export function next<M extends Machine<any>>(
+  m: M,
+  update: (ctx: Readonly<Context<M>>) => Context<M>
+): M {
+  return setContext(m, update);
 }
 
 /**

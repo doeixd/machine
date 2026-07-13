@@ -213,15 +213,19 @@ console.log(next.context.count); // 15
 
 This helper is for when you like organizing your logic in a class, but want a simple factory function for creating instances. It separates a class's *behavior* from its *state*.
 
-**How it works:** You create one "template" instance of your class. The builder extracts all its methods (transitions) and gives you a factory function that creates new instances with those same methods but different initial contexts.
+**How it works:** You create one "template" instance of your class. The builder clones its prototype and instance fields while replacing the context, giving you a factory for snapshots with the same runtime class identity.
 
 ```typescript
 import { MachineBase, createMachineBuilder } from '@doeixd/machine';
 
 class Counter extends MachineBase<{ count: number }> {
-  // Transitions call the factory to ensure they get the shared methods.
-  increment = () => createCounter({ count: this.context.count + 1 });
-  add = (n: number) => createCounter({ count: this.context.count + n });
+  increment() {
+    return createCounter({ count: this.context.count + 1 });
+  }
+
+  add(n: number) {
+    return createCounter({ count: this.context.count + n });
+  }
 }
 
 // Create the builder from a template instance. This captures the `increment` and `add` methods.
@@ -235,6 +239,8 @@ console.log(counter1.context.count); // 50
 const next1 = counter1.increment();
 console.log(next1.context.count); // 51
 ```
+
+Use prototype methods for transitions that read `this`. A class-field arrow captures the template instance lexically, so copying that function would keep reading the template's original context.
 
 #### When to use `createMachineBuilder`:
 -   ✅ When you are using **classes** to define your machine's behavior.

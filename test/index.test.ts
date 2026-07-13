@@ -267,6 +267,43 @@ describe('setContext', () => {
     expect(updated.context.count).toBe(10);
     expect(updated.increment().context.count).toBe(11);
   });
+
+  it('should preserve class identity and instance fields', () => {
+    class ScaledCounter extends MachineBase<{ count: number }> {
+      constructor(context: { count: number }, readonly step: number) {
+        super(context);
+      }
+
+      increment() {
+        return setContext(this, { count: this.context.count + this.step });
+      }
+    }
+
+    const original = new ScaledCounter({ count: 1 }, 3);
+    const updated = setContext(original, { count: 10 });
+
+    expect(updated).toBeInstanceOf(ScaledCounter);
+    expect(updated.step).toBe(3);
+    expect(updated.increment().context.count).toBe(13);
+    expect(original.context.count).toBe(1);
+  });
+
+  it('should replace accessor-backed context without copying its getter', () => {
+    const originalContext = { count: 1 };
+    const machine = Object.create({
+      get context() {
+        return originalContext;
+      },
+      increment() {
+        return setContext(this, { count: this.context.count + 1 });
+      },
+    }) as Machine<{ count: number }> & { increment(): Machine<{ count: number }> };
+
+    const updated = setContext(machine, { count: 10 });
+
+    expect(updated.context.count).toBe(10);
+    expect(updated.increment().context.count).toBe(11);
+  });
 });
 
 describe('next', () => {
@@ -452,6 +489,25 @@ describe('createMachineBuilder', () => {
 
     const added = machine.add(10);
     expect(added.context.count).toBe(15);
+  });
+
+  it('should preserve the template prototype and instance fields', () => {
+    class ScaledCounter extends MachineBase<{ count: number }> {
+      constructor(context: { count: number }, readonly step: number) {
+        super(context);
+      }
+
+      increment() {
+        return setContext(this, { count: this.context.count + this.step });
+      }
+    }
+
+    const builder = createMachineBuilder(new ScaledCounter({ count: 0 }, 4));
+    const machine = builder({ count: 5 });
+
+    expect(machine).toBeInstanceOf(ScaledCounter);
+    expect(machine.step).toBe(4);
+    expect(machine.increment().context.count).toBe(9);
   });
 });
 

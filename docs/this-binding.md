@@ -79,6 +79,8 @@ counter.increment(); // `this` is the machine, increment uses ctx for typing
 
 `setContext` and `next` create new machine instances. Before the binding overhaul, these helpers could accidentally freeze builder-style machines to the old context because their transitions were already bound. The runtime now stores the canonical transition map, so both helpers behave consistently.
 
+For class machines, these helpers preserve the prototype, property descriptors, and instance fields. Define transitions as prototype methods when they read `this`. Class-field arrows capture their original instance lexically and cannot be rebound by any cloning helper, so copying one would continue reading the source snapshot.
+
 ```ts
 const counter = createMachine({ count: 1 }, (next) => ({
   increment() {

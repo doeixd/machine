@@ -42,11 +42,13 @@ Other construction helpers:
 
 ### Immutable updates and composition
 
-- `setContext(machine, contextOrUpdater)` — return the same machine type with updated context.
+- `setContext(machine, contextOrUpdater)` — return the same machine type with updated context, preserving its prototype, property descriptors, and instance fields.
 - `overrideTransitions(machine, overrides)` — replace or add transitions.
 - `extendTransitions(machine, additions)` — add transitions while rejecting duplicate keys at compile time.
 - `combineFactories(first, second)` — merge independent machine factories.
 - `next(machine, updater)` — updater-only shorthand for `setContext`.
+
+Transition functions passed to `overrideTransitions` and `extendTransitions` receive the full combined machine as `this`, matching `createMachine`; they can read `this.context` and call existing transitions.
 
 ### Async runner
 
