@@ -1,10 +1,12 @@
 # vs. The Classic "State" Design Pattern
 
+> This is a conceptual comparison. TypeScript can reject transitions omitted from a correctly modeled typestate, but it does not prove transition implementations, effects, or the application as a whole correct. See [first principles](principles.md) for the guarantee boundary.
+
 If you have a background in classic object-oriented programming, you might notice that the architecture of `@doeixd/machine` strongly resembles the **State design pattern**, as cataloged in the influential "Gang of Four" book, *Design Patterns: Elements of Reusable Object-Oriented Software*.
 
 This is not a coincidence—it's a foundational design choice. Our library embraces this time-tested pattern for its clarity and separation of concerns. However, it also evolves it significantly by leveraging the power of the TypeScript compiler.
 
-This document explains what the State pattern is, how this library is a modern implementation of it, and—most importantly—the crucial improvements that make our approach uniquely safe and powerful.
+This document explains what the State pattern is, how this library relates to it, and what typestate adds when state-specific capabilities are modeled precisely.
 
 ### What is the Classic State Pattern?
 
@@ -85,10 +87,10 @@ doc = doc.publish();
 doc.archive(); // ✅
 ```
 
-The classic State pattern provides **runtime polymorphism**. `@doeixd/machine` provides **compile-time correctness**. It takes the proven organizational benefits of the State pattern and adds a layer of static analysis that guarantees you cannot even write the code for an invalid state transition.
+The classic State pattern provides **runtime polymorphism**. A typestate model can additionally provide **compile-time transition constraints**: TypeScript rejects a call when the current state's type does not expose that transition. This guarantee applies to the modeled public surface, not to arbitrary runtime values or the correctness of a transition's implementation.
 
 ### Conclusion
 
-`@doeixd/machine` is a thoughtful and modern implementation of the classic State pattern. By integrating it with functional principles and a sophisticated type system, it transforms a behavioral runtime pattern into a structural, compile-time guarantee of correctness.
+`@doeixd/machine` adapts ideas from the classic State pattern to immutable snapshots and structural TypeScript types. This lets state-specific APIs express useful compile-time constraints while retaining ordinary executable transition code.
 
-This approach allows you to model complex state logic in a way that is not only well-organized and maintainable but also **provably correct** by the TypeScript compiler before it ever runs.
+The result can be easier to navigate and harder to misuse, provided the typestate accurately models the constraints that matter. Tests and runtime validation are still required for behavior the type system cannot prove.

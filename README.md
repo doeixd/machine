@@ -4,6 +4,8 @@ A TypeScript state-machine library built around immutable snapshots and typestat
 
 The core runtime is deliberately small: a machine is an object with a `context` property and transition methods. A transition returns the next machine snapshot. TypeScript can then represent different states as different types, making invalid transitions unavailable at compile time.
 
+If you already know what you need, jump to the [minimal API](#minimal-api), [main API](#main-api), or [task-oriented documentation map](docs/README.md). For the design behind both APIs, continue with the core tenets below.
+
 ## Install
 
 ```bash
@@ -143,7 +145,7 @@ const second = first.load('/api/data');
 // second.load(...) is a type error: loading states do not have `load`.
 ```
 
-See [docs/minimal.md](docs/minimal.md) for the rest of this API.
+See [docs/minimal.md](docs/minimal.md) for constructors, tagged unions, exhaustive matching, lifecycle hooks, child composition, and the exact boundary of the minimal runtime.
 
 ## Main API
 

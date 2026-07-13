@@ -1,10 +1,12 @@
 # From Runtime Rules to Compile-Time Guarantees: A State Machine Refactoring Journey
 
+> Historical refactoring essay: the examples and third-party comparison are not the current package contract. See the [README](../README.md), [minimal API](minimal.md), and [supported API](api.md) before adapting this code.
+
 It’s 10 PM. A critical bug just came in from production. Users can't submit the checkout form if they edit their cart after a failed payment attempt. Your mind races, trying to map the flow: `idle` -> `submitting` -> `error` -> `editing` -> `submitting`... wait, is that last transition even *allowed*? You start peppering `console.log(currentState)` throughout the codebase, beginning a painful game of "guess the state."
 
 We've all been there. Modern state machine libraries like XState and Zag.js have been a godsend, bringing declarative order to this UI chaos. But what if we could eliminate this entire class of bugs *before* the code even runs?
 
-This post is a journey. We're going to refactor a real-world, complex state machine—the date picker from the excellent Zag.js library—to a new paradigm called **Type-State Programming** using `@doeixd/machine`. We won't just change the syntax; we'll fundamentally shift our safety net from runtime checks to the static, unblinking guarantees of the TypeScript compiler. By the end, you'll see how to make impossible states truly, unrepresentably impossible.
+This post is a journey. We're going to refactor a real-world, complex state machine—the date picker from the excellent Zag.js library—to **Type-State Programming** using `@doeixd/machine`. The goal is to move selected state and transition constraints into TypeScript so those modeled constraints can be checked before runtime.
 
 ### Part 1: The "Before" - The World of Declarative Configs
 
@@ -193,7 +195,7 @@ stateDiagram-v2
 ```
 *A simplified diagram generated directly from our TypeScript classes.*
 
-**The Payoff:** This is the holy grail. We write code that is **provably correct at compile-time** and get **perfectly accurate visual documentation** as a byproduct. We no longer have to choose between type safety and clear diagrams.
+**The payoff:** Modeled transition constraints become compiler-visible, while annotations can generate useful visual documentation from the same transition declarations. Tests are still needed to verify runtime behavior and generated artifacts.
 
 #### Step 4: Handling the Real World - Side Effects (`use-date-picker.hook.ts`)
 

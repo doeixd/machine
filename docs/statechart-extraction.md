@@ -43,6 +43,8 @@ export default config;
 
 Paths are resolved from the current working directory.
 
+For nested states or orthogonal regions, see [hierarchical and parallel extraction](ADVANCED_EXTRACTION.md). Those options change the generated chart layout; they do not create runtime composition behavior.
+
 ## Annotating transitions
 
 ```ts
@@ -146,7 +148,7 @@ const chart = extractMachine({
 }, project);
 ```
 
-Use `extractMachines(config)` when processing a complete `ExtractionConfig`.
+Use `extractMachines(config)` for the conventional `src/**/*.ts` and `examples/**/*.ts` layout used by this repository. For another source layout, create a `Project` containing your inputs and call `extractMachine` for each configuration.
 
 ## Runtime extraction
 
@@ -168,6 +170,7 @@ The bundled schema checks structural compatibility. It does not prove that targe
 ## Known limitations
 
 - Static extraction is class-oriented.
+- The `extractMachines` convenience currently discovers source files under `src` and `examples`; use a custom `Project` with `extractMachine` for other layouts.
 - Metadata implementations are not serialized, only their declared names and descriptions.
 - Complex computed syntax may be ignored.
 - Mermaid generation currently covers event transitions and does not fully render every hierarchical or invoked-service detail.

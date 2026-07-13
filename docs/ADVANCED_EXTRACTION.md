@@ -1,146 +1,98 @@
-# Advanced Statechart Extraction: Hierarchical and Parallel Machines
+# Hierarchical and parallel extraction
 
-This document describes the new hierarchical and parallel machine support in the statechart extractor.
+The static extractor can arrange annotated class states into nested or orthogonal statechart structures. This page covers the configuration differences from a flat machine; read the [statechart extraction guide](statechart-extraction.md) first for annotations, CLI options, output formats, validation, and limitations.
 
-## Overview
+These options affect generated statechart structure only. They do not add runtime parent/child scheduling or parallel execution to machine instances.
 
-The statechart extractor now supports two advanced patterns for modeling complex state machines:
+## Hierarchical states
 
-1. **Hierarchical (Nested) States** - Parent states containing child states
-2. **Parallel (Orthogonal) States** - Independent regions evolving simultaneously
+`children` nests one configured set of child classes under the top-level initial state.
 
-## Configuration Types
+```ts
+import type { ExtractionConfig } from '@doeixd/machine/extract';
 
-### New Configuration Interfaces
-
-```typescript
-// For parallel regions
-export interface ParallelRegionConfig {
-  name: string;          // Unique name for the region
-  initialState: string;  // Initial state class name
-  classes: string[];     // All state classes in this region
-}
-
-// For child states
-export interface ChildStatesConfig {
-  contextProperty: string;  // Property holding child (typically 'child')
-  initialState: string;     // Initial child state class
-  classes: string[];        // All child state classes
-}
-
-// Updated MachineConfig
-export interface MachineConfig {
-  input: string;
-  id: string;
-  description?: string;
-  output?: string;
-
-  // For simple FSM
-  initialState?: string;
-  classes?: string[];
-
-  // For parallel machines
-  parallel?: {
-    regions: ParallelRegionConfig[];
-  };
-
-  // For hierarchical machines
-  children?: ChildStatesConfig;
-}
-```
-
-## Hierarchical Machines
-
-Hierarchical machines model parent-child state relationships where a parent state contains multiple child states.
-
-### Configuration
-
-```typescript
-const config: MachineConfig = {
-  input: 'examples/dashboardMachine.ts',
-  classes: ['DashboardMachine', 'ErrorState'],
-  id: 'dashboard',
-  initialState: 'DashboardMachine',
-  description: 'Dashboard with nested view states',
-  
-  // Define child states for the initial state
-  children: {
-    contextProperty: 'child',        // Property name in parent context
-    initialState: 'ViewingMachine',   // Initial child state
-    classes: ['ViewingMachine', 'EditingMachine'], // All child states
-  },
+const config: ExtractionConfig = {
+  machines: [{
+    input: 'src/dashboard-machine.ts',
+    output: 'statecharts/dashboard.json',
+    id: 'dashboard',
+    initialState: 'Dashboard',
+    classes: ['Dashboard', 'Failed'],
+    children: {
+      contextProperty: 'view',
+      initialState: 'Viewing',
+      classes: ['Viewing', 'Editing'],
+    },
+  }],
+  validate: true,
 };
+
+export default config;
 ```
 
-### Generated Output
+The resulting shape is equivalent to:
 
 ```json
 {
   "id": "dashboard",
-  "initial": "DashboardMachine",
+  "initial": "Dashboard",
   "states": {
-    "DashboardMachine": {
-      "initial": "ViewingMachine",
+    "Dashboard": {
+      "initial": "Viewing",
       "states": {
-        "ViewingMachine": {
-          "on": { /* transitions */ }
-        },
-        "EditingMachine": {
-          "on": { /* transitions */ }
-        }
+        "Viewing": { "on": {} },
+        "Editing": { "on": {} }
       },
-      "on": { /* parent transitions */ }
+      "on": {}
     },
-    "ErrorState": {
-      "on": { /* transitions */ }
-    }
+    "Failed": { "on": {} }
   }
 }
 ```
 
-### Key Points
+Important boundaries:
 
-- Child states are only added to the **initial state** of the parent machine
-- Each child state is fully analyzed, extracting its transitions and metadata
-- Parent states can still have their own transitions
-- Child state transitions are nested under the parent's `states` property
+- Children are attached only to the configured top-level `initialState`.
+- `children.classes` must name class declarations in the same input source file.
+- Parent and child transitions are analyzed independently.
+- `contextProperty` records the intended runtime relationship but does not cause the extractor to inspect arbitrary object graphs.
+- Only one child-state group is supported by this configuration shape; recursive, per-parent hierarchy configuration is not currently available.
 
-## Parallel Machines
+## Parallel regions
 
-Parallel machines model independent, orthogonal regions that can evolve simultaneously.
+`parallel` replaces top-level `initialState` and `classes`. Each region declares its own initial class and class set.
 
-### Configuration
+```ts
+import type { ExtractionConfig } from '@doeixd/machine/extract';
 
-```typescript
-const config: MachineConfig = {
-  input: 'examples/editorMachine.ts',
-  id: 'editor',
-  description: 'Text editor with parallel formatting',
-  
-  // Define independent regions
-  parallel: {
-    regions: [
-      {
-        name: 'fontWeight',
-        initialState: 'Normal',
-        classes: ['Normal', 'Bold', 'Light'],
-      },
-      {
-        name: 'textDecoration',
-        initialState: 'None',
-        classes: ['None', 'Underline', 'Strikethrough'],
-      },
-      {
-        name: 'fontSize',
-        initialState: 'Medium',
-        classes: ['Small', 'Medium', 'Large'],
-      },
-    ],
-  },
+const config: ExtractionConfig = {
+  machines: [{
+    input: 'src/editor-machine.ts',
+    output: 'statecharts/editor.json',
+    id: 'editor',
+    parallel: {
+      regions: [
+        {
+          name: 'fontWeight',
+          initialState: 'Normal',
+          classes: ['Normal', 'Bold'],
+        },
+        {
+          name: 'selection',
+          initialState: 'NoSelection',
+          classes: ['NoSelection', 'TextSelected'],
+        },
+      ],
+    },
+  }],
+  format: 'json',
+  validate: true,
 };
+
+export default config;
 ```
 
-### Generated Output
+This produces a root with `type: "parallel"`:
 
 ```json
 {
@@ -150,286 +102,80 @@ const config: MachineConfig = {
     "fontWeight": {
       "initial": "Normal",
       "states": {
-        "Normal": { "on": { "bold": { "target": "Bold" } } },
-        "Bold": { "on": { "unBold": { "target": "Normal" } } },
-        "Light": { "on": { /* ... */ } }
+        "Normal": { "on": {} },
+        "Bold": { "on": {} }
       }
     },
-    "textDecoration": {
-      "initial": "None",
+    "selection": {
+      "initial": "NoSelection",
       "states": {
-        "None": { "on": { "underline": { "target": "Underline" } } },
-        "Underline": { "on": { /* ... */ } },
-        "Strikethrough": { "on": { /* ... */ } }
-      }
-    },
-    "fontSize": {
-      "initial": "Medium",
-      "states": {
-        "Small": { "on": { /* ... */ } },
-        "Medium": { "on": { /* ... */ } },
-        "Large": { "on": { /* ... */ } }
+        "NoSelection": { "on": {} },
+        "TextSelected": { "on": {} }
       }
     }
   }
 }
 ```
 
-### Key Points
+Each region is structurally independent in the generated chart. The extractor does not prove that regions avoid shared mutable data or cross-region effects.
 
-- The root machine has `type: "parallel"` instead of `initial`
-- Each region is a separate state machine with its own `initial` and `states`
-- Regions evolve independently but are part of the same machine
-- XState and Stately Viz natively support this format
+## Run the extractor
 
-## Configuration Examples
-
-### In `.statechart.config.ts`
-
-```typescript
-import type { ExtractionConfig } from './src/extract';
-
-const config: ExtractionConfig = {
-  machines: [
-    // Standard FSM
-    {
-      input: 'examples/authMachine.ts',
-      classes: ['LoggedOut', 'LoggingIn', 'LoggedIn'],
-      id: 'auth',
-      initialState: 'LoggedOut',
-    },
-
-    // Hierarchical Machine
-    {
-      input: 'examples/dashboardMachine.ts',
-      classes: ['Dashboard', 'Error'],
-      id: 'dashboard',
-      initialState: 'Dashboard',
-      children: {
-        contextProperty: 'child',
-        initialState: 'Viewing',
-        classes: ['Viewing', 'Editing'],
-      },
-    },
-
-    // Parallel Machine
-    {
-      input: 'examples/editorMachine.ts',
-      id: 'editor',
-      parallel: {
-        regions: [
-          {
-            name: 'formatting',
-            initialState: 'Normal',
-            classes: ['Normal', 'Bold', 'Italic'],
-          },
-          {
-            name: 'selection',
-            initialState: 'NoSelection',
-            classes: ['NoSelection', 'TextSelected'],
-          },
-        ],
-      },
-    },
-  ],
-  validate: true,
-  verbose: true,
-};
-
-export default config;
-```
-
-## Usage
-
-### Command Line
+From a consuming project:
 
 ```bash
-# Extract with default config
-npm run extract
-
-# Extract specific config file
-npx tsx scripts/extract-statechart.ts --config .statechart.config.ts
-
-# Watch mode
-npm run extract -- --watch
-
-# Verbose output
-npm run extract -- --verbose
+npx --package @doeixd/machine extract \
+  --config .statechart.config.ts \
+  --validate
 ```
 
-### Programmatic
+From this repository, use `npm run extract`, `npm run extract:watch`, or `npm run extract:validate`.
 
-```typescript
-import { extractMachine, type MachineConfig } from './src/extract';
+There are no direct CLI flags for hierarchical or parallel structure; put those definitions in a TypeScript or JSON configuration file. The single-machine `--input` form creates a flat configuration.
+
+## Programmatic extraction
+
+Use `extractMachine` when you need control over source discovery:
+
+```ts
 import { Project } from 'ts-morph';
+import {
+  extractMachine,
+  type MachineConfig,
+} from '@doeixd/machine/extract';
 
-const project = new Project();
-project.addSourceFilesAtPaths("examples/**/*.ts");
-
-const config: MachineConfig = {
-  input: 'examples/editorMachine.ts',
+const project = new Project({ tsConfigFilePath: 'tsconfig.json' });
+const machineConfig: MachineConfig = {
+  input: 'src/editor-machine.ts',
   id: 'editor',
   parallel: {
-    regions: [
-      {
-        name: 'fontWeight',
-        initialState: 'Normal',
-        classes: ['Normal', 'Bold'],
-      },
-    ],
+    regions: [{
+      name: 'fontWeight',
+      initialState: 'Normal',
+      classes: ['Normal', 'Bold'],
+    }],
   },
 };
 
-const statechart = extractMachine(config, project, true);
-console.log(JSON.stringify(statechart, null, 2));
+const chart = extractMachine(machineConfig, project);
 ```
 
-## Visualization
-
-Both hierarchical and parallel machines are compatible with:
-
-- **Stately Viz** - Visual statechart editor and inspector
-- **XState Tools** - Visualization and debugging tools
-- **UML State Machine Tools** - For formal specifications
-
-## Implementation Details
-
-### Hierarchical Extraction
-
-1. The extractor identifies the initial state class
-2. For each child state class in `children.classes`:
-   - Analyzes the class AST to extract transitions
-   - Builds a complete state node with metadata
-   - Nests it under the parent's `states` property
-3. Parent and child transitions are extracted independently
-
-### Parallel Extraction
-
-1. The extractor creates a root state with `type: "parallel"`
-2. For each region in `parallel.regions`:
-   - Creates a region state object with `initial` and `states`
-   - Analyzes all classes in the region
-   - Extracts transitions and metadata for each state
-   - Nests each state under the region
-
-### AST-Based Analysis
-
-Both approaches use the same AST-based metadata extraction as simple FSMs:
-
-- `transitionTo()` - Extracts target states
-- `describe()` - Extracts descriptions
-- `guarded()` - Extracts guard conditions
-- `action()` - Extracts actions
-- `invoke()` - Extracts async services
-
-## Backward Compatibility
-
-- Existing simple FSM configurations continue to work unchanged
-- The `initialState` and `classes` properties are optional
-- Either `parallel` or FSM config must be provided
-- All existing features (descriptions, guards, actions, etc.) work in nested/parallel contexts
-
-## Error Handling
-
-```typescript
-// ❌ Invalid: Neither parallel nor FSM config
-{
-  input: 'examples/machine.ts',
-  id: 'invalid',
-  // Error: must have either 'parallel' or 'initialState'/'classes'
-}
-
-// ✅ Valid: FSM config
-{
-  input: 'examples/machine.ts',
-  id: 'valid1',
-  classes: ['State1', 'State2'],
-  initialState: 'State1',
-}
-
-// ✅ Valid: Parallel config
-{
-  input: 'examples/machine.ts',
-  id: 'valid2',
-  parallel: {
-    regions: [
-      { name: 'r1', initialState: 'S1', classes: ['S1'] }
-    ]
-  }
-}
-```
-
-## Best Practices
-
-### Use Hierarchical When
-
-- States naturally group into parent-child relationships
-- A child's context depends on the parent
-- You want to model a "stack" of active states
-- Transitions can cross parent boundaries
-
-### Use Parallel When
-
-- Regions are truly independent
-- Each region has its own lifecycle
-- Regions don't directly communicate
-- You need true orthogonal state management
-
-### Configuration Design
-
-1. **Name regions clearly** - Use descriptive names for parallel regions
-2. **Document context relationships** - Add `description` field to clarify parent-child semantics
-3. **Keep hierarchies shallow** - Deeply nested states become hard to visualize
-4. **Validate completeness** - Ensure `classes` array contains all reachable states
+The supplied `Project` must already contain the configured input file. `extractMachines(config)` is a convenience for the repository’s conventional `src/**/*.ts` and `examples/**/*.ts` layout; use `extractMachine` with your own project when sources live elsewhere.
 
 ## Troubleshooting
 
-### "Class not found" warning
+### A class is missing
 
-```
-⚠️ Warning: Class 'ChildState' not found for region 'fontStyle'.
-```
+Class names are case-sensitive and must appear in the configured input file. A class omitted from `classes` is omitted from the generated statechart even if another transition targets it.
 
-**Solution**: Ensure the class name matches exactly and is in the source file.
+### A nested group appears under the wrong state
 
-### Missing transitions in nested states
+The current hierarchy configuration always attaches `children` to the top-level `initialState`. It cannot select a different parent. Restructure the chart configuration or post-process the generated data when you need a deeper hierarchy.
 
-**Cause**: The extractor only analyzes classes listed in `classes` array.
+### A parallel chart has no top-level `initial`
 
-**Solution**: Add all state classes to the `classes` array, even if they seem unnecessary.
+That is expected. A parallel root uses `type: "parallel"`; each region supplies its own `initial` value.
 
-### Parallel region not appearing in output
+### Validation succeeds but the model is still wrong
 
-**Cause**: Missing or incomplete region configuration.
-
-**Solution**: Verify each region has `name`, `initialState`, and `classes` properties.
-
-## API Reference
-
-### extractMachine()
-
-```typescript
-export function extractMachine(
-  config: MachineConfig,
-  project: Project,
-  verbose?: boolean
-): any
-```
-
-Extracts a single machine configuration. Handles both hierarchical and parallel patterns automatically based on config.
-
-### MachineConfig
-
-See "Configuration Types" section for complete interface documentation.
-
-### Related Functions
-
-- `extractMachines()` - Extract multiple machines from `ExtractionConfig`
-- `analyzeStateNode()` - Analyze a single state node (used internally)
-- `extractMetaFromMember()` - Extract metadata from class members
-
-## See Also
-
-- [Statechart extraction guide](statechart-extraction.md)
-- [Type-State Programming Guide](../README.md)
-- [Supported API](api.md)
+Schema validation checks output structure. It does not prove that transition targets exist, that class lists are complete, or that runtime behavior matches annotations. Review extractor warnings and test important generated charts as build artifacts.

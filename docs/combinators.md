@@ -91,7 +91,7 @@ Now, you can use this combinator inside your machine factory to define transitio
 ```typescript
 // counterMachine.ts
 import { createMachine, Machine } from '@doeixd/machine';
-import { createTransitionFactory } from './functional-combinators';
+import { createTransitionFactory } from '@doeixd/machine/functional-combinators';
 
 type CounterContext = { count: number };
 type CounterMachine = Machine<CounterContext>;
@@ -180,7 +180,7 @@ You can start with a simple machine and layer on functionality. Each step is imm
 
 ```typescript
 import { createMachine } from '@doeixd/machine';
-import { createTransitionExtender } from './functional-combinators';
+import { createTransitionExtender } from '@doeixd/machine/functional-combinators';
 
 // 1. Start with a machine that only has data.
 const baseMachine = createMachine({ value: 10, name: 'base' }, {});
@@ -277,7 +277,7 @@ export function createFunctionalMachine<C extends object>(initialContext: C) {
 This pattern is the pinnacle of declarative machine construction. You define everything as pure data transformations:
 
 ```typescript
-import { createFunctionalMachine } from './functional-combinators';
+import { createFunctionalMachine } from '@doeixd/machine/functional-combinators';
 
 type TodoContext = {
   todos: Array<{ id: number; text: string; completed: boolean }>;
@@ -564,13 +564,13 @@ const notificationEnsemble = createAppEnsemble({
 - **Architectural Consistency**: All features use the same state management approach
 - **Separation of Concerns**: Infrastructure setup vs. feature business logic
 - **Framework Agnostic**: Same factories work with React, Solid, Vue, etc.
-- **Type Safety**: Full compile-time guarantees across the entire application
+- **Typed boundaries**: Transition parameters and modeled state shapes remain visible to TypeScript
 - **Testability**: Each feature's logic can be tested in isolation
 - **Scalability**: Easy to add new features without changing existing code
 - **Coordination**: Multiple machines can communicate through shared context without tight coupling
 - **State-Dependent Behavior**: Machines can have different capabilities based on global application state
 
-This pattern enables large teams to build complex applications with confidence, knowing that all state interactions are type-safe and consistent.
+This pattern can give teams a consistent construction boundary. Its types cover the modeled factory and transition surfaces; external stores, effects, casts, and runtime data still need validation and tests.
 
 ---
 

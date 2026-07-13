@@ -1,5 +1,7 @@
 # The Compiler is Your State Machine: A Tale of Two Conversions
 
+> Historical essay: this captures an earlier design perspective, not the current API contract or a current comparison with third-party libraries. Start with the [README](../README.md) and [supported API](api.md) for present behavior and guarantees.
+
 We've all been there. A bug report comes in: "The 'Submit' button doesn't work when I go back to the first step of the form." You dive into the code, sprinkle in some `console.log` statements, and eventually find the culprit: your code tried to send a `"SUBMIT"` event while the machine was in the `"entering_user_details"` state. An invalid state transition. A runtime bug that your tools couldn't catch.
 
 For years, we've used powerful libraries like XState and Zag.js to model these flows. They are fantastic tools that bring order to chaos. But their core model—a configuration object with string-based states and events—has a fundamental limitation: the compiler is a passive observer. It can't truly understand the *rules* of your machine.

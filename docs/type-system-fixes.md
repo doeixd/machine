@@ -1,5 +1,7 @@
 # Type System Fixes for createMachine Overloads
 
+> Historical implementation note: this describes a specific earlier repair and is not an API guide. Consult the [supported API](api.md) and current declarations for accepted overloads.
+
 ## Overview
 
 This document describes the TypeScript type system fixes applied to resolve overload resolution issues in the `createMachine` function. These changes ensure that all code typechecks correctly while maintaining backward compatibility and runtime behavior.

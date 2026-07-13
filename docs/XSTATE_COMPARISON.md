@@ -1,5 +1,7 @@
 # @doeixd/machine vs. XState: In-Depth Comparison
 
+> Historical comparison: APIs and capabilities on both sides may have changed. This document is retained for design context, not purchasing or migration guidance. Verify current XState documentation and use this library's [supported API](api.md) for current behavior.
+
 This document provides a comprehensive comparison between `@doeixd/machine` and XState, two different approaches to state machines in TypeScript.
 
 ## TL;DR
