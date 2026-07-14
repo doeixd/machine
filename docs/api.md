@@ -82,6 +82,7 @@ Actors serialize sync, promise, and promise-like transition results through a ma
 - `createRunner(machine, onChange?)` — mutable controller with a stable `actions` proxy.
 - `createEnsemble(store, factories, getDiscriminant)` — coordinate a domain's state-specific machine factories through an external store. Multiple ensembles can share that store so separate domains react to the same current context.
 - `createEnsembleFactory(store, getDiscriminant)` — capture a shared store and state selector for creating consistently configured ensembles.
+- `runWithEnsemble(flow, ensemble)` — synchronously drive a generator against an ensemble. It does not await yielded promises.
 - `createMutableMachine(...)` — mutable façade for integration points that require mutation.
 - `StoreMachineBase` and `createStoreMachine` — expose read-only live fields from an external store together with methods from one class instance.
 - `MultiMachineBase` and `createMultiMachine` — deprecated compatibility names. The legacy proxy permits direct context-field assignment; it does not create or select among multiple machines.

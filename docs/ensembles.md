@@ -87,11 +87,87 @@ cart.actions.checkout();
 
 Transitions must call `store.setContext` themselves. Returning a context from an ensemble action does not update the ensemble because the external store—not the ensemble—owns state.
 
+### Migrating snapshot-style transitions
+
+A normal immutable machine transition returns its next machine. That pattern does not persist an ensemble context:
+
+```typescript
+// Wrong for an ensemble: the returned object is ignored by the external store.
+login: () => ({ ...ctx, auth: 'signedIn' })
+```
+
+Write through the ensemble's store instead:
+
+```typescript
+login: () => store.setContext({ ...ctx, auth: 'signedIn' })
+```
+
+The factory's `ctx` is current when the action begins. For an asynchronous action, other code may update the store while it is awaiting. Re-read `store.getContext()` before the final write when those updates must be preserved, or use an [actor](actor.md) to serialize the work.
+
 ## Freshness and action availability
 
 The `context` and `state` properties are getters. They read the store each time rather than caching a snapshot. The `actions` object is stable, but each invocation resolves the active machine again.
 
 That stable proxy contains the union of action names represented by the factories. An action that is not valid on the current machine throws at runtime. Prefer narrowing `ensemble.state` when callers need compile-time knowledge of the current typestate; use `actions` at imperative or framework boundaries where a stable reference matters.
+
+For example, if `login` exists only in `signedOut` and `logout` only in `signedIn`, both names are present on the stable `actions` type. Calling `auth.actions.logout()` while signed out still throws. The broad action surface makes the proxy stable; it does not weaken the current-state check.
+
+## Reusing an environment with `createEnsembleFactory`
+
+`createEnsembleFactory` captures a store and one discriminant function. The returned function only needs the state-specific factories:
+
+```typescript
+import { createEnsembleFactory, createMachine } from '@doeixd/machine';
+
+const createAuthAwareEnsemble = createEnsembleFactory(
+  store,
+  (ctx: AppContext) => ctx.auth,
+);
+
+const auth = createAuthAwareEnsemble({
+  signedOut: (ctx) => createMachine(ctx, {
+    login: () => store.setContext({ ...ctx, auth: 'signedIn' }),
+  }),
+  signedIn: (ctx) => createMachine(ctx, {
+    logout: () => store.setContext({ ...ctx, auth: 'signedOut' }),
+  }),
+});
+
+const cartPolicy = createAuthAwareEnsemble({
+  signedOut: (ctx) => createMachine(ctx, {
+    add: (item: string) => store.setContext({ ...ctx, items: [...ctx.items, item] }),
+  }),
+  signedIn: (ctx) => createMachine(ctx, {
+    add: (item: string) => store.setContext({ ...ctx, items: [...ctx.items, item] }),
+    checkout: () => store.setContext({ ...ctx, items: [] }),
+  }),
+});
+```
+
+Both ensembles are selected by authentication status, so logging in changes the cart policy as well as the auth behavior. If a domain has a different discriminant—such as `ctx.cart` rather than `ctx.auth`—create a separate configured factory over the same store.
+
+`createEnsembleFactory` is configuration reuse, not another runtime layer. The returned ensembles have the same freshness, action validation, and store responsibilities as direct `createEnsemble` calls.
+
+## Synchronous workflows with `runWithEnsemble`
+
+`runWithEnsemble` drives a generator to completion and returns the generator's final value:
+
+```typescript
+import { runWithEnsemble } from '@doeixd/machine';
+
+const finalContext = runWithEnsemble(function* (ensemble) {
+  yield ensemble.actions.login();
+  return ensemble.context;
+}, auth);
+```
+
+The driver is synchronous. It does not await yielded promises, pass resolved values back into the generator, cancel work, or serialize concurrent actions. Use it for synchronous sequencing. Use an actor or an explicit async function when the workflow owns asynchronous work.
+
+## React integration
+
+`useEnsemble(initialContext, factories, getDiscriminant)` adapts one ensemble to component-owned React state and returns a stable ensemble object. Its context and state getters still resolve the latest render state through an internal ref.
+
+Separate `useEnsemble` calls own separate React stores, so they do not coordinate merely because their context types match. For application-wide coordination, create the ensembles over one shared external store and distribute them through React context or another dependency boundary.
 
 ## What an ensemble does not do
 

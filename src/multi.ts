@@ -620,17 +620,17 @@ export function runWithRunner<M extends Machine<any>, T>(
 }
 
 /**
- * Executes a generator-based workflow using an Ensemble.
+ * Synchronously executes a generator-based workflow using an Ensemble.
  *
- * This pattern is ideal for orchestrating complex sagas or workflows that
- * interact with a global, framework-managed state. Like `runWithRunner`,
- * it provides clean imperative syntax for multi-step workflows, but operates
- * on an Ensemble's external store rather than internal state.
+ * Like `runWithRunner`, this provides imperative syntax for multi-step workflows
+ * over an Ensemble's external store rather than internal state. The generator is
+ * driven to completion immediately: yielded promises are not awaited and yielded
+ * values are not passed back into the generator.
  *
  * **Key differences from runWithRunner:**
  * - Works with external state stores (React, Solid, etc.)
- * - Useful for global workflows and sagas
- * - State changes automatically propagate to the framework
+ * - Useful for synchronous global workflows
+ * - Can write through framework-managed stores
  * - Great for testing framework-agnostic state logic
  *
  * @param flow - A generator function that receives the `Ensemble` instance.
@@ -638,6 +638,8 @@ export function runWithRunner<M extends Machine<any>, T>(
  * @param ensemble - The `Ensemble` to run the workflow against. Its context
  *   is shared across the entire workflow.
  * @returns The final value returned by the generator (the `return` statement).
+ * @remarks This is not an async saga runtime. Use an actor or explicit async
+ * orchestration when yielded work must be awaited, cancelled, or serialized.
  *
  * @example
  * // Multi-step workflow with an ensemble
