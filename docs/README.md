@@ -9,6 +9,7 @@ The repository [README](../README.md) is the best starting point: it explains th
 | Model states so invalid transitions disappear from the type | [Minimal API](minimal.md) | [Tagged helpers](tagged-helpers.md), [First principles](principles.md) |
 | Build `{ context, ...transitions }` machines | [README: Main API](../README.md#main-api) | [Supported API](api.md), [Transition binding](this-binding.md) |
 | Own a changing snapshot | [Actors](actor.md) | [Async cancellation](abort.md), [Event adapters](adapters.md) |
+| Coordinate multiple machine domains | [Ensembles](ensembles.md) | [Additional patterns](patterns.md), [Functional combinators](combinators.md) |
 | Add guards or transition wrappers | [Conditional transitions](conditional-transitions.md) | [Middleware](middleware.md) |
 | Compose machines | [Delegation](delegate.md) | [Higher-order machines](higher-order.md), [Mixins](mixins.md) |
 | Generate diagrams or statecharts | [Statechart extraction](statechart-extraction.md) | [Hierarchical and parallel extraction](ADVANCED_EXTRACTION.md) |

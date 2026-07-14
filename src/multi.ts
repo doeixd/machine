@@ -10,8 +10,8 @@
  * 1.  **Runner (`createRunner`):** A stateful controller for ergonomic control
  *     of a single, immutable machine. Solves state reassignment.
  *
- * 2.  **Ensemble (`createEnsemble`):** A functional pattern for orchestrating logic
- *     over an external, framework-agnostic state store.
+ * 2.  **Ensemble (`createEnsemble`):** A functional pattern for coordinating
+ *     machine domains through an external, framework-agnostic state store.
  *
  * 3.  **MultiMachine (`createMultiMachine`):** A class-based alternative to the
  *     Ensemble for OOP-style orchestration.
@@ -236,9 +236,9 @@ export function createRunner<M extends Machine<any>>(
 // =============================================================================
 
 /**
- * Defines the contract for an external, user-provided state store. The Ensemble
- * uses this interface to read and write the machine's context, allowing it to
- * plug into any state management solution (React, Solid, Zustand, etc.).
+ * Defines the contract for an external, user-provided state store. Ensembles use
+ * this interface to share current context, allowing multiple machine domains to
+ * coordinate through any state solution (React, Solid, Zustand, etc.).
  *
  * **The power of this abstraction:**
  * Your machine logic is completely decoupled from how or where the state is stored.
@@ -306,28 +306,33 @@ export interface StateStore<C extends object> {
  * // AllTransitions<AllStates> = { fetch: (...) => ..., cancel: (...) => ... }
  * // (Both fetch and cancel are available, but each is only valid in its state)
  */
-type AllTransitions<AllMachines extends Machine<any>> = Omit<
-  { [K in keyof AllMachines]: AllMachines[K] }[keyof AllMachines],
-  'context'
->;
+type UnionToIntersection<U> =
+  (U extends unknown ? (value: U) => void : never) extends
+    (value: infer I) => void ? I : never;
+
+type AllTransitions<AllMachines extends Machine<any>> = UnionToIntersection<
+  AllMachines extends unknown ? Omit<AllMachines, 'context'> : never
+> & object;
 
 /**
- * The Ensemble object. It provides a stable, unified API for orchestrating a
- * state machine whose context is managed by an external store.
+ * A stable API for a coordinated machine domain whose context is managed by an
+ * external store.
  *
- * The Ensemble acts as the "director," determining which machine "actor" is
- * currently active based on the state of the shared context. Unlike a Runner,
- * which manages local state, an Ensemble plugs into external state management
- * (like React's useState, Solid's signal, or a global store).
+ * An ensemble selects the active machine factory from the latest shared context.
+ * Multiple ensembles can use the same store to coordinate separate domains:
+ * each domain remains independently defined, while every action sees changes
+ * made by the others. Unlike a Runner, an ensemble does not own local state.
  *
  * **Key characteristics:**
  * - Dynamically reconstructs the current machine based on context
  * - Validates transitions at runtime for the current state
+ * - Coordinates independently defined machine domains through shared context
  * - Integrates seamlessly with framework state managers
  * - Same factories can be reused across different frameworks
  *
  * **Use Ensemble for:**
  * - Global application state
+ * - Multiple machine domains that must coordinate without direct references
  * - Framework integration (React, Solid, Vue, etc.)
  * - Complex workflows that span multiple components
  * - Decoupling business logic from UI framework
@@ -363,10 +368,9 @@ export type Ensemble<AllMachines extends Machine<any>, C extends object> = {
 };
 
 /**
- * Creates an Ensemble to orchestrate a state machine over an external state store.
- * This is the primary tool for framework integration, as it decouples pure state
- * logic (defined in factories) from an application's state management solution
- * (defined in store).
+ * Creates an Ensemble that coordinates a machine domain through an external
+ * state store. Create multiple ensembles over the same store when independently
+ * defined domains must react to one another's state changes.
  *
  * **How it works:**
  * 1. You provide a `StateStore` that can read and write your application's state
@@ -375,11 +379,14 @@ export type Ensemble<AllMachines extends Machine<any>, C extends object> = {
  *    factory to use based on the current context
  * 4. The Ensemble dynamically constructs the right machine and provides a stable
  *    `actions` object to call transitions
+ * 5. Transitions persist their next context with `store.setContext`; other
+ *    ensembles observe that context the next time they resolve state or an action
  *
  * **Why this pattern?**
- * Your business logic (machines) is completely separated from your state management
- * (React, Solid, Zustand). You can change state managers without rewriting machines,
- * and you can test machines in isolation without framework dependencies.
+ * Business domains remain separately defined while shared context gives them a
+ * deliberate coordination boundary. Storage stays replaceable and testable. The
+ * ensemble does not broadcast events or schedule parallel work; the store is the
+ * communication channel and controls persistence and subscriptions.
  *
  * @template C - The shared context type.
  * @template F - An object of functions that create machine instances for each state.
@@ -510,9 +517,9 @@ export function createEnsemble<
 }
 
 /**
- * Creates a factory for building type-safe, framework-agnostic Ensembles.
- * This is a higher-order function that captures the application's state store
- * and state-discriminant logic in a closure.
+ * Creates a factory for building consistently configured, framework-agnostic
+ * Ensembles. This higher-order function captures a shared state store and
+ * state-discriminant logic in a closure.
  *
  * This allows you to define your application's state "environment" once and then
  * easily create multiple, consistent ensembles by only providing the behavioral logic.

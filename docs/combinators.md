@@ -341,7 +341,7 @@ This approach offers the ultimate separation of concerns:
 
 ## Pattern 4: The Curried Ensemble Factory (`createEnsembleFactory`)
 
-This is an advanced architectural pattern for building large, maintainable applications. It applies the same curried, functional approach to the `createEnsemble` primitive, allowing you to define your application's state "environment" once and then use it to create multiple, consistent state machines.
+This is an advanced architectural pattern for building large, maintainable applications. It applies the same curried, functional approach to `createEnsemble`: define a shared state environment once, then create consistently configured ensembles for the machine domains that coordinate through it. Start with [Ensembles and multi-machine coordination](ensembles.md) for the runtime model and boundaries.
 
 ### The Goal: Architectural Consistency and Decoupling
 

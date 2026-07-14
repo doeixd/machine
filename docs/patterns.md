@@ -123,6 +123,8 @@ function Counter() {
 
 **What it is:** Coordinates multiple machines that share the same context store, like musicians in an orchestra.
 
+Each ensemble owns the factories and discriminant for one domain. Coordination happens when multiple ensembles read and write the same current context; it is not direct machine-to-machine messaging. See [Ensembles and multi-machine coordination](ensembles.md) for a complete example and the store contract.
+
 **When to use:**
 - ✅ **Global state** - app-wide state management
 - ✅ **Multiple domains** - auth, data, UI state coordination
@@ -140,23 +142,35 @@ function Counter() {
 // Global app state
 type AppState = {
   auth: { user: string | null };
-  data: { items: any[] };
+  data: { status: 'idle' | 'loading'; items: unknown[] };
 };
 
 // Machines for different domains
 const authEnsemble = createEnsemble(store, {
-  loggedOut: (ctx) => createMachine(ctx, { login: (user) => ({ ...ctx, auth: { user } }) }),
-  loggedIn: (ctx) => createMachine(ctx, { logout: () => ({ ...ctx, auth: { user: null } }) })
+  loggedOut: (ctx) => createMachine(ctx, {
+    login: (user: string) => store.setContext({ ...ctx, auth: { user } })
+  }),
+  loggedIn: (ctx) => createMachine(ctx, {
+    logout: () => store.setContext({ ...ctx, auth: { user: null } })
+  })
 }, (ctx) => ctx.auth.user ? 'loggedIn' : 'loggedOut');
 
 const dataEnsemble = createEnsemble(store, {
-  idle: (ctx) => createMachine(ctx, { fetch: async () => ({ ...ctx, data: { items: await api.get() } }) }),
-  loading: (ctx) => createMachine(ctx, { /* ... */ })
-}, (ctx) => ctx.data.loading ? 'loading' : 'idle');
+  idle: (ctx) => createMachine(ctx, {
+    fetch: () => store.setContext({ ...ctx, data: { ...ctx.data, status: 'loading' } })
+  }),
+  loading: (ctx) => createMachine(ctx, {
+    resolve: (items: unknown[]) => store.setContext({
+      ...ctx,
+      data: { status: 'idle', items }
+    })
+  })
+}, (ctx) => ctx.data.status);
 
 // They share the same store but handle different concerns
 authEnsemble.actions.login('alice');
 dataEnsemble.actions.fetch();
+dataEnsemble.actions.resolve(await api.get());
 ```
 
 ### Generators (run, step) - Complex Workflows

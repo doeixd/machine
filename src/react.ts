@@ -22,7 +22,7 @@
  *       unnecessary re-renders when other parts of the context change.
  *
  * 3.  **`useEnsemble(initialContext, factories, getDiscriminant)`**:
- *     - **Best for:** Complex state, shared state, or integrating with external logic.
+ *     - **Best for:** Coordinated machine domains, shared state, or external logic.
  *     - **Returns:** A stable `Ensemble` instance.
  *     - The most powerful hook. It uses the `Ensemble` pattern to decouple your
  *       pure machine logic from React's state management, making your business
@@ -162,9 +162,11 @@ export function useMachineSelector<M extends Machine<any>, T>(
 /**
  * A hook that creates and manages an `Ensemble` within a React component.
  *
- * This is the most powerful and flexible integration pattern. It decouples your
- * state logic (defined in `factories`) from React's state management. Your machine
- * logic becomes pure, portable, and easily testable outside of React.
+ * It hosts one ensemble domain in React state. Ensemble factories remain separate
+ * from React's state management, and the stable ensemble resolves its current
+ * machine from the latest context on every access. For application-wide
+ * coordination between multiple ensembles, create them over the same external
+ * store and provide them through context.
  *
  * @template C - The shared context object type.
  * @template F - An object of factory functions that create machine instances.

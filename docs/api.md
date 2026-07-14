@@ -79,11 +79,12 @@ Actors serialize sync, promise, and promise-like transition results through a ma
 ### Runners and ensembles
 
 - `createRunner(machine, onChange?)` — mutable controller with a stable `actions` proxy.
-- `createEnsemble(store, factories, getDiscriminant)` — reconstruct the active typestate from an external context store.
+- `createEnsemble(store, factories, getDiscriminant)` — coordinate a domain's state-specific machine factories through an external store. Multiple ensembles can share that store so separate domains react to the same current context.
+- `createEnsembleFactory(store, getDiscriminant)` — capture a shared store and state selector for creating consistently configured ensembles.
 - `createMutableMachine(...)` — mutable façade for integration points that require mutation.
 - `MultiMachineBase` and `createMultiMachine` — class-oriented multi-state orchestration.
 
-These are runtime conveniences over immutable machine snapshots.
+An ensemble reconstructs its current machine on demand and exposes a stable action proxy. Transitions must persist their next context through `store.setContext`; the shared store is the coordination channel, not an event bus or scheduler. See [Ensembles and multi-machine coordination](ensembles.md).
 
 ### Pattern matching
 

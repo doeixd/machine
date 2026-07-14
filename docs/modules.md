@@ -34,7 +34,7 @@ Exports `Actor`, `createActor`, `spawn`, `fromPromise`, and `fromObservable`. Ac
 
 ### `@doeixd/machine/multi`
 
-Exports `createRunner`, `createEnsemble`, external-store coordination, `createMultiMachine`, and `createMutableMachine`. Use these when an imperative controller must own or reconstruct immutable snapshots.
+Exports `createRunner`, `createEnsemble`, `createEnsembleFactory`, `createMultiMachine`, and `createMutableMachine`. A runner owns one changing snapshot locally. Ensembles coordinate state-specific machine factories—and multiple machine domains—through a shared external `StateStore`. See [Ensembles and multi-machine coordination](ensembles.md).
 
 ### `@doeixd/machine/adapters`
 

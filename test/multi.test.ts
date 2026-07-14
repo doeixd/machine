@@ -312,7 +312,7 @@ describe('createEnsemble', () => {
 
     const ensemble = createEnsemble(store, factories, (ctx) => ctx.status);
 
-    (ensemble.actions as any).start();
+    ensemble.actions.start();
     expect(ensemble.context.status).toBe('loading');
     expect(typeof (ensemble.state as any).stop).toBe('function');
   });
@@ -335,9 +335,9 @@ describe('createEnsemble', () => {
 
     const ensemble = createEnsemble(store, factories, (ctx) => ctx.status);
 
-    (ensemble.actions as any).fetch();
+    ensemble.actions.fetch();
     expect(ensemble.context.status).toBe('loading');
-    (ensemble.actions as any).succeed('hello');
+    ensemble.actions.succeed('hello');
     expect(ensemble.context.status).toBe('idle');
     expect(ensemble.context.data).toBe('hello');
   });
@@ -378,7 +378,7 @@ describe('createEnsemble', () => {
 
     const ensemble = createEnsemble(store, factories, (ctx) => ctx.status);
 
-    expect(() => (ensemble.actions as any).stop()).toThrow();
+    expect(() => ensemble.actions.stop()).toThrow();
   });
 
   it('should maintain stable actions object', () => {
