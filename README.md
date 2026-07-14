@@ -283,26 +283,28 @@ type FetchState = States<{
   success: { data: string };
 }>;
 
-const idle = tag.factory<FetchState>()('idle');
-const loading = tag.factory<FetchState>()('loading');
-const success = tag.factory<FetchState>()('success');
+const State = tag.enum(
+  tag('idle'),
+  tag('loading'),
+  tag('success'),
+);
 
 const createFetch = union<FetchState>()({
   idle: (_state, next) => ({
-    load: (url: string) => next(loading({ url })),
+    load: (url: string) => next(State.loading({ url })),
   }),
   loading: (_state, next) => ({
-    resolve: (data: string) => next(success({ data })),
-    cancel: () => next(idle({})),
+    resolve: (data: string) => next(State.success({ data })),
+    cancel: () => next(State.idle()),
   }),
   success: (_state, next) => ({
-    reset: () => next(idle({})),
+    reset: () => next(State.idle()),
   }),
 });
 
 type FetchMachine = UnionOf<typeof createFetch>;
 
-const first: FetchMachine = createFetch(idle({}));
+const first: FetchMachine = createFetch(State.idle());
 const second = first.load('/api/data');
 // second.load(...) is a type error: loading states do not have `load`.
 ```

@@ -181,7 +181,7 @@ const explicitCounter = machine({ count: 0 }, blueprint);
 
 The minimal entry re-exports the tagged helpers from `@doeixd/machine/types`:
 
-- `tag(name, props?)` and `tag.factory<Union>()` create tagged values;
+- `tag(name, props?)`, `tag.factory<Union>()`, and `tag.enum(...)` create tagged values and reusable factories;
 - `isState(value, tag)` narrows a tagged union;
 - `States<Shape>` converts a tag-to-payload map into a union;
 - `Context<M>`, `Transitions<M>`, `InferMachine<F>`, and `MachineOf<F>` inspect types;

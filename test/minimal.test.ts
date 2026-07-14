@@ -62,6 +62,20 @@ describe('minimal API', () => {
     })).toBe('done');
   });
 
+  it('creates named factories with tag.enum', () => {
+    const Status = tag.enum(tag('idle'), tag('loading'), tag('success'));
+
+    expect(Status.idle()).toEqual({ tag: 'idle' });
+    expect(Status.loading({ url: '/api' })).toEqual({
+      tag: 'loading',
+      url: '/api',
+    });
+    expect(Object.isFrozen(Status)).toBe(true);
+    expect(() => tag.enum(tag('idle'), tag('idle'))).toThrow(
+      "duplicate tag 'idle'",
+    );
+  });
+
   it('runs entry lifecycles and cleans them up', () => {
     type ToggleState = States<{ off: {}; on: {} }>;
     const createToggle = union<ToggleState>()({

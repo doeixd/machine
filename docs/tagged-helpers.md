@@ -48,6 +48,40 @@ const nextState = idle({ count: 10 });
 // { tag: 'idle', count: 10 }
 ```
 
+### `tag.enum()`
+
+Creates a read-only namespace of factories from a list of tags:
+
+```typescript
+import { tag } from '@doeixd/machine';
+
+const Status = tag.enum(
+  tag('idle'),
+  tag('loading'),
+  tag('success'),
+);
+
+const idle = Status.idle();
+// { tag: 'idle' }
+
+const loading = Status.loading({ url: '/api' });
+// { tag: 'loading', url: '/api' }
+
+// Status.missing(); // TypeScript error
+```
+
+Payloads are inferred independently for each call. `tag.enum()` defines the available names, not a fixed payload schema. Use `States<...>` with `union()` when each tag must always carry a specific payload:
+
+```typescript
+type RequestState = States<{
+  idle: {};
+  loading: { url: string };
+  success: { data: string };
+}>;
+```
+
+Duplicate definitions such as `tag.enum(tag('idle'), tag('idle'))` throw during construction rather than silently replacing a factory.
+
 ---
 
 ## `isState()`

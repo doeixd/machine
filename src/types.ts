@@ -59,13 +59,24 @@ export type InferMachine<F extends (...args: any[]) => any> = ReturnType<F>;
  */
 export type MachineOf<F extends (...args: any[]) => any> = InferMachine<F>;
 
+/** A factory for one member produced by {@link tag.enum}. */
+export interface TaggedEnumMember<K extends string> {
+  (): { readonly tag: K };
+  <P extends object>(payload: P & { readonly tag?: never }): { readonly tag: K } & P;
+}
+
+/** A tag-named collection of tagged-object factories. */
+export type TaggedEnum<Members extends readonly Tagged[]> = {
+  readonly [K in Members[number]['tag']]: TaggedEnumMember<K>;
+};
+
 /**
  * Creates a tagged object or adds a tag to an existing object.
  */
-export function tag<T extends string>(name: T): { tag: T };
-export function tag<T extends string, O extends object>(name: T, props: O): { tag: T } & O;
-export function tag<const T extends { tag: string }>(obj: T): T;
-export function tag<T extends string, O extends object>(
+function createTag<T extends string>(name: T): { tag: T };
+function createTag<T extends string, O extends object>(name: T, props: O): { tag: T } & O;
+function createTag<const T extends { tag: string }>(obj: T): T;
+function createTag<T extends string, O extends object>(
   nameOrObj: T | { tag: string },
   props?: O
 ): { tag: T } | ({ tag: T } & O) | { tag: string } {
@@ -79,36 +90,57 @@ export function tag<T extends string, O extends object>(
 }
 
 /**
- * Namespace for tag factory utility.
+ * Creates a pre-bound tag factory for a specific state.
+ *
+ * @example const idle = tag.factory<{ count: number }>('idle');
  */
-export namespace tag {
-  /**
-   * Creates a pre-bound tag factory for a specific state.
-   * 
-   * @typeParam C - Context (data) type
-   * @typeParam T - Transitions type (optional, for machine return types)
-   * @param name - The tag name for this state
-   * @returns A function that takes context data and returns a tagged object
-   * 
-   * @typeParam C - Context (data) type
-   * @typeParam T - Transitions type (optional)
-   * @param name - The tag name
-   * @example const idle = tag.factory<{ count: number }>('idle');
-   */
-  export function factory<C extends object, T extends object = {}, K extends string = string>(name: K): (props: C) => { readonly tag: K } & C & T;
-  /**
-   * Creates a curried tag factory, ideal for use with the States utility.
-   * @example const state = tag.factory<AppState>()('idle')({ count: 0 });
-   */
-  export function factory<C extends object, T extends object = {}>(): <K extends string>(name: K) => (props: Omit<Extract<C, { tag: K }>, 'tag'>) => (Extract<C, { tag: K }> extends never ? { readonly tag: K } & C : Extract<C, { tag: K }>) & T;
-
-  export function factory(name?: string) {
-    if (name !== undefined) {
-      return (props: any) => tag(name, props);
-    }
-    return (name: string) => (props: any) => tag(name, props);
+function createTagFactory<C extends object, T extends object = {}, K extends string = string>(name: K): (props: C) => { readonly tag: K } & C & T;
+/**
+ * Creates a curried tag factory constrained to the members of a tagged union.
+ * @example const state = tag.factory<AppState>()('idle')({ count: 0 });
+ */
+function createTagFactory<C extends Tagged, T extends object = {}>(): <K extends TagOf<C>>(name: K) => (props: Omit<Extract<C, { tag: K }>, 'tag'>) => Extract<C, { tag: K }> & T;
+function createTagFactory(name?: string) {
+  if (name !== undefined) {
+    return (props: object) => createTag(name, props);
   }
+  return (tagName: string) => (props: object) => createTag(tagName, props);
 }
+
+/**
+ * Creates a namespace of factories from tag definitions.
+ *
+ * Payload types are inferred independently at each factory call. Use `States`
+ * with `union` when every member needs a fixed payload contract.
+ */
+function createTaggedEnum<const Members extends readonly Tagged[]>(
+  ...members: Members
+): TaggedEnum<Members> {
+  const result = Object.create(null) as Record<string, TaggedEnumMember<string>>;
+
+  for (const member of members) {
+    if (Object.prototype.hasOwnProperty.call(result, member.tag)) {
+      throw new Error(`Cannot create tagged enum: duplicate tag '${member.tag}'.`);
+    }
+
+    Object.defineProperty(result, member.tag, {
+      enumerable: true,
+      value: (payload?: object) => payload === undefined
+        ? createTag(member.tag)
+        : createTag(member.tag, payload),
+    });
+  }
+
+  return Object.freeze(result) as TaggedEnum<Members>;
+}
+
+/**
+ * Creates tagged values and exposes reusable factory helpers.
+ */
+export const tag = Object.assign(createTag, {
+  factory: createTagFactory,
+  enum: createTaggedEnum,
+});
 
 /**
  * Type guard to check if a machine or object is in a specific state.

@@ -44,3 +44,33 @@ runner.send('reset');
 runner.send('missing');
 // @ts-expect-error load requires a URL
 runner.send('load');
+
+const Status = tag.enum(tag('idle'), tag('loading'), tag('success'));
+const enumIdle: { readonly tag: 'idle' } = Status.idle();
+const enumLoading: { readonly tag: 'loading'; url: string } =
+  Status.loading({ url: '/api' });
+void enumIdle;
+void enumLoading;
+// @ts-expect-error enum members are limited to the declared tags
+Status.missing();
+// @ts-expect-error enum payloads must be objects
+Status.loading('api');
+// @ts-expect-error payloads cannot override the enum member's tag
+Status.loading({ tag: 'idle', url: '/api' });
+
+const state = tag.factory<FetchState>();
+state('loading')({ url: '/api' });
+// @ts-expect-error tag factories are constrained to the tagged union
+state('missing')({});
+
+union<FetchState>()({
+  idle: (_state, next) => ({
+    // @ts-expect-error next rejects tags outside the declared union
+    invalid: () => next(tag('missing')),
+  }),
+  loading: (_state, next) => ({
+    // @ts-expect-error next requires the selected tag's payload
+    invalid: () => next(tag('success')),
+  }),
+  success: (_state, next) => ({ reset: () => next(tag('idle')) }),
+});
