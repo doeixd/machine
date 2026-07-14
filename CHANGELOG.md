@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.5.0](https://github.com/doeixd/machine/compare/v1.4.0...v1.5.0) (2026-07-14)
+
+
+### Features
+
+* add read-only store machine facade ([2916f9e](https://github.com/doeixd/machine/commit/2916f9ed07b2f8954003aad0e1bd267a44d3743f))
+
+
+### Bug Fixes
+
+* keep state as a supported constructor ([1441663](https://github.com/doeixd/machine/commit/144166355a8e57a7b7a3e58e4f21b53a13ff9df9))
+
 ## [1.4.0](https://github.com/doeixd/machine/compare/v1.3.0...v1.4.0) (2026-07-14)
 
 
