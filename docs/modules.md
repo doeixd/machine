@@ -24,7 +24,7 @@ Exports `MachineBase`, a class containing only a readonly `context` property. Us
 
 ### `@doeixd/machine/functional-combinators`
 
-Exports `createTransitionFactory`, `createTransitionExtender`, and `createFunctionalMachine` for building main-style machines from context transformations. The older dual-arity `state` helper remains exported but is deprecated because its return shape changes with argument count. See [Combinators](combinators.md).
+Exports `createTransitionFactory`, `createTransitionExtender`, `createFunctionalMachine`, and `state` for building main-style machines from context transformations. `state` supports direct `state(context, transitions)` and curried `state(context)(transformers)` construction. See [Combinators](combinators.md).
 
 ## Runtime ownership and integration
 

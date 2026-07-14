@@ -272,7 +272,7 @@ export function createFunctionalMachine<C extends object>(initialContext: C) {
 }
 
 /**
- * A backward-compatible dual-arity constructor. With two arguments it delegates
+ * A concise dual-form constructor. With two arguments it delegates
  * to `createMachine`; with one argument it delegates to `createFunctionalMachine`.
  *
  * **Two Usage Patterns:**
@@ -301,9 +301,6 @@ export function createFunctionalMachine<C extends object>(initialContext: C) {
  * @param context The initial context object
  * @param transitions Optional transitions object (traditional pattern)
  * @returns Either a machine (traditional) or a factory function (functional)
- * @deprecated Prefer the explicit constructor that matches the intended result:
- * `createMachine(context, transitions)` or `createFunctionalMachine(context)`.
- *
  * @example
  * ```typescript
  * // Traditional pattern

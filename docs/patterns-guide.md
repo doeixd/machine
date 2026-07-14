@@ -14,7 +14,7 @@ This comprehensive guide explains all the different patterns and overloads for c
   - [Traditional Pattern](#traditional-pattern-1)
 - [`createMachineFactory` Patterns](#createmachinefactory-patterns)
   - [Pure Functions Pattern](#pure-functions-pattern)
-- [Legacy `state()` wrapper](#legacy-state-wrapper)
+- [`state()` convenience constructor](#state-convenience-constructor)
 - [Pattern Comparison Matrix](#pattern-comparison-matrix)
 - [Migration Guide](#migration-guide)
 - [Common Pitfalls](#common-pitfalls)
@@ -239,14 +239,14 @@ const next = counter.add(5); // { count: 15 }
 
 **Best for:** Simple state transformations, calculators, pure business logic.
 
-## Legacy `state()` wrapper
+## `state()` convenience constructor
 
-`state()` is a deprecated compatibility wrapper whose behavior depends only on argument count. It does not inspect a machine or choose the best construction pattern.
+`state()` provides two concise construction forms. Its behavior depends on argument count; it does not inspect a machine or choose a pattern heuristically.
 
 ### Traditional Pattern (with transitions object)
 
 ```typescript
-const machine = createMachine({ count: 0 }, {
+const machine = state({ count: 0 }, {
   increment() { return createMachine({ count: this.context.count + 1 }, this); },
   decrement() { return createMachine({ count: this.context.count - 1 }, this); }
 });
@@ -255,7 +255,7 @@ const machine = createMachine({ count: 0 }, {
 ### Functional Pattern (curried with transformers)
 
 ```typescript
-const createCounter = createFunctionalMachine({ count: 0 });
+const createCounter = state({ count: 0 });
 const machine = createCounter({
   increment: ctx => ({ count: ctx.count + 1 }),
   add: (ctx, n: number) => ({ count: ctx.count + n }),
@@ -263,12 +263,12 @@ const machine = createCounter({
 });
 ```
 
-Existing calls continue to work in 1.x:
+The two forms are:
 
 - `state(context, transitions)` delegates to `createMachine(context, transitions)`.
 - `state(context)` delegates to `createFunctionalMachine(context)` and therefore returns another function.
 
-New code should call the explicit constructor. The explicit names make the return shape visible at the call site and produce clearer editor help and error messages.
+Use the direct form for ordinary transition methods. Use the curried form when transitions are naturally expressed as pure context transformers. The explicit `createMachine` and `createFunctionalMachine` names remain useful when construction style should be obvious at the call site.
 
 ## Pattern Comparison Matrix
 
@@ -280,7 +280,7 @@ New code should call the explicit constructor. The explicit names make the retur
 | `createAsyncMachine` (Functional Builder) | ⭐⭐⭐⭐⭐ | Low | Single-state async | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | Most async machines |
 | `createAsyncMachine` (Traditional) | ⭐⭐⭐ | Medium | Multi-state async | ⭐⭐⭐ | ⭐⭐⭐ | Type-state with async |
 | `createMachineFactory` | ⭐⭐⭐⭐ | Low | Pure functions | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | Simple transformations |
-| `state()` (deprecated) | — | — | Argument-count overload | — | — | Existing code only |
+| `state()` | ⭐⭐⭐⭐ | Low | Direct or curried | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | Concise construction |
 
 ### Legend
 - **Type Safety**: How well the pattern prevents runtime errors at compile time
@@ -308,9 +308,11 @@ New code should call the explicit constructor. The explicit names make the retur
 - ✅ You're doing **simple state transformations**
 - ✅ You want **easy testability**
 
-### Use `state()` only for existing code
+### Use `state()` when concision helps
 
-For new code, use `createMachine`, `createFunctionalMachine`, or `createMachineFactory` so the constructor and return shape are explicit.
+- Use `state(context, transitions)` for a compact direct machine definition.
+- Use `state(context)(transformers)` for compact, curried context transformations.
+- Use the longer constructor names where distinguishing styles is more important.
 
 ### Quick Decision Guide:
 
@@ -324,8 +326,8 @@ For new code, use `createMachine`, `createFunctionalMachine`, or `createMachineF
 **Q: Are your transitions pure functions?**
 - ✅ **Yes** → Consider `createMachineFactory`
 
-**Q: Are you maintaining an existing `state()` call?**
-- ✅ **Yes** → It remains supported in 1.x; migrate each overload to its explicit equivalent when convenient.
+**Q: Do you want a concise constructor?**
+- ✅ **Yes** → Use the direct or curried `state()` form deliberately.
 
 ## Migration Guide
 
