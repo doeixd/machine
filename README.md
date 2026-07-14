@@ -4,7 +4,7 @@ A TypeScript state-machine library built around immutable snapshots and typestat
 
 The core runtime is deliberately small: a machine is an object with a `context` property and transition methods. A transition returns the next machine snapshot. TypeScript can then represent different states as different types, making invalid transitions unavailable at compile time.
 
-If you already know what you need, jump to the [minimal API](#minimal-api), [main API](#main-api), or [task-oriented documentation map](docs/README.md). For the design behind both APIs, continue with the core tenets below.
+If you already know what you need, jump to the [main API](#main-api) or [task-oriented documentation map](docs/README.md). For the design behind the API, continue with the core tenets below.
 
 ## Install
 
@@ -25,10 +25,10 @@ For a classic finite-state machine `(S, Σ, δ, s₀, F)`:
 | `S` — control states | A finite union of typestates, tagged objects, or state classes. Each variant exposes only the transitions valid from that state. |
 | `Σ` — inputs | Transition method names plus their typed arguments: `login(username)`, `resolve(data)`, and so on. Event objects are available when a runner or actor needs message dispatch. |
 | `δ` — transition function | The transition methods themselves. Given the current snapshot and input, each returns the next snapshot. In typestate models this is intentionally a partial function: an invalid transition is absent rather than represented by a failing string lookup. |
-| `s₀` — initial state | The initial snapshot passed to `machine()`, `createMachine()`, or a runner. |
+| `s₀` — initial state | The initial snapshot passed to `createMachine()` or a runner. |
 | `F` — final states | Optional terminal typestates with no outgoing transitions. The library does not require every machine to have a final state. |
 
-Real applications usually need an **extended state machine**: a small, finite set of control states plus data such as a username, count, or response. That data lives directly on a minimal-machine snapshot or under `context` in the main API. The values need not be finite; the typestate union remains the finite control model.
+Real applications usually need an **extended state machine**: a small, finite set of control states plus data such as a username, count, or response. That data lives under `context`. Its values need not be finite; the typestate union remains the finite control model.
 
 This mapping drives the design:
 
@@ -39,113 +39,6 @@ This mapping drives the design:
 - **Analysis is opt-in metadata.** When diagrams or formal statecharts matter, annotations describe the same executable transition instead of creating a second machine definition.
 
 There are honest limits to these guarantees. TypeScript checks the model at compile time, but JavaScript can still mutate nested data, read global state, perform effects, or return nondeterministic results. Immutability, determinism, and the Markov property—depending only on the current snapshot and input—are design rules supported by the API, not runtime laws enforced by it.
-
-## Choose an API
-
-There are two primary styles:
-
-| Entry point | State shape | Best for |
-| --- | --- | --- |
-| `@doeixd/machine/minimal` | Flat `state & transitions` | New typestate-focused code with the least machinery |
-| `@doeixd/machine` | `{ context, ...transitions }` | Actors, async runners, middleware, matching, and orchestration |
-
-For most new typestate code, start with the minimal API. Choose the main API when you need its runtime controllers or its broader composition toolkit. The two styles intentionally have different state shapes; examples are not interchangeable without adjusting property access.
-
-Framework entrypoints are explicit:
-
-| Entry point | Contents |
-| --- | --- |
-| `@doeixd/machine/react` | React hooks plus core exports |
-| `@doeixd/machine/solid` | Solid signal/store helpers; import non-reactive factories from the package root |
-
-## Published modules
-
-Every entry below is built as ESM and CommonJS and includes TypeScript declarations. `npm run build` fails if any configured export target is missing.
-
-| Subpath | Purpose |
-| --- | --- |
-| `@doeixd/machine` | Complete main API |
-| `@doeixd/machine/core` | Main API without React or Solid helpers |
-| `@doeixd/machine/minimal` | Flat typestate API |
-| `@doeixd/machine/actor` | Actors, spawning, promises, and observables |
-| `@doeixd/machine/adapters` | EventTarget, EventEmitter, and Observable adapters |
-| `@doeixd/machine/base` | `MachineBase` only |
-| `@doeixd/machine/context-bound` | Context-bound transition helpers |
-| `@doeixd/machine/delegate` | Child-transition delegation |
-| `@doeixd/machine/devtools` | Browser DevTools connection helper |
-| `@doeixd/machine/extract` | Programmatic static statechart extraction |
-| `@doeixd/machine/functional-combinators` | Functional construction and transition combinators |
-| `@doeixd/machine/generators` | Generator-based transition sequences |
-| `@doeixd/machine/higher-order` | Higher-order machine transformations |
-| `@doeixd/machine/matcher` | Reusable typed pattern matching |
-| `@doeixd/machine/middleware` | Middleware, composition, history, snapshots, and time travel |
-| `@doeixd/machine/mixins` | Class and functional machine composition |
-| `@doeixd/machine/multi` | Runners, ensembles, and multi-machine coordination |
-| `@doeixd/machine/primitives` | Guards and metadata annotations |
-| `@doeixd/machine/runtime-extract` | Statechart metadata extraction from live instances |
-| `@doeixd/machine/types` | Tagged-state runtime and type helpers |
-| `@doeixd/machine/utils` | Events, context helpers, binding, and sequences |
-| `@doeixd/machine/react` | React integration |
-| `@doeixd/machine/solid` | Solid integration |
-
-Focused subpaths are useful when you want an explicit dependency boundary or a smaller direct bundle. Files such as `internal-transitions.ts`, `entry-react.ts`, and `entry-solid.ts` are implementation details and are deliberately not public subpaths.
-
-See the [published module guide](docs/modules.md) for the main exports, intended use, and caveats of each entry point.
-
-## Minimal API
-
-Minimal machines keep state and transitions on one flat object.
-
-```ts
-import { machine } from '@doeixd/machine/minimal';
-
-const counter = machine({ count: 0 }, (state, next) => ({
-  increment: () => next({ count: state.count + 1 }),
-  add: (amount: number) => next({ count: state.count + amount }),
-}));
-
-const updated = counter.increment().add(4);
-
-console.log(counter.count); // 0
-console.log(updated.count); // 5
-```
-
-Use `factory()` when the same machine should be instantiated with different initial data. Use `union()` with tagged states when each state has a different set of transitions.
-
-```ts
-import { tag, type States, union, type UnionOf } from '@doeixd/machine/minimal';
-
-type FetchState = States<{
-  idle: {};
-  loading: { url: string };
-  success: { data: string };
-}>;
-
-const idle = tag.factory<FetchState>()('idle');
-const loading = tag.factory<FetchState>()('loading');
-const success = tag.factory<FetchState>()('success');
-
-const createFetch = union<FetchState>()({
-  idle: (_state, next) => ({
-    load: (url: string) => next(loading({ url })),
-  }),
-  loading: (_state, next) => ({
-    resolve: (data: string) => next(success({ data })),
-    cancel: () => next(idle({})),
-  }),
-  success: (_state, next) => ({
-    reset: () => next(idle({})),
-  }),
-});
-
-type FetchMachine = UnionOf<typeof createFetch>;
-
-const first: FetchMachine = createFetch(idle({}));
-const second = first.load('/api/data');
-// second.load(...) is a type error: loading states do not have `load`.
-```
-
-See [docs/minimal.md](docs/minimal.md) for constructors, tagged unions, exhaustive matching, lifecycle hooks, child composition, and the exact boundary of the minimal runtime.
 
 ## Main API
 
@@ -282,6 +175,95 @@ function Counter() {
 ```
 
 Solid action objects are stable and resolve transitions against the current snapshot. Calling an action that is unavailable in the current typestate throws a descriptive runtime error.
+
+## Minimal API
+
+The optional `@doeixd/machine/minimal` entry uses flat snapshots: state and transitions live on the same object.
+
+```ts
+import { machine } from '@doeixd/machine/minimal';
+
+const counter = machine({ count: 0 }, (state, next) => ({
+  increment: () => next({ count: state.count + 1 }),
+  add: (amount: number) => next({ count: state.count + amount }),
+}));
+
+const updated = counter.increment().add(4);
+
+console.log(counter.count); // 0
+console.log(updated.count); // 5
+```
+
+Use `factory()` when the same machine should be instantiated with different initial data. Use `union()` with tagged states when each state has a different set of transitions.
+
+```ts
+import { tag, type States, union, type UnionOf } from '@doeixd/machine/minimal';
+
+type FetchState = States<{
+  idle: {};
+  loading: { url: string };
+  success: { data: string };
+}>;
+
+const idle = tag.factory<FetchState>()('idle');
+const loading = tag.factory<FetchState>()('loading');
+const success = tag.factory<FetchState>()('success');
+
+const createFetch = union<FetchState>()({
+  idle: (_state, next) => ({
+    load: (url: string) => next(loading({ url })),
+  }),
+  loading: (_state, next) => ({
+    resolve: (data: string) => next(success({ data })),
+    cancel: () => next(idle({})),
+  }),
+  success: (_state, next) => ({
+    reset: () => next(idle({})),
+  }),
+});
+
+type FetchMachine = UnionOf<typeof createFetch>;
+
+const first: FetchMachine = createFetch(idle({}));
+const second = first.load('/api/data');
+// second.load(...) is a type error: loading states do not have `load`.
+```
+
+The main and minimal APIs intentionally use different snapshot shapes; their examples are not interchangeable without adjusting property access. See [docs/minimal.md](docs/minimal.md) for factories, tagged unions, exhaustive matching, lifecycle hooks, child composition, and the exact boundary of this smaller runtime.
+
+## Published modules
+
+Every entry below is built as ESM and CommonJS and includes TypeScript declarations. `npm run build` fails if any configured export target is missing.
+
+| Subpath | Purpose |
+| --- | --- |
+| `@doeixd/machine` | Complete main API |
+| `@doeixd/machine/core` | Main API without React or Solid helpers |
+| `@doeixd/machine/minimal` | Flat typestate API |
+| `@doeixd/machine/actor` | Actors, spawning, promises, and observables |
+| `@doeixd/machine/adapters` | EventTarget, EventEmitter, and Observable adapters |
+| `@doeixd/machine/base` | `MachineBase` only |
+| `@doeixd/machine/context-bound` | Context-bound transition helpers |
+| `@doeixd/machine/delegate` | Child-transition delegation |
+| `@doeixd/machine/devtools` | Browser DevTools connection helper |
+| `@doeixd/machine/extract` | Programmatic static statechart extraction |
+| `@doeixd/machine/functional-combinators` | Functional construction and transition combinators |
+| `@doeixd/machine/generators` | Generator-based transition sequences |
+| `@doeixd/machine/higher-order` | Higher-order machine transformations |
+| `@doeixd/machine/matcher` | Reusable typed pattern matching |
+| `@doeixd/machine/middleware` | Middleware, composition, history, snapshots, and time travel |
+| `@doeixd/machine/mixins` | Class and functional machine composition |
+| `@doeixd/machine/multi` | Runners, ensembles, and multi-machine coordination |
+| `@doeixd/machine/primitives` | Guards and metadata annotations |
+| `@doeixd/machine/runtime-extract` | Statechart metadata extraction from live instances |
+| `@doeixd/machine/types` | Tagged-state runtime and type helpers |
+| `@doeixd/machine/utils` | Events, context helpers, binding, and sequences |
+| `@doeixd/machine/react` | React integration |
+| `@doeixd/machine/solid` | Solid integration |
+
+Focused subpaths are useful when you want an explicit dependency boundary or a smaller direct bundle. Files such as `internal-transitions.ts`, `entry-react.ts`, and `entry-solid.ts` are implementation details and are deliberately not public subpaths.
+
+See the [published module guide](docs/modules.md) for the main exports, intended use, and caveats of each entry point.
 
 ## Statechart extraction
 
