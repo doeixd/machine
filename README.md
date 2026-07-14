@@ -14,6 +14,21 @@ npm install @doeixd/machine
 
 Node 18 or newer is supported. React and Solid are optional peer dependencies used only by their framework entry points.
 
+## Documentation
+
+| Topic | Guide |
+| --- | --- |
+| Public API and supported behavior | [Supported API](docs/api.md) |
+| Mathematical model and guarantee boundaries | [State machines from first principles](docs/principles.md) |
+| Factories, classes, and `this` behavior | [Factories](docs/factories.md), [transition binding](docs/this-binding.md) |
+| Async work and ownership | [Cancellation](docs/abort.md), [actors](docs/actor.md) |
+| Transition policies | [Guards](docs/conditional-transitions.md), [middleware](docs/middleware.md) |
+| Composition | [Delegation](docs/delegate.md), [higher-order machines](docs/higher-order.md), [mixins](docs/mixins.md) |
+| Package entry points | [Published modules](docs/modules.md) |
+| Diagrams and formal output | [Statechart extraction](docs/statechart-extraction.md) |
+
+The [complete documentation map](docs/README.md) also separates supported guides from design notes and historical essays.
+
 ## The Core Tenets of a State Machine
 
 The central idea of this library is deliberately plain: **a machine is a state snapshot with typed functions that return the next snapshot**. The API follows the mathematical model instead of hiding it behind a configuration language.
@@ -40,6 +55,8 @@ This mapping drives the design:
 
 There are honest limits to these guarantees. TypeScript checks the model at compile time, but JavaScript can still mutate nested data, read global state, perform effects, or return nondeterministic results. Immutability, determinism, and the Markov property—depending only on the current snapshot and input—are design rules supported by the API, not runtime laws enforced by it.
 
+Read [State machines from first principles](docs/principles.md) for the formal model and the exact boundary of these guarantees.
+
 ## Main API
 
 Main-API machines store data under `context`.
@@ -63,6 +80,8 @@ console.log(updated.context.count); // 5
 ```
 
 The factory form is recommended because it preserves the transition set without manually passing it to every new snapshot. The traditional transition-object overload remains supported.
+
+See the [supported API](docs/api.md), [factory guide](docs/factories.md), and [`this` binding guide](docs/this-binding.md) for the available construction forms and composition rules.
 
 ### Explicit typestates
 
@@ -108,6 +127,8 @@ runner.stop();
 
 `runner.state` is the current context, not the entire machine. The dispatch result is the entire next machine.
 
+See [Async cancellation](docs/abort.md) for dispatch ordering, `AbortSignal`, stale results, and shutdown behavior.
+
 ### Actors
 
 Actors add queued async dispatch, subscriptions, and stable RPC-style actions.
@@ -124,6 +145,8 @@ actor.send.increment();
 unsubscribe();
 ```
 
+See [Actors](docs/actor.md) for mailbox ordering, lifecycle, inspection, and promise or observable adapters.
+
 ### Middleware and orchestration
 
 The main entry also exports:
@@ -136,6 +159,8 @@ The main entry also exports:
 - generator-based transition composition.
 
 These are optional layers. They are not required to use the core machine factories.
+
+Continue with [Middleware](docs/middleware.md), [conditional transitions](docs/conditional-transitions.md), or the [higher-order machine guide](docs/higher-order.md).
 
 ## React
 
@@ -153,6 +178,8 @@ function Counter() {
   return <button onClick={actions.increment}>{machine.context.count}</button>;
 }
 ```
+
+See the [React API notes](docs/api.md#react-entry-doeixdmachinereact) for selectors, contexts, ensembles, and actor hooks.
 
 ## Solid
 
@@ -175,6 +202,8 @@ function Counter() {
 ```
 
 Solid action objects are stable and resolve transitions against the current snapshot. Calling an action that is unavailable in the current typestate throws a descriptive runtime error.
+
+See the [Solid API notes](docs/api.md#solid-entry-doeixdmachinesolid) for stores, selectors, batching, contexts, async ownership, and effects.
 
 ## Minimal API
 
@@ -318,6 +347,8 @@ The CLI supports JSON, Mermaid, or both, and validates generated JSON against th
 - Runtime controllers validate missing transitions, but most transition validity comes from TypeScript.
 
 Avoid describing the library as “zero runtime” or claiming that immutability and purity are enforced. The core is small, but actors, middleware, extraction, and framework adapters intentionally add runtime behavior.
+
+See [Mutability boundaries](docs/mutability.md) for practical guidance on immutable snapshots, nested data, and integration points that require mutation.
 
 ## Development
 
