@@ -24,9 +24,10 @@ Node 18 or newer is supported. React and Solid are optional peer dependencies us
 | Async work and ownership | [Cancellation](docs/abort.md), [actors](docs/actor.md) |
 | Multi-machine coordination | [Ensembles](docs/ensembles.md) |
 | Class-based external-store façade | [`StoreMachine`](docs/multi-machine.md) |
-| Transition policies | [Guards](docs/conditional-transitions.md), [middleware](docs/middleware.md) |
+| Nested and conditional behavior | [Composition guide](docs/nested-and-conditional.md), [guards](docs/conditional-transitions.md) |
+| Transition policies | [Middleware](docs/middleware.md) |
 | Pattern matching | [Advanced matcher](#advanced-matching), [matcher API](docs/api.md#pattern-matching) |
-| Composition | [Delegation](docs/delegate.md), [higher-order machines](docs/higher-order.md), [mixins](docs/mixins.md) |
+| Composition | [Nested and conditional machines](docs/nested-and-conditional.md), [delegation](docs/delegate.md), [higher-order machines](docs/higher-order.md), [mixins](docs/mixins.md) |
 | Package entry points | [Published modules](docs/modules.md) |
 | Diagrams and formal output | [Statechart extraction](docs/statechart-extraction.md) |
 

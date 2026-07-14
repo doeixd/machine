@@ -11,8 +11,9 @@ The repository [README](../README.md) is the best starting point: it explains th
 | Own a changing snapshot | [Actors](actor.md) | [Async cancellation](abort.md), [Event adapters](adapters.md) |
 | Coordinate multiple machine domains | [Ensembles](ensembles.md) | [Additional patterns](patterns.md), [Functional combinators](combinators.md) |
 | Put live store fields and class methods behind one object | [`StoreMachine`](multi-machine.md) | [Published modules](modules.md) |
-| Add guards or transition wrappers | [Conditional transitions](conditional-transitions.md) | [Middleware](middleware.md) |
-| Compose machines | [Delegation](delegate.md) | [Higher-order machines](higher-order.md), [Mixins](mixins.md) |
+| Model nested or conditional behavior | [Nested and conditional machines](nested-and-conditional.md) | [Delegation](delegate.md), [Conditional transitions](conditional-transitions.md) |
+| Add transition wrappers | [Middleware](middleware.md) | [Conditional transitions](conditional-transitions.md) |
+| Compose machines | [Nested and conditional machines](nested-and-conditional.md) | [Delegation](delegate.md), [Higher-order machines](higher-order.md), [Mixins](mixins.md) |
 | Generate diagrams or statecharts | [Statechart extraction](statechart-extraction.md) | [Hierarchical and parallel extraction](ADVANCED_EXTRACTION.md) |
 | Choose a package subpath | [Published modules](modules.md) | [Supported API](api.md) |
 

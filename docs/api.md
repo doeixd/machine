@@ -163,6 +163,8 @@ Minimal state data is flat: read `machine.count`, not `machine.context.count`.
 
 Options can pick, omit, or rename delegated transitions.
 
+See [Nested and conditional machines](nested-and-conditional.md) for how child snapshots, delegation, parallel composition, typestates, and guards fit together—and which hierarchical-statechart semantics they do not provide.
+
 ## React entry: `@doeixd/machine/react`
 
 This entry re-exports the core API and adds:

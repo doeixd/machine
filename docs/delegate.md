@@ -57,8 +57,9 @@ You can pick, omit, or rename transitions to avoid collisions or hide implementa
 ...delegate(ctx, 'child', next, { rename: { inc: 'incrementChild' } })
 ```
 
-### 1. Delegation with `union()`
-Delegation works perfectly with multi-state machines. When the child state changes, the parent's reference to the child is updated, and the parent machine is automatically narrowed to the transitions of the new child state.
+### Delegation with typestate children
+
+Delegation correctly replaces a child when its transition produces another typestate. However, one parent factory still has one statically inferred transition shape: delegation does not automatically derive a new parent API from the returned child's branch. If the parent API must narrow with the child, define the parent as a corresponding typestate union and use `delegate` as the runtime wiring in each branch.
 
 ```typescript
 import { machine, union, tag } from "@doeixd/machine/minimal";
@@ -78,9 +79,9 @@ const parent = machine({
   ...delegate(ctx, 'child', next)
 }));
 
-// Transitions flow through automatically!
-const s1 = parent.activate(); // Parent is now in 'active' child state
-const s2 = s1.inc();          // parent.child.count is 1
+// Runtime replacement works: the returned parent contains the active child.
+const activeParent = parent.activate();
+console.log(activeParent.child.tag); // active
 ```
 
 ## Universal Compatibility
@@ -99,7 +100,7 @@ Creates a bound helper to reduce repetition when delegating several properties.
 const d = createDelegate(ctx, next);
 return {
   ...d('auth'),
-  ...d('counter', { prefix: 'cnt' }),
+  ...d('counter', { rename: { increment: 'incrementCounter' } }),
   ...d('form', { omit: ['reset'] })
 };
 ```
@@ -111,3 +112,5 @@ Delegates transitions from multiple keys at once.
 // Prefixes transitions with key name (e.g. counter_inc)
 ...delegateAll(ctx, ['counter', 'timer'], next, true)
 ```
+
+Prefer prefix mode when child transition names may overlap. Without prefixes, a later child silently replaces an earlier transition with the same name.

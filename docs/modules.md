@@ -48,7 +48,7 @@ Exports `connectToDevTools` for sending machine events and snapshots to a compat
 
 ### `@doeixd/machine/delegate`
 
-Exports `delegate`, `createDelegate`, `delegateAll`, and `renameMap` for exposing selected child transitions through a parent snapshot. See [Delegation](delegate.md).
+Exports `delegate`, `createDelegate`, `delegateAll`, and `renameMap` for exposing selected child transitions through a parent snapshot. See [Nested and conditional machines](nested-and-conditional.md) and [Delegation](delegate.md).
 
 ### `@doeixd/machine/context-bound`
 
