@@ -23,6 +23,7 @@ Node 18 or newer is supported. React and Solid are optional peer dependencies us
 | Factories, classes, and `this` behavior | [Factories](docs/factories.md), [transition binding](docs/this-binding.md) |
 | Async work and ownership | [Cancellation](docs/abort.md), [actors](docs/actor.md) |
 | Transition policies | [Guards](docs/conditional-transitions.md), [middleware](docs/middleware.md) |
+| Pattern matching | [Advanced matcher](#advanced-matching), [matcher API](docs/api.md#pattern-matching) |
 | Composition | [Delegation](docs/delegate.md), [higher-order machines](docs/higher-order.md), [mixins](docs/mixins.md) |
 | Package entry points | [Published modules](docs/modules.md) |
 | Diagrams and formal output | [Statechart extraction](docs/statechart-extraction.md) |
@@ -146,6 +147,50 @@ unsubscribe();
 ```
 
 See [Actors](docs/actor.md) for mailbox ordering, lifecycle, inspection, and promise or observable adapters.
+
+### Advanced matching
+
+`createMatcher` turns a machine union into three complementary APIs: a callable state classifier, reusable type guards, and exhaustive case handling.
+
+```ts
+import {
+  MachineBase,
+  classCase,
+  createMatcher,
+} from '@doeixd/machine';
+
+class Idle extends MachineBase<{ status: 'idle' }> {}
+class Loading extends MachineBase<{ status: 'loading'; startedAt: number }> {}
+class Success extends MachineBase<{ status: 'success'; data: string }> {}
+class Failed extends MachineBase<{ status: 'error'; error: Error }> {}
+
+type FetchMachine = Idle | Loading | Success | Failed;
+
+const matchFetch = createMatcher(
+  classCase('idle', Idle),
+  classCase('loading', Loading),
+  classCase('success', Success),
+  classCase('error', Failed),
+);
+
+function describeFetch(snapshot: FetchMachine): string {
+  matchFetch(snapshot); // 'idle' | 'loading' | 'success' | 'error' | null
+
+  if (matchFetch.is.success(snapshot)) {
+    console.log(snapshot.context.data); // narrowed to Success
+  }
+
+  return matchFetch.when(snapshot).is(
+    matchFetch.case.idle(() => 'Ready'),
+    matchFetch.case.loading(state => `Started at ${state.context.startedAt}`),
+    matchFetch.case.success(state => `Loaded: ${state.context.data}`),
+    matchFetch.case.error(state => `Failed: ${state.context.error.message}`),
+    matchFetch.exhaustive,
+  );
+}
+```
+
+Omitting a case makes the inferred result an error type instead of `string`. For discriminated contexts, `forContext<ContextUnion>()` provides concise case builders; `customCase` accepts arbitrary type-guard predicates. See the [matcher API](docs/api.md#pattern-matching) and [matcher module](docs/modules.md#doeixdmachinematcher).
 
 ### Middleware and orchestration
 
