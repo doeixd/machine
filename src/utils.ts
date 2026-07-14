@@ -606,6 +606,13 @@ export function sequence<
  * Convenience overload for sequencing exactly 2 machines.
  * Provides better type inference and IntelliSense for common 2-step flows.
  *
+ * @typeParam M1 - First machine type.
+ * @typeParam M2 - Second machine type.
+ * @param machine1 - Initial machine in the sequence.
+ * @param machine2 - Machine selected after the first satisfies `isFinal`.
+ * @param isFinal - Predicate evaluated after transitions to advance the sequence.
+ * @returns A proxy exposing the union of both machine APIs.
+ *
  * @example
  * ```typescript
  * const flow = sequence2(
@@ -629,6 +636,15 @@ export function sequence2<
 /**
  * Convenience overload for sequencing exactly 3 machines.
  * Provides better type inference and IntelliSense for common 3-step flows.
+ *
+ * @typeParam M1 - First machine type.
+ * @typeParam M2 - Second machine type.
+ * @typeParam M3 - Third machine type.
+ * @param machine1 - Initial machine in the sequence.
+ * @param machine2 - Second machine in the sequence.
+ * @param machine3 - Final machine in the sequence.
+ * @param isFinal - Predicate evaluated after transitions to advance the sequence.
+ * @returns A proxy exposing the union of all three machine APIs.
  *
  * @example
  * ```typescript

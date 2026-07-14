@@ -181,10 +181,15 @@ const explicitCounter = machine({ count: 0 }, blueprint);
 
 The minimal entry re-exports the tagged helpers from `@doeixd/machine/types`:
 
-- `tag(name, props?)`, `tag.factory<Union>()`, and `tag.enum(...)` create tagged values and reusable factories;
+- `tag(name, props?)`, `tag.factory<Union>()`, and `tag.enum(...)` create tagged values and reusable factories. Use `tag.enum<Union>()(...)` when enum payloads must be constrained by a `States<...>` union;
 - `isState(value, tag)` narrows a tagged union;
 - `States<Shape>` converts a tag-to-payload map into a union;
 - `Context<M>`, `Transitions<M>`, `InferMachine<F>`, and `MachineOf<F>` inspect types;
 - `freeze(value)` recursively freezes objects and arrays, handles cyclic object graphs, and returns a deeply readonly type.
 
 The main and minimal APIs use different snapshot shapes. Minimal state is read as `machine.count`; main-API state is read as `machine.context.count`.
+
+For example, `tag.enum<State>()(tag('idle'), tag('loading'))` rejects unknown
+definition names and gives each generated factory the payload declared for that
+member of `State`. The non-generic `tag.enum(tag('idle'), tag('loading'))` form
+instead infers payloads independently at each call. See [Tagged helpers](tagged-helpers.md).

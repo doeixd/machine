@@ -283,7 +283,7 @@ type FetchState = States<{
   success: { data: string };
 }>;
 
-const State = tag.enum(
+const State = tag.enum<FetchState>()(
   tag('idle'),
   tag('loading'),
   tag('success'),
@@ -307,7 +307,13 @@ type FetchMachine = UnionOf<typeof createFetch>;
 const first: FetchMachine = createFetch(State.idle());
 const second = first.load('/api/data');
 // second.load(...) is a type error: loading states do not have `load`.
+// State.loading() is a type error: `url` is required by FetchState.
 ```
+
+`tag.enum(tag('one'), tag('two'))` is also available when each factory should
+infer an open-ended payload at the call site. The generic, curried form shown
+above constrains every payload and definition name to an existing `States<...>`
+member. See [Tagged helpers](docs/tagged-helpers.md) for both modes.
 
 The main and minimal APIs intentionally use different snapshot shapes; their examples are not interchangeable without adjusting property access. See [docs/minimal.md](docs/minimal.md) for factories, tagged unions, exhaustive matching, lifecycle hooks, child composition, and the exact boundary of this smaller runtime.
 

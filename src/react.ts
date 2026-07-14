@@ -61,6 +61,11 @@ import {
   BaseMachine
 } from './index';
 
+/**
+ * Synchronous runner type used by the React hooks in this entry.
+ *
+ * @typeParam M - Machine or typestate union owned by the runner.
+ */
 export type Runner<M extends Machine<any>> = ReturnType<typeof createRunner<M>>;
 type TransitionHandlers<M extends Machine<any>> = BoundTransitions<M>;
 
@@ -221,6 +226,19 @@ export function useEnsemble<
  *
  * It returns a `Provider` component and a suite of consumer hooks for accessing
  * the state and actions.
+ *
+ * @typeParam M - Machine or typestate union stored in React context.
+ * @returns A Provider plus hooks for the complete value, state, actions, and selections.
+ * @throws {Error} Consumer hooks throw when called outside the returned Provider.
+ * @example
+ * ```tsx
+ * const Counter = createMachineContext<CounterMachine>();
+ *
+ * function Count() {
+ *   const count = Counter.useSelector(machine => machine.context.count);
+ *   return <span>{count}</span>;
+ * }
+ * ```
  */
 export function createMachineContext<M extends Machine<any>>() {
   type MachineContextValue = [M, Record<string, (...args: any[]) => void>];
@@ -278,6 +296,7 @@ export function createMachineContext<M extends Machine<any>>() {
  * 
  * @param actor The actor instance to subscribe to.
  * @returns The current machine snapshot.
+ * @typeParam M - Machine or typestate union owned by the actor.
  */
 export function useActor<M extends BaseMachine<any>>(actor: Actor<M>): M {
   // bind is important if subscribe methods rely on `this`
@@ -294,6 +313,9 @@ export function useActor<M extends BaseMachine<any>>(actor: Actor<M>): M {
  * @param actor The actor instance.
  * @param selector Function to select a part of the state.
  * @param isEqual Optional equality function.
+ * @returns The selected value, retaining reference identity while `isEqual` returns true.
+ * @typeParam M - Machine or typestate union owned by the actor.
+ * @typeParam T - Selected value type.
  */
 export function useActorSelector<M extends BaseMachine<any>, T>(
   actor: Actor<M>,

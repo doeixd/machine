@@ -64,6 +64,7 @@ export type Machine<
  * The shape of an asynchronous machine, where transitions can return Promises.
  * Async transitions receive an AbortSignal as the last parameter for cancellation support.
  * @template C - The context object type.
+ * @template T - Transition methods exposed by the snapshot.
  */
 export type AsyncMachine<
   C extends object,
@@ -75,6 +76,12 @@ export type AsyncMachine<
 /**
  * Utility type to extract the parameters of an async transition function,
  * which includes TransitionOptions as the last parameter.
+ *
+ * The runner supplies a trailing `TransitionOptions`, so it is removed from the
+ * caller-facing tuple when present.
+ *
+ * @typeParam M - Async machine or typestate union to inspect.
+ * @typeParam K - Transition name selected from the machine.
  */
 export type AsyncTransitionArgs<M extends AsyncMachine<any, any>, K extends string> =
   M extends unknown
@@ -141,7 +148,12 @@ export type TransitionArgs<M extends BaseMachine<any>, K extends string> =
       : never
     : never;
 
-/** Extracts the return type of a transition across every branch in a machine union. */
+/**
+ * Extracts a transition's return type across every branch in a machine union.
+ *
+ * @typeParam M - Machine or typestate union to inspect.
+ * @typeParam K - Transition name to select.
+ */
 export type TransitionReturn<M extends BaseMachine<any>, K extends string> =
   M extends unknown
     ? K extends keyof M
@@ -190,6 +202,22 @@ export type DeepReadonly<T> = {
 export type InferMachine<F extends (...args: any[]) => any> = ReturnType<F>;
 
 
+/**
+ * Converts a transition record into a discriminated event union.
+ *
+ * Each transition key becomes `event.type`; its parameter tuple becomes
+ * `event.args` without altering optional or rest parameters.
+ *
+ * @typeParam T - Transition-name to function mapping.
+ * @example
+ * ```ts
+ * type CounterEvent = EventFromTransitions<{
+ *   add(amount: number): Counter;
+ *   reset(): Counter;
+ * }>;
+ * // { type: 'add'; args: [number] } | { type: 'reset'; args: [] }
+ * ```
+ */
 export type EventFromTransitions<T extends Record<string, (...args: any[]) => any>> =
   { [K in keyof T & string]: { type: K; args: T[K] extends (...a: infer A) => any ? A : never } }[keyof T & string];
 
@@ -208,6 +236,8 @@ export type Event<M extends BaseMachine<any>> = {
 /**
  * Event union for `runMachine`. A trailing `TransitionOptions` parameter is
  * supplied by the runner and is therefore omitted from the caller's args.
+ *
+ * @typeParam M - Async machine or typestate union to convert to events.
  */
 export type AsyncEvent<M extends AsyncMachine<any>> = {
   [K in TransitionNames<M>]: { type: K; args: AsyncTransitionArgs<M, K> }
@@ -270,6 +300,9 @@ export type TransitionsFor<C extends object, T extends Record<string, any>> = {
 /**
  * A helper type for use with the `satisfies` operator to provide strong
  * type-checking for standalone asynchronous transition objects.
+ *
+ * @typeParam C - Context read by every transition.
+ * @typeParam T - Transition record being validated.
  */
 export type AsyncTransitionsFor<C extends object, T extends Record<string, any>> = {
   [K in keyof T]: (this: Machine<C, T>, ...args: Parameters<T[K] extends (...a: infer A) => any ? (...a: A) => any : never>) => MaybePromise<AsyncMachine<any, any>>;
@@ -335,6 +368,9 @@ export type FilterValidTransitions<T> = {
  * 1. If the argument is the augmented `this` context (`C & { transitions: T }`), it extracts `T`.
  * 2. If the argument is a factory function `((ctx: C) => T)`, it infers and returns `T`.
  * 3. If the argument is already the pure transitions object `T`, it returns it as is.
+ *
+ * @typeParam Arg - Factory, augmented context, or transition record to inspect.
+ * @typeParam C - Machine context used when recognizing augmented forms.
  */
 export type ExtractTransitions<Arg, C extends object> = Arg extends (
   ...args: any[]
@@ -344,13 +380,19 @@ export type ExtractTransitions<Arg, C extends object> = Arg extends (
   ? T // Case 1: It's the augmented `this` context, extract `T` from `transitions`.
   : Arg; // Case 3: It's already the plain transitions object.
 
-/** Keep only keys whose value is a function that returns a Machine. */
+/**
+ * Keeps only functions that return a synchronous machine.
+ * @typeParam T - Candidate transition record to filter.
+ */
 export type ValidTransitions<T> = {
   [K in keyof T as T[K] extends (...a: any[]) => Machine<any, any> ? K : never]:
   T[K] extends (...a: infer A) => Machine<infer C2, infer T2> ? (...a: A) => Machine<C2, T2> : never;
 };
 
-/** Same for async transitions (functions returning MaybePromise<AsyncMachine>). */
+/**
+ * Keeps only functions returning an async machine or a promise of one.
+ * @typeParam T - Candidate async transition record to filter.
+ */
 export type ValidAsyncTransitions<T> = {
   [K in keyof T as T[K] extends (...a: any[]) => MaybePromise<AsyncMachine<any, any>> ? K : never]:
   T[K] extends (...a: infer A) => MaybePromise<AsyncMachine<infer C2, infer T2>> ? (...a: A) => MaybePromise<AsyncMachine<C2, T2>> : never;
@@ -425,6 +467,7 @@ export function createMachine<C extends object, M extends BaseMachine<C>>(
   machine: M
 ): Machine<C, Transitions<M>>;
 
+/** @internal Runtime implementation shared by the public `createMachine` overloads. */
 export function createMachine(context: any, fnsOrFactory: any): any {
   assertContext(context);
 
@@ -500,6 +543,7 @@ export function createAsyncMachine<C extends object, T extends Record<string, (t
   fns: T
 ): AsyncMachine<C, T>;
 
+/** @internal Runtime implementation shared by the public `createAsyncMachine` overloads. */
 export function createAsyncMachine(context: any, fnsOrFactory: any): any {
   assertContext(context);
 

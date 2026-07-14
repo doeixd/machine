@@ -13,6 +13,8 @@ import { type ContextSnapshot } from './snapshot';
 
 /**
  * A machine enhanced with history tracking capabilities.
+ *
+ * @typeParam M - Original machine type.
  */
 export type WithHistory<M extends BaseMachine<any>> = M & {
   /** History of all transitions */
@@ -23,6 +25,8 @@ export type WithHistory<M extends BaseMachine<any>> = M & {
 
 /**
  * A machine enhanced with snapshot tracking capabilities.
+ *
+ * @typeParam M - Original machine type.
  */
 export type WithSnapshot<M extends BaseMachine<any>> = M & {
   /** Snapshots of context before/after each transition */
@@ -46,6 +50,14 @@ type TimeTravelMachine<M extends BaseMachine<any>> = {
     : M[K];
 };
 
+/**
+ * Machine enhanced with history, context snapshots, restoration, and replay.
+ *
+ * Transition parameter lists are preserved. Machine-returning transitions are
+ * recursively wrapped so debugging capabilities remain available afterward.
+ *
+ * @typeParam M - Machine type being instrumented.
+ */
 export type WithTimeTravel<M extends BaseMachine<any>> = TimeTravelMachine<M> & {
   /** History of all transitions */
   history: HistoryEntry[];

@@ -12,11 +12,17 @@ import {
 // =============================================================================
 
 /**
- * A standard interface for interacting with any actor-like entity.
+ * Minimal reference shared by machine actors and actor-like adapters.
+ *
+ * @typeParam T - Snapshot returned to readers and subscribers.
+ * @typeParam E - Event accepted by {@link ActorRef.dispatch}.
  */
 export interface ActorRef<T, E = unknown> {
+  /** Enqueues an event for processing. */
   dispatch: (event: E) => void;
+  /** Returns the actor's current snapshot synchronously. */
   getSnapshot: () => T;
+  /** Observes successful snapshot replacements; returns an unsubscribe callback. */
   subscribe: (observer: (state: T) => void) => () => void;
 }
 
@@ -37,6 +43,19 @@ export type InspectionEvent = {
 /**
  * A reactive container for a state machine that handles dispatching,
  * queueing of async transitions, and state observability.
+ *
+ * Events are processed in arrival order. A promise-returning transition blocks
+ * later events until it settles. Stopping the actor invalidates pending results,
+ * clears queued events, and removes subscribers.
+ *
+ * @typeParam M - Complete machine or typestate union owned by the actor.
+ * @example
+ * ```ts
+ * const actor = createActor(counter);
+ * actor.subscribe(snapshot => console.log(snapshot.context.count));
+ * actor.send.add(2);
+ * actor.ref.send({ type: 'reset', args: [] });
+ * ```
  */
 export class Actor<M extends BaseMachine<any>> implements ActorRef<M, Event<M>> {
   private _state: M;
@@ -245,21 +264,47 @@ function isMachineSnapshot(value: unknown): value is BaseMachine<object> {
 // =============================================================================
 
 /**
- * Creates a new Actor instance from a machine.
+ * Creates an actor that owns and serializes transitions for `machine`.
+ *
+ * @typeParam M - Machine or typestate union to own.
+ * @param machine - Initial immutable snapshot.
+ * @returns A stopped-state-aware actor with RPC-style `send` and event-style `ref.send`.
+ * @example
+ * ```ts
+ * const actor = createActor(createCounter({ count: 0 }));
+ * actor.send.increment();
+ * ```
  */
 export function createActor<M extends BaseMachine<any>>(machine: M): Actor<M> {
   return new Actor(machine);
 }
 
 /**
- * Spawns an actor from a machine. Alias for createActor.
+ * Creates an actor reference from a machine; alias of {@link createActor}.
+ *
+ * @typeParam M - Machine or typestate union to own.
+ * @param machine - Initial immutable snapshot.
+ * @returns The actor through the portable {@link ActorRef} interface.
  */
 export function spawn<M extends BaseMachine<any>>(machine: M): ActorRef<M, Event<M>> {
   return createActor(machine);
 }
 
 /**
- * Creates an actor-like machine from a Promise.
+ * Creates an actor whose context tracks one eagerly started promise.
+ *
+ * The promise function runs in a microtask after construction. Resolution moves
+ * context to `resolved`; rejection moves it to `rejected`. Stopping the actor
+ * prevents later snapshot replacement but does not cancel the underlying promise.
+ *
+ * @typeParam T - Promise fulfillment value.
+ * @param promiseFn - Lazy promise producer invoked once.
+ * @returns An actor with pending/resolved/rejected context.
+ * @example
+ * ```ts
+ * const request = fromPromise(() => fetch('/api').then(r => r.json()));
+ * request.subscribe(snapshot => console.log(snapshot.context.status));
+ * ```
  */
 export function fromPromise<T>(promiseFn: () => Promise<T>) {
   type PromiseContext =
@@ -291,7 +336,20 @@ export function fromPromise<T>(promiseFn: () => Promise<T>) {
 }
 
 /**
- * Creates an actor-like machine from an Observable.
+ * Creates an actor whose context follows an Observable-like source.
+ *
+ * `next`, `error`, and `complete` notifications become actor transitions.
+ * Calling `actor.stop()` unsubscribes from the source exactly once.
+ *
+ * @typeParam T - Observable value type.
+ * @param observable - Source exposing an RxJS-compatible `subscribe` method.
+ * @returns An actor with active/done/error context.
+ * @example
+ * ```ts
+ * const actor = fromObservable(source$);
+ * actor.subscribe(snapshot => console.log(snapshot.context));
+ * actor.stop(); // also unsubscribes from source$
+ * ```
  */
 export function fromObservable<T>(observable: { subscribe: (next: (val: T) => void, error?: (err: unknown) => void, complete?: () => void) => { unsubscribe: () => void } }) {
   type ObsContext =

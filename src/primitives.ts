@@ -103,26 +103,45 @@ export interface TransitionMeta {
  * The Branded Type.
  * It takes a function type `F` and intersects it with a hidden metadata object `M`.
  * This is the mechanism that carries information from your code to the compiler API.
+ *
+ * @typeParam F - Original transition function type.
+ * @typeParam M - Metadata merged onto that function type.
  */
 export type WithMeta<
   F extends (...args: any[]) => any,
   M extends TransitionMeta
 > = Annotated<F, M>;
 
-/** A value carrying type-level metadata without changing its runtime shape. */
+/**
+ * Value carrying type-level metadata without changing its callable runtime shape.
+ *
+ * @typeParam T - Annotated object or function.
+ * @typeParam M - Metadata represented by the annotation.
+ */
 export type Annotated<T, M extends TransitionMeta> = T & { [META_KEY]: M };
 
 type AnyFunction = (...args: any[]) => any;
 
-/** Extracts annotation metadata already carried by a transition function. */
+/**
+ * Extracts metadata already carried by an annotated transition.
+ *
+ * @typeParam F - Possibly annotated function type.
+ */
 export type MetadataOf<F> = F extends { [META_KEY]: infer M extends TransitionMeta }
   ? M
   : {};
 
-/** A unary function suitable for use with {@link pipe}. */
+/**
+ * Unary type transformation suitable for use with {@link pipe}.
+ * @typeParam Input - Accepted value type.
+ * @typeParam Output - Resulting value type.
+ */
 export type Operator<Input, Output> = (value: Input) => Output;
 
-/** A reusable decorator that adds metadata without changing a transition's call signature. */
+/**
+ * Reusable decorator that adds metadata without changing a transition's call signature.
+ * @typeParam M - Metadata fragment added by the operator.
+ */
 export type MetadataOperator<M extends TransitionMeta> = <F extends AnyFunction>(
   transition: F
 ) => WithMeta<F, MetadataOf<F> & M>;
@@ -132,14 +151,77 @@ export type MetadataOperator<M extends TransitionMeta> = <F extends AnyFunction>
  *
  * This is deliberately a standalone function: machine snapshots stay plain values,
  * and the same composition helper works for transition functions or other values.
+ *
+ * @param value - Initial value passed to the first operator.
+ * @param operators - Unary transformations applied in declaration order.
+ * @returns The final operator result, or `value` when no operators are supplied.
+ * @example
+ * ```ts
+ * const login = pipe(
+ *   (user: User) => new LoggedIn({ user }),
+ *   transitionTo(LoggedIn),
+ *   describe('Authenticate the current user'),
+ *   action({ name: 'auditLogin' }),
+ * );
+ * ```
+ */
+/**
+ * Returns `value` unchanged.
+ * @typeParam A - Input and result type.
  */
 export function pipe<A>(value: A): A;
+/**
+ * Applies one typed operator.
+ * @typeParam A - Input type.
+ * @typeParam B - Result type.
+ */
 export function pipe<A, B>(value: A, ab: Operator<A, B>): B;
+/**
+ * Applies two typed operators.
+ * @typeParam A - Input type.
+ * @typeParam B - Intermediate type.
+ * @typeParam C - Result type.
+ */
 export function pipe<A, B, C>(value: A, ab: Operator<A, B>, bc: Operator<B, C>): C;
+/**
+ * Applies three typed operators.
+ * @typeParam A - Input type.
+ * @typeParam B - First intermediate type.
+ * @typeParam C - Second intermediate type.
+ * @typeParam D - Result type.
+ */
 export function pipe<A, B, C, D>(value: A, ab: Operator<A, B>, bc: Operator<B, C>, cd: Operator<C, D>): D;
+/**
+ * Applies four typed operators.
+ * @typeParam A - Input type.
+ * @typeParam B - First intermediate type.
+ * @typeParam C - Second intermediate type.
+ * @typeParam D - Third intermediate type.
+ * @typeParam E - Result type.
+ */
 export function pipe<A, B, C, D, E>(value: A, ab: Operator<A, B>, bc: Operator<B, C>, cd: Operator<C, D>, de: Operator<D, E>): E;
+/**
+ * Applies five typed operators.
+ * @typeParam A - Input type.
+ * @typeParam B - First intermediate type.
+ * @typeParam C - Second intermediate type.
+ * @typeParam D - Third intermediate type.
+ * @typeParam E - Fourth intermediate type.
+ * @typeParam F - Result type.
+ */
 export function pipe<A, B, C, D, E, F>(value: A, ab: Operator<A, B>, bc: Operator<B, C>, cd: Operator<C, D>, de: Operator<D, E>, ef: Operator<E, F>): F;
+/**
+ * Applies six typed operators.
+ * @typeParam A - Input type.
+ * @typeParam B - First intermediate type.
+ * @typeParam C - Second intermediate type.
+ * @typeParam D - Third intermediate type.
+ * @typeParam E - Fourth intermediate type.
+ * @typeParam F - Fifth intermediate type.
+ * @typeParam G - Result type.
+ */
 export function pipe<A, B, C, D, E, F, G>(value: A, ab: Operator<A, B>, bc: Operator<B, C>, cd: Operator<C, D>, de: Operator<D, E>, ef: Operator<E, F>, fg: Operator<F, G>): G;
+/** @internal Variadic runtime implementation for the typed overloads. */
 export function pipe(value: unknown, ...operators: Array<Operator<any, any>>): unknown {
   return operators.reduce((current, operator) => operator(current), value);
 }
@@ -229,15 +311,23 @@ function guardedRuntimeMeta(
  * @param target - The Class Constructor of the state being transitioned to.
  * @param implementation - The implementation function returning the new state instance.
  * @returns The implementation function, branded with target metadata.
+ * @typeParam T - Target state constructor.
+ * @typeParam F - Transition implementation type, including parameters and return.
  *
  * @example
  * login = transitionTo(LoggedInMachine, (user) => new LoggedInMachine({ user }));
  */
 export function transitionTo<T extends ClassConstructor>(target: T): MetadataOperator<{ target: T }>;
+/**
+ * Direct form of {@link transitionTo}; annotates `implementation` immediately.
+ * @typeParam T - Target constructor.
+ * @typeParam F - Implementation type.
+ */
 export function transitionTo<T extends ClassConstructor, F extends AnyFunction>(
   target: T,
   implementation: F
 ): WithMeta<F, MetadataOf<F> & { target: T }>;
+/** @internal Runtime implementation shared by direct and curried forms. */
 export function transitionTo<T extends ClassConstructor, F extends AnyFunction>(
   _target: T,
   implementation?: F
@@ -259,14 +349,21 @@ export function transitionTo<T extends ClassConstructor, F extends AnyFunction>(
  *
  * @param text - The description text.
  * @param transition - The transition function (or wrapper) to annotate.
+ * @returns A reusable operator when `transition` is omitted, otherwise the same callable transition.
+ * @typeParam F - Annotated transition function type.
  * @example
  * logout = describe("Logs the user out", transitionTo(LoggedOut, ...));
  */
 export function describe(text: string): MetadataOperator<{ description: string }>;
+/**
+ * Direct form of {@link describe}; annotates `transition` immediately.
+ * @typeParam F - Annotated transition type.
+ */
 export function describe<F extends AnyFunction>(
   text: string,
   transition: F
 ): WithMeta<F, MetadataOf<F> & { description: string }>;
+/** @internal Runtime implementation shared by direct and curried forms. */
 export function describe<F extends AnyFunction>(
   _text: string,
   transition?: F
@@ -290,14 +387,23 @@ export function describe<F extends AnyFunction>(
  * @deprecated Use the runtime `guard()` primitive instead. Its `options.description` is used for static analysis.
  * @param guard - Object containing the name and optional description of the guard.
  * @param transition - The transition function to guard.
+ * @returns A reusable metadata operator or the annotated transition.
+ * @typeParam G - Guard metadata literal.
+ * @typeParam F - Annotated transition function type.
  * @example
  * delete = guarded({ name: "isAdmin" }, transitionTo(Deleted, ...));
  */
 export function guarded<G extends GuardMeta>(guard: G): MetadataOperator<{ guards: [G] }>;
+/**
+ * Direct form of {@link guarded}; annotates `transition` immediately.
+ * @typeParam G - Guard metadata.
+ * @typeParam F - Annotated transition type.
+ */
 export function guarded<G extends GuardMeta, F extends AnyFunction>(
   guard: G,
   transition: F
 ): WithMeta<F, MetadataOf<F> & { guards: [G] }>;
+/** @internal Runtime implementation shared by direct and curried forms. */
 export function guarded<G extends GuardMeta, F extends AnyFunction>(
   guard: G,
   transition?: F
@@ -318,8 +424,15 @@ export function guarded<G extends GuardMeta, F extends AnyFunction>(
 /**
  * Annotates a transition with an Invoked Service (asynchronous effect).
  *
+ * This decorator records extraction metadata; it does not schedule or execute
+ * the function. Execution remains the responsibility of the caller or runner.
+ *
  * @param service - configuration for the service (source, onDone target, onError target).
  * @param implementation - The async function implementation that receives an AbortSignal.
+ * @returns A reusable operator or the same callable implementation with invoke metadata.
+ * @typeParam D - Success target constructor.
+ * @typeParam E - Error target constructor.
+ * @typeParam F - Abort-aware implementation function.
  * @example
  * load = invoke(
  *   { src: "fetchData", onDone: LoadedMachine, onError: ErrorMachine },
@@ -340,13 +453,25 @@ type InvokeOperator<D extends ClassConstructor, E extends ClassConstructor> = <F
   implementation: F
 ) => WithMeta<F, MetadataOf<F> & { invoke: InvokeService<D, E> }>;
 
+/**
+ * Curried form of `invoke`; returns an operator for an abort-aware implementation.
+ * @typeParam D - Success target constructor.
+ * @typeParam E - Error target constructor.
+ */
 export function invoke<D extends ClassConstructor, E extends ClassConstructor>(
   service: InvokeService<D, E>
 ): InvokeOperator<D, E>;
+/**
+ * Direct form of {@link invoke}; annotates `implementation` immediately.
+ * @typeParam D - Success target constructor.
+ * @typeParam E - Error target constructor.
+ * @typeParam F - Abort-aware implementation type.
+ */
 export function invoke<D extends ClassConstructor, E extends ClassConstructor, F extends (options: { signal: AbortSignal }) => any>(
   service: InvokeService<D, E>,
   implementation: F
 ): WithMeta<F, MetadataOf<F> & { invoke: InvokeService<D, E> }>;
+/** @internal Runtime implementation shared by direct and curried forms. */
 export function invoke<D extends ClassConstructor, E extends ClassConstructor, F extends (options: { signal: AbortSignal }) => any>(
   service: InvokeService<D, E>,
   implementation?: F
@@ -371,17 +496,27 @@ export function invoke<D extends ClassConstructor, E extends ClassConstructor, F
 /**
  * Annotates a transition with a side-effect Action.
  * Useful for logging, analytics, or external event firing that doesn't change state structure.
+ * This decorator records metadata; it does not execute the described action.
  *
  * @param action - Object containing the name and optional description.
  * @param transition - The transition function to annotate.
+ * @returns A reusable operator or the same callable transition with action metadata.
+ * @typeParam A - Action metadata literal.
+ * @typeParam F - Annotated transition function type.
  * @example
  * click = action({ name: "trackClick" }, (ctx) => ...);
  */
 export function action<A extends ActionMeta>(action: A): MetadataOperator<{ actions: [A] }>;
+/**
+ * Direct form of {@link action}; annotates `transition` immediately.
+ * @typeParam A - Action metadata.
+ * @typeParam F - Annotated transition type.
+ */
 export function action<A extends ActionMeta, F extends AnyFunction>(
   actionMeta: A,
   transition: F
 ): WithMeta<F, MetadataOf<F> & { actions: [A] }>;
+/** @internal Runtime implementation shared by direct and curried forms. */
 export function action<A extends ActionMeta, F extends AnyFunction>(
   actionMeta: A,
   transition?: F
@@ -405,20 +540,29 @@ export function action<A extends ActionMeta, F extends AnyFunction>(
 
 /**
  * Configuration options for guard behavior when conditions fail.
+ *
+ * @typeParam C - Context read by the condition and fallback.
+ * @typeParam TFailure - Machine type returned by a configured fallback.
  */
 export interface GuardOptions<C extends object = any, TFailure extends Machine<any> = Machine<C>> {
-  /** What to do when guard fails */
+  /** Failure policy. Defaults to throwing `errorMessage` or `Guard condition failed`. */
   onFail?: 'throw' | 'ignore' | GuardFallback<C, TFailure>;
 
-  /** Custom error message for 'throw' mode */
+  /** Custom error message used only by `'throw'` mode. */
   errorMessage?: string;
 
-  /** Additional metadata for statechart extraction */
+  /** Human-readable description attached to runtime extraction metadata. */
   description?: string;
 }
 
 /**
- * A fallback machine or function that returns a machine when guard fails.
+ * Machine or machine-bound function returned when a guard fails.
+ *
+ * Function fallbacks receive the original transition arguments and the current
+ * machine as `this`. They cannot be used with context-only invocation.
+ *
+ * @typeParam C - Current context type.
+ * @typeParam TFailure - Machine returned by the fallback.
  */
 export type GuardFallback<C extends object, TFailure extends Machine<any> = Machine<C>> =
   | ((this: Machine<C>, ...args: any[]) => TFailure)
@@ -427,6 +571,10 @@ export type GuardFallback<C extends object, TFailure extends Machine<any> = Mach
 /**
  * A guarded transition that checks conditions at runtime before executing.
  * Can be called with either machine or context as 'this' binding.
+ *
+ * @typeParam C - Context inspected by the guard condition.
+ * @typeParam TSuccess - Machine returned when the condition passes.
+ * @typeParam TFailure - Machine returned by the configured failure policy.
  */
 export type GuardedTransition<
   C extends object,
@@ -458,6 +606,8 @@ export type GuardedTransition<
  * @param transition - The transition function to execute if condition passes
  * @param options - Configuration for guard failure behavior
  * @returns A synchronous guarded transition function
+ * @throws {Error} When the condition fails in `'throw'` mode.
+ * @throws {Error} When `'ignore'` or a function fallback is used with context-only binding.
  *
  * @example
  * ```typescript
@@ -569,6 +719,8 @@ export function guard<
  * @param transition - The transition function to execute if condition passes
  * @param options - Configuration for guard failure behavior
  * @returns A guarded transition function that returns a Promise
+ * @throws {Error} Through the returned promise when the condition fails in `'throw'` mode.
+ * @throws {Error} Through the returned promise when a machine-only failure policy is used with context-only binding.
  *
  * @example
  * ```typescript
@@ -667,16 +819,21 @@ export function guardAsync<
 }
 
 /**
- * Creates a synchronous guard that checks conditions before executing transitions.
- * This is the synchronous counterpart to `guard()` - use this when your machine
- * doesn't need async transitions to avoid unnecessary Promise overhead.
+ * Creates a branded synchronous guard with condition and transition metadata.
+ *
+ * `guard()` is also synchronous; `guardSync()` additionally returns the
+ * `GuardedTransition` inspection surface (`__guard`, `condition`, and
+ * `transition`). Use `guardAsync()` for promise-returning conditions.
  *
  * @template C - The context type
- * @template T - The transition return type
+ * @template TSuccess - The transition return type when the condition passes
+ * @template TFailure - The fallback return type when the condition fails
  * @param condition - Function that returns true if transition should proceed (must be synchronous)
  * @param transition - The transition function to execute if condition passes (must be synchronous)
  * @param options - Configuration for guard failure behavior
  * @returns A synchronous guarded transition function
+ * @throws {Error} When the condition fails in `'throw'` mode.
+ * @throws {Error} When a machine-only failure policy is used with context-only binding.
  *
  * @example
  * ```typescript
@@ -867,6 +1024,9 @@ export function whenGuardAsync<C extends object>(
  * @param meta - Partial metadata object describing states, transitions, etc.
  * @param value - The value to annotate (machine, config, factory function, etc.)
  * @returns The value unchanged, or a reusable unary annotation when value is omitted
+ * @typeParam M - Metadata fragment attached to the value.
+ * @typeParam T - Annotated object or function type.
+ * @throws {TypeError} If the direct form receives `undefined` instead of an object or function.
  *
  * @example
  * // Annotate a functional machine
@@ -886,7 +1046,13 @@ export function whenGuardAsync<C extends object>(
  * );
  */
 export function metadata<M extends Partial<TransitionMeta>>(meta: M): <T extends object>(value: T) => Annotated<T, M>;
+/**
+ * Direct form of {@link metadata}; annotates `value` immediately.
+ * @typeParam M - Metadata shape.
+ * @typeParam T - Annotated value type.
+ */
 export function metadata<M extends Partial<TransitionMeta>, T extends object>(meta: M, value: T): Annotated<T, M>;
+/** @internal Runtime implementation shared by direct and curried forms. */
 export function metadata<M extends Partial<TransitionMeta>, T extends object>(
   meta: M,
   value?: T,

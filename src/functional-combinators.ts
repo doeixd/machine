@@ -319,6 +319,14 @@ export function createFunctionalMachine<C extends object>(initialContext: C) {
  * ```
  */
 export function state<C extends object>(context: C): ReturnType<typeof createFunctionalMachine<C>>;
+/**
+ * Creates a machine immediately from context and traditional transition methods.
+ *
+ * @typeParam C - Context shape.
+ * @typeParam T - Transition record bound to the full machine as `this`.
+ * @param context - Initial context.
+ * @param transitions - Machine-returning transition methods.
+ */
 export function state<
   C extends object,
   T extends Record<string, (this: Machine<C, T>, ...args: any[]) => any>
@@ -326,6 +334,11 @@ export function state<
   context: C,
   transitions: T
 ): Machine<C, T>;
+/**
+ * @internal Runtime implementation shared by the two public `state` forms.
+ * @typeParam C - Context shape.
+ * @typeParam T - Optional transition record.
+ */
 export function state<C extends object, T extends Record<string, (...args: any[]) => any>>(
   context: C,
   transitions?: T

@@ -90,6 +90,14 @@ type DelegateOptions<Child extends object> =
  * @param options - Optional: pick, omit, or rename specific transitions
  * 
  * @returns Object of delegated transitions to spread into parent's transitions
+ *
+ * @example
+ * ```ts
+ * const parent = machine({ child: createCounter({ count: 0 }) }, (ctx, next) => ({
+ *   ...delegate(ctx, 'child', next),
+ * }));
+ * const updated = parent.increment();
+ * ```
  */
 export function delegate<
   Ctx extends object,
@@ -102,6 +110,17 @@ export function delegate<
   next: (c: Ctx) => R
 ): DelegatedTransitions<Child, R>;
 
+/**
+ * Delegates only the named child transitions.
+ *
+ * @typeParam Ctx - Parent context containing the child.
+ * @typeParam Key - Parent context key containing the child machine.
+ * @typeParam R - Parent snapshot returned by `next`.
+ * @typeParam Child - Child machine type.
+ * @typeParam Keys - Selected child transition names.
+ * @param options.pick - Child transition names to expose unchanged.
+ * @returns A transition object containing only `pick` members.
+ */
 export function delegate<
   Ctx extends object,
   Key extends keyof Ctx,
@@ -115,6 +134,17 @@ export function delegate<
   options: { pick: Keys[] }
 ): PickedDelegatedTransitions<Child, R, Keys>;
 
+/**
+ * Delegates every enumerable child transition except the named members.
+ *
+ * @typeParam Ctx - Parent context containing the child.
+ * @typeParam Key - Parent context key containing the child machine.
+ * @typeParam R - Parent snapshot returned by `next`.
+ * @typeParam Child - Child machine type.
+ * @typeParam Keys - Excluded child transition names.
+ * @param options.omit - Child transition names to hide from the parent.
+ * @returns Delegated transitions with omitted names removed from the type.
+ */
 export function delegate<
   Ctx extends object,
   Key extends keyof Ctx,
@@ -128,6 +158,19 @@ export function delegate<
   options: { omit: Keys[] }
 ): DelegatedTransitions<Omit<Child, Keys>, R>;
 
+/**
+ * Delegates and renames exactly the transitions present in the mapping.
+ *
+ * Unmapped child transitions are not included by this overload.
+ *
+ * @typeParam Ctx - Parent context containing the child.
+ * @typeParam Key - Parent context key containing the child machine.
+ * @typeParam R - Parent snapshot returned by `next`.
+ * @typeParam Child - Child machine type.
+ * @typeParam Mapping - Child-to-parent transition name mapping.
+ * @param options.rename - Child-name to parent-name mapping.
+ * @returns Delegated transitions keyed by the mapped parent names.
+ */
 export function delegate<
   Ctx extends object,
   Key extends keyof Ctx,
@@ -141,6 +184,7 @@ export function delegate<
   options: { rename: Mapping }
 ): RenamedDelegatedTransitions<Child, R, Mapping>;
 
+/** @internal Runtime implementation shared by the public delegation overloads. */
 export function delegate<
   Ctx extends object,
   Key extends keyof Ctx,
@@ -203,6 +247,8 @@ export function delegate<
 /**
  * Type helper to get transition names from a machine or object.
  * Useful for type-safe pick/omit/rename options.
+ *
+ * @typeParam M - Child machine or transition-bearing object to inspect.
  */
 export type TransitionsOf<M> = TransitionNamesOf<M>;
 
@@ -213,6 +259,20 @@ export type TransitionsOf<M> = TransitionNamesOf<M>;
 /**
  * Creates a delegate helper bound to a specific context and next function.
  * Useful when delegating multiple children to avoid repetition.
+ *
+ * @typeParam Ctx - Parent context containing child snapshots.
+ * @typeParam R - Parent result returned by `next`.
+ * @param ctx - Current parent context.
+ * @param next - Parent reconstruction callback.
+ * @returns A child-keyed delegate function with the same options as {@link delegate}.
+ * @example
+ * ```ts
+ * const d = createDelegate(ctx, next);
+ * return {
+ *   ...d('auth'),
+ *   ...d('counter', { rename: { increment: 'incrementCounter' } }),
+ * };
+ * ```
  */
 export function createDelegate<Ctx extends object, R>(
   ctx: Ctx,
@@ -226,6 +286,23 @@ export function createDelegate<Ctx extends object, R>(
 
 /**
  * Delegates all transitions from multiple children, optionally with a prefix.
+ *
+ * Without prefixes, later children overwrite earlier transitions with the same
+ * name. Pass `true` when child APIs can overlap.
+ *
+ * @typeParam Ctx - Parent context containing the selected children.
+ * @typeParam Keys - Child keys to traverse.
+ * @typeParam R - Parent result returned by `next`.
+ * @param ctx - Current parent context.
+ * @param keys - Child keys whose enumerable function properties are delegated.
+ * @param next - Parent reconstruction callback.
+ * @param prefix - Whether to expose names as `child_transition`.
+ * @returns A runtime transition record; individual names are not statically enumerated.
+ * @example
+ * ```ts
+ * const transitions = delegateAll(ctx, ['counter', 'timer'], next, true);
+ * // transitions.counter_increment(), transitions.timer_reset(), ...
+ * ```
  */
 export function delegateAll<
   Ctx extends object,
@@ -261,6 +338,13 @@ export function delegateAll<
 
 /**
  * Type-safe helper to create a rename mapping for delegate.
+ *
+ * @typeParam M - Child machine whose transition names are allowed as keys.
+ * @returns An identity function that preserves literal destination names.
+ * @example
+ * ```ts
+ * const names = renameMap<typeof child>()({ submit: 'submitForm' });
+ * ```
  */
 export function renameMap<M extends object>() {
   return <T extends Partial<Record<TransitionNamesOf<M>, string>>>(mapping: T): T => mapping;

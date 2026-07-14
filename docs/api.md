@@ -150,7 +150,7 @@ See [Higher-order machines](higher-order.md) for lifecycle examples and collisio
 - `match(value, handlers)` — exhaustively consume tagged states.
 - `runnable(machine, lifecycle)` and `run(machine)` — event-driven lifecycle support.
 - `withChildren(parent, children)` — namespace child machines.
-- `tag`, `tag.factory`, `tag.enum`, `States`, `UnionOf`, and related tagged helpers.
+- `tag`, `tag.factory`, `tag.enum`, `States`, `UnionOf`, and related tagged helpers. `tag.enum(tag(...), ...)` infers open payloads per call; `tag.enum<State>()(tag(...), ...)` constrains names and payloads to a tagged union. See [Tagged helpers](tagged-helpers.md).
 
 Minimal state data is flat: read `machine.count`, not `machine.context.count`.
 

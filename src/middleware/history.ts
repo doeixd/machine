@@ -26,7 +26,9 @@ export interface HistoryEntry {
 }
 
 /**
- * Serializer interface for converting context/args to/from strings.
+ * Bidirectional serialization used when history or snapshots must be persisted.
+ *
+ * @typeParam T - Value converted to and from its string representation.
  */
 export interface Serializer<T = any> {
   serialize: (value: T) => string;
@@ -43,7 +45,14 @@ type HistoryMachine<M extends BaseMachine<any>> = {
     : M[K];
 };
 
-/** A machine whose transitions retain history tracking. */
+/**
+ * A machine whose machine-returning transitions preserve history instrumentation.
+ *
+ * `history` belongs to the current wrapper instance. `clearHistory()` mutates
+ * that diagnostic buffer; it does not change the immutable machine context.
+ *
+ * @typeParam M - Original machine type.
+ */
 export type HistoryTrackedMachine<M extends BaseMachine<any>> = HistoryMachine<M> & {
   history: HistoryEntry[];
   clearHistory: () => void;

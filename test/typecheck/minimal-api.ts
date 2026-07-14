@@ -58,6 +58,22 @@ Status.loading('api');
 // @ts-expect-error payloads cannot override the enum member's tag
 Status.loading({ tag: 'idle', url: '/api' });
 
+const RequestState = tag.enum<FetchState>()(
+  tag('idle'),
+  tag('loading'),
+  tag('success'),
+);
+const constrainedLoading: Extract<FetchState, { tag: 'loading' }> =
+  RequestState.loading({ url: '/api' });
+RequestState.idle();
+void constrainedLoading;
+// @ts-expect-error constrained enum payloads require the selected state's fields
+RequestState.loading();
+// @ts-expect-error constrained enum payload fields retain their declared types
+RequestState.loading({ url: 42 });
+// @ts-expect-error constrained enum definitions reject tags outside the union
+tag.enum<FetchState>()(tag('missing'));
+
 const state = tag.factory<FetchState>();
 state('loading')({ url: '/api' });
 // @ts-expect-error tag factories are constrained to the tagged union

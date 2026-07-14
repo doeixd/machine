@@ -4,37 +4,48 @@ import { MachineBase } from './index';
 // HELPER TYPES
 // =============================================================================
 
+/**
+ * Constructable class type used by the machine-mixin utilities.
+ *
+ * @typeParam T - Instance type produced by the constructor.
+ */
 export type Constructor<T = any> = new (...args: any[]) => T;
 
 /**
  * Helper to convert a tuple of types into an intersection of those types.
  * e.g. [A, B] -> A & B
+ * @typeParam U - Union to distribute and intersect.
  */
 export type UnionToIntersection<U> =
   (U extends any ? (k: U) => void : never) extends ((k: infer I) => void) ? I : never;
 
 /**
  * Extracts the instance type from a constructor.
+ * @typeParam T - Constructor type to inspect.
  */
 export type Instance<T> = T extends new (...args: any[]) => infer R ? R : never;
 
 /**
  * Extracts the Context type from a MachineBase subclass.
+ * @typeParam T - Machine instance type to inspect.
  */
 export type ExtractContext<T> = T extends MachineBase<infer C> ? C : never;
 
 /**
  * Combined context type for a union of machines.
+ * @typeParam T - Tuple of machine constructors whose contexts are intersected.
  */
 export type CombinedContext<T extends Constructor[]> = UnionToIntersection<ExtractContext<Instance<T[number]>>> & object;
 
 /**
  * Combined instance type for a union of machines.
+ * @typeParam T - Tuple of machine constructors whose instances are intersected.
  */
 export type CombinedInstance<T extends Constructor[]> = UnionToIntersection<Instance<T[number]>>;
 
 /**
  * The instance type of a MachineUnion, with methods remapped to return the union type.
+ * @typeParam T - Tuple of machine constructors being combined.
  */
 export type MachineUnionInstance<T extends Constructor[]> = {
   [K in keyof CombinedInstance<T>]: CombinedInstance<T>[K] extends (...args: infer Args) => any
@@ -44,6 +55,7 @@ export type MachineUnionInstance<T extends Constructor[]> = {
 
 /**
  * The constructor type for a MachineUnion.
+ * @typeParam T - Tuple of machine constructors being combined.
  */
 export type MachineUnionConstructor<T extends Constructor[]> = new (context: CombinedContext<T>) => MachineUnionInstance<T>;
 
@@ -85,6 +97,8 @@ function getAllPropertyDescriptors(obj: any) {
  *
  * @param machines - A list of Machine classes to combine.
  * @returns A new class constructor that inherits from all input classes.
+ * @typeParam T - Constructor tuple used to infer combined context and methods.
+ * @throws {TypeError} At construction if no usable base constructor is supplied.
  *
  * @example
  * ```typescript
@@ -178,6 +192,8 @@ export function MachineUnion<T extends Constructor[]>(...machines: T): MachineUn
  * @param Source - The class to extend and extract methods from.
  * @param Excluded - One or more classes defining methods to remove.
  * @returns A new class with the subset of methods.
+ * @typeParam S - Source constructor type.
+ * @typeParam E - Tuple of constructors whose methods are removed.
  *
  * @example
  * ```typescript
@@ -258,6 +274,7 @@ export function MachineExclude<
  *
  * @param instances - Variadic list of machine instances to combine.
  * @returns A new instance of the combined machine.
+ * @typeParam T - Machine-instance tuple to combine.
  *
  * @example
  * ```typescript
@@ -286,6 +303,8 @@ export function machineUnion<T extends MachineBase<any>[]>(
  * @param source - The source machine instance.
  * @param excluded - Variadic list of machine instances whose methods should be excluded from source.
  * @returns A new instance restricted to the source's capabilities minus excluded ones.
+ * @typeParam S - Source machine instance type.
+ * @typeParam E - Tuple of machine instances defining excluded methods.
  *
  * @example
  * ```typescript

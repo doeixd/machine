@@ -74,6 +74,16 @@ describe('minimal API', () => {
     expect(() => tag.enum(tag('idle'), tag('idle'))).toThrow(
       "duplicate tag 'idle'",
     );
+
+    type RequestState = States<{
+      idle: {};
+      loading: { url: string };
+    }>;
+    const Request = tag.enum<RequestState>()(tag('idle'), tag('loading'));
+    expect(Request.loading({ url: '/typed' })).toEqual({
+      tag: 'loading',
+      url: '/typed',
+    });
   });
 
   it('runs entry lifecycles and cleans them up', () => {

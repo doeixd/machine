@@ -24,6 +24,8 @@ import {
 /**
  * A minimal Observer interface for reactive streams.
  * Compatible with RxJS and other Observable implementations.
+ *
+ * @typeParam T - Value delivered to `next`.
  */
 export interface Observer<T> {
   next?: (value: T) => void;
@@ -34,6 +36,8 @@ export interface Observer<T> {
 /**
  * A minimal Observable interface for reactive streams.
  * Compatible with RxJS and other Observable implementations.
+ *
+ * @typeParam T - Value delivered to subscribers.
  */
 export interface Observable<T> {
   subscribe(observer: Observer<T>): { unsubscribe: () => void };
@@ -205,6 +209,15 @@ export class MachineEventTarget<M extends Machine<any>> extends EventTarget {
  *
  * @param initialMachine The machine instance to wrap.
  * @returns A `MachineEventTarget` instance.
+ * @typeParam M - Machine or typestate union owned by the adapter.
+ * @example
+ * ```ts
+ * const target = asEventTarget(counter);
+ * target.addMachineEventListener('statechange', event => {
+ *   console.log(event.detail.state.context);
+ * });
+ * target.dispatch('add', [2]);
+ * ```
  */
 export function asEventTarget<M extends Machine<any>>(initialMachine: M): MachineEventTarget<M> {
   return new MachineEventTarget(initialMachine);
@@ -218,6 +231,8 @@ export function asEventTarget<M extends Machine<any>>(initialMachine: M): Machin
  * @param type The name of the event to listen for.
  * @param listener The callback function to execute.
  * @returns A cleanup function that removes the event listener.
+ * @typeParam M - Machine type owned by `target`.
+ * @typeParam K - Event-map key selected for the listener.
  *
  * @example
  * useEffect(() => {
@@ -325,6 +340,13 @@ export class MachineEventEmitter<M extends Machine<any>> extends EventEmitter {
  *
  * @param initialMachine The machine instance to wrap.
  * @returns A `MachineEventEmitter` instance.
+ * @typeParam M - Machine or typestate union owned by the adapter.
+ * @example
+ * ```ts
+ * const emitter = asEventEmitter(counter);
+ * emitter.on('statechange', state => console.log(state.context));
+ * emitter.dispatch('increment');
+ * ```
  */
 export function asEventEmitter<M extends Machine<any>>(initialMachine: M): MachineEventEmitter<M> {
   return new MachineEventEmitter(initialMachine);
@@ -476,6 +498,14 @@ export class MachineObservable<M extends Machine<any>> implements Observable<M> 
  *
  * @param initialMachine The machine instance to wrap.
  * @returns A `MachineObservable` instance.
+ * @typeParam M - Machine or typestate union owned by the adapter.
+ * @example
+ * ```ts
+ * const observable = asObservable(counter);
+ * const subscription = observable.subscribe({ next: console.log });
+ * observable.dispatch('increment');
+ * subscription.unsubscribe();
+ * ```
  */
 export function asObservable<M extends Machine<any>>(initialMachine: M): MachineObservable<M> {
   return new MachineObservable(initialMachine);

@@ -67,6 +67,7 @@ type CaseToName<C> = C extends MatcherCase<infer Name, any, any> ? Name : never;
 
 /**
  * Builds a mapping from case names to their machine types.
+ * @typeParam Cases - Matcher-case tuple to index by name.
  */
 export type CasesToMapping<Cases extends readonly MatcherCase<any, any, any>[]> = {
   [C in Cases[number]as CaseToName<C>]: CaseToMachine<C>;
@@ -74,12 +75,14 @@ export type CasesToMapping<Cases extends readonly MatcherCase<any, any, any>[]> 
 
 /**
  * Creates a union of all possible machine types from the cases.
+ * @typeParam Cases - Matcher-case tuple to combine.
  */
 export type MatcherUnion<Cases extends readonly MatcherCase<any, any, any>[]> =
   Cases[number] extends MatcherCase<any, infer M, any> ? M : never;
 
 /**
  * Extracts the union of all case names.
+ * @typeParam Cases - Matcher-case tuple to inspect.
  */
 export type CaseNames<Cases extends readonly MatcherCase<any, any, any>[]> =
   CaseToName<Cases[number]>;
@@ -87,6 +90,10 @@ export type CaseNames<Cases extends readonly MatcherCase<any, any, any>[]> =
 /**
  * A branded type representing a case handler in pattern matching.
  * This is used internally to track which cases have been handled.
+ *
+ * @typeParam Name - Case name handled by this value.
+ * @typeParam M - Narrowed machine received by the handler.
+ * @typeParam R - Handler result type.
  */
 export type CaseHandler<Name extends string, M, R> = {
   readonly __brand: 'CaseHandler';
@@ -120,6 +127,9 @@ type ExtractHandlerReturn<H extends readonly any[]> =
 /**
  * Checks if all machine types in Union have been handled.
  * Returns true if exhaustive, otherwise returns an error type with missing cases.
+ *
+ * @typeParam Union - Complete machine union expected by the match.
+ * @typeParam Handled - Machine members represented by handlers.
  */
 export type IsExhaustive<Union, Handled> =
   Exclude<Union, Handled> extends never
@@ -131,6 +141,9 @@ export type IsExhaustive<Union, Handled> =
 
 /**
  * Pattern matching builder returned by matcher.when().
+ *
+ * @typeParam _Cases - Cases registered on the parent matcher.
+ * @typeParam M - Runtime value being matched.
  */
 export interface WhenBuilder<
   _Cases extends readonly MatcherCase<any, any, any>[],
@@ -171,6 +184,8 @@ export interface WhenBuilder<
 
 /**
  * The main Matcher interface with three APIs.
+ *
+ * @typeParam Cases - Registered matcher-case tuple.
  */
 export interface Matcher<Cases extends readonly MatcherCase<any, any, any>[]> {
   /**

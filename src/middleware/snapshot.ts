@@ -11,7 +11,9 @@ import type { Serializer } from './history';
 // =============================================================================
 
 /**
- * A snapshot of machine context before and after a transition.
+ * A recorded context pair surrounding one transition.
+ *
+ * @typeParam C - Machine context captured before and after the transition.
  */
 export interface ContextSnapshot<C extends object> {
   /** Unique ID for this snapshot */
@@ -41,7 +43,14 @@ type SnapshotMachine<M extends BaseMachine<any>> = {
     : M[K];
 };
 
-/** A machine whose transitions retain snapshot tracking. */
+/**
+ * A machine whose machine-returning transitions preserve snapshot tracking.
+ *
+ * `restoreSnapshot(context)` creates a machine at the supplied context; it does
+ * not mutate an earlier immutable machine snapshot.
+ *
+ * @typeParam M - Original machine type.
+ */
 export type SnapshotTrackedMachine<M extends BaseMachine<any>> = SnapshotMachine<M> & {
   snapshots: ContextSnapshot<Context<M>>[];
   clearSnapshots: () => void;

@@ -136,19 +136,48 @@ export function toggle<
 
 // --- Types for the Fetch Machine ---
 
+/**
+ * Abort-aware request function consumed by {@link createFetchMachine}.
+ *
+ * @typeParam T - Successful data type.
+ * @typeParam P - Request parameter type.
+ */
 export type Fetcher<T, P = unknown> = (
   params: P,
   options: { signal: AbortSignal }
 ) => Promise<T>;
+
+/**
+ * Success callback invoked once when a fetch attempt resolves.
+ * @typeParam T - Successful data type.
+ */
 export type OnSuccess<T> = (data: T) => void;
+
+/**
+ * Final-failure callback invoked after the retry budget is exhausted.
+ * @typeParam E - Normalized error type.
+ */
 export type OnError<E> = (error: E) => void;
 
+/**
+ * Configuration for {@link createFetchMachine}.
+ *
+ * @typeParam T - Successful data type.
+ * @typeParam E - Normalized error type exposed by error typestates.
+ * @typeParam P - Parameters accepted by `fetch`, `retry`, and `refetch`.
+ */
 export interface FetchMachineConfig<T, E = Error, P = unknown> {
+  /** Performs one request and should honor the supplied abort signal. */
   fetcher: Fetcher<T, P>;
+  /** Used when a transition does not supply explicit parameters. */
   initialParams?: P;
+  /** Retries available after the first failed attempt. Defaults to `3`. */
   maxRetries?: number;
+  /** Observes successful data before the success snapshot is returned. */
   onSuccess?: OnSuccess<T>;
+  /** Observes the normalized error after no retries remain. */
   onError?: OnError<E>;
+  /** Converts unknown thrown values into the declared error type. */
   mapError?: (error: unknown) => E;
 }
 
@@ -245,6 +274,16 @@ function selectParams<P>(provided: P | undefined, fallback: P | undefined): P {
   return (provided === undefined ? fallback : provided) as P;
 }
 
+/**
+ * Complete typestate union returned by {@link createFetchMachine} transitions.
+ *
+ * Narrow `context.status` before calling state-specific operations such as
+ * `done`, `retry`, `cancel`, or `refetch`.
+ *
+ * @typeParam T - Successful data type.
+ * @typeParam E - Normalized error type.
+ * @typeParam P - Request parameter type.
+ */
 export type FetchMachine<T, E = Error, P = unknown> =
   | IdleMachine<T, E, P>
   | LoadingMachine<T, E, P>
@@ -261,12 +300,16 @@ export type FetchMachine<T, E = Error, P = unknown> =
  *
  * @template T - The type of the data to be fetched.
  * @template E - The type of the error.
+ * @template P - The type of parameters accepted by fetch operations.
  * @param config - Configuration object.
  * @param config.fetcher - An async function that takes params and returns the data.
  * @param [config.maxRetries=3] - The number of times to retry on failure.
  * @param [config.onSuccess] - Optional callback fired with the data on success.
  * @param [config.onError] - Optional callback fired with the error on final failure.
+ * @param [config.mapError] - Converts an unknown thrown value to `E`.
  * @returns An `IdleMachine` instance, ready to start fetching.
+ * @throws {TypeError} If `config.fetcher` is not a function.
+ * @throws {RangeError} If `maxRetries` is negative or not an integer.
  *
  * @example
  * ```typescript
@@ -347,6 +390,15 @@ export type ParallelMachine<
  * @param m1 The first machine instance.
  * @param m2 The second machine instance.
  * @returns A new ParallelMachine instance.
+ * @throws {Error} If the inputs share a context key or transition name.
+ * @typeParam M1 - First machine type.
+ * @typeParam M2 - Second machine type.
+ *
+ * @example
+ * ```ts
+ * const combined = createParallelMachine(counter, panel);
+ * const updated = combined.increment().toggle();
+ * ```
  */
 export function createParallelMachine<
   M1 extends Machine<any>,
@@ -411,8 +463,16 @@ function collectTransitions(machine: Machine<any>): Record<string, (...args: any
   return transitions;
 }
 
-// A mapped type that transforms the return types of a machine's transitions.
-// For a transition that returns `NewMachineState`, this will transform it to return `T`.
+/**
+ * Rewrites every transition return type while retaining its name and parameters.
+ *
+ * @typeParam M - Machine whose transitions are inspected.
+ * @typeParam T - Replacement return type for every transition.
+ * @example
+ * ```ts
+ * type Chained = RemapTransitions<typeof counter, Controller>;
+ * ```
+ */
 export type RemapTransitions<M extends Machine<any>, T> = {
   [K in keyof Transitions<M>]: Transitions<M>[K] extends (...args: infer A) => any
     ? (...args: A) => T

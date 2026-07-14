@@ -6,7 +6,8 @@ This library provides a set of lightweight utilities for working with tagged uni
 
 The `tag` function is a helper for creating tagged objects. It ensures that the `tag` property is correctly treated as a literal type by TypeScript, which is essential for pattern matching and state narrowing.
 
-### Basic Tagging
+### Basic tagging
+
 ```typescript
 import { tag } from "@doeixd/machine";
 
@@ -14,13 +15,15 @@ const state = tag('idle');
 // { tag: 'idle' }
 ```
 
-### With Data
+### With data
+
 ```typescript
 const state = tag('loading', { url: '/api' });
 // { tag: 'loading', url: '/api' }
 ```
 
-### From Object
+### From an object
+
 You can also use it to ensure an existing object is treated as a literal tag.
 ```typescript
 const state = tag({ tag: 'success', data: 'ok' });
@@ -48,9 +51,16 @@ const nextState = idle({ count: 10 });
 // { tag: 'idle', count: 10 }
 ```
 
-### `tag.enum()`
+## `tag.enum()`
 
-Creates a read-only namespace of factories from a list of tags:
+`tag.enum()` creates a frozen, read-only namespace of named tag factories. It
+has an inferred form for open payloads and a generic form for a fixed tagged
+union schema.
+
+### Inferred payloads
+
+Pass definitions directly when the tags are fixed but each call should infer
+its own payload:
 
 ```typescript
 import { tag } from '@doeixd/machine';
@@ -73,14 +83,64 @@ const loading = Status.loading({ url: '/api' });
 Payloads are inferred independently for each call. `tag.enum()` defines the available names, not a fixed payload schema. Use `States<...>` with `union()` when each tag must always carry a specific payload:
 
 ```typescript
+const first = Status.loading({ url: '/api' });
+const second = Status.loading({ attempt: 2 });
+// Both are valid: the inferred form does not prescribe loading's payload.
+```
+
+### Schema-constrained payloads
+
+Supply a tagged union as the generic argument when each name has a durable
+payload contract. Because TypeScript generic arguments cannot be inferred from
+later function arguments, this form has one additional call:
+
+```typescript
 type RequestState = States<{
   idle: {};
   loading: { url: string };
   success: { data: string };
 }>;
+
+const Request = tag.enum<RequestState>()(
+  tag('idle'),
+  tag('loading'),
+  tag('success'),
+);
+
+Request.idle();
+Request.loading({ url: '/api' });
+Request.success({ data: 'done' });
+
+// Request.loading();                 // TypeScript error: url is required
+// Request.loading({ url: 42 });      // TypeScript error: url must be a string
+// tag.enum<RequestState>()(tag('x')); // TypeScript error: unknown tag
 ```
 
-Duplicate definitions such as `tag.enum(tag('idle'), tag('idle'))` throw during construction rather than silently replacing a factory.
+An empty payload (`{}`) produces a zero-argument factory. A non-empty payload is
+required and checked with ordinary TypeScript structural typing. The result
+only exposes definitions you supplied, so you may intentionally create a subset
+of a larger union:
+
+```typescript
+const Pending = tag.enum<RequestState>()(
+  tag('idle'),
+  tag('loading'),
+);
+
+// Pending.success does not exist.
+```
+
+Both forms reject duplicate definitions such as
+`tag.enum(tag('idle'), tag('idle'))` at construction instead of silently
+replacing a factory. Payload objects cannot override the generated `tag` field.
+
+### Which form should I use?
+
+- Use `tag.enum(tag(...), ...)` for a convenient namespace whose payload shape
+  is intentionally chosen at each call.
+- Use `tag.enum<State>()(tag(...), ...)` for state machines and domain models
+  where each tag has one stable payload schema. This is the safer default with
+  `States<...>` and `union()`.
 
 ---
 

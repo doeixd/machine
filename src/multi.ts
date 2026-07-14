@@ -576,6 +576,8 @@ export function createEnsembleFactory<C extends object>(
  * @param initialMachine - The machine to start the flow with. A runner will be
  *   created from this automatically.
  * @returns The final value returned by the generator (the `return` statement).
+ * @typeParam M - Machine or typestate union owned by the temporary runner.
+ * @typeParam T - Generator return type forwarded to the caller.
  *
  * @example
  * // Simple sequential transitions
@@ -638,6 +640,9 @@ export function runWithRunner<M extends Machine<any>, T>(
  * @param ensemble - The `Ensemble` to run the workflow against. Its context
  *   is shared across the entire workflow.
  * @returns The final value returned by the generator (the `return` statement).
+ * @typeParam AllMachines - Union of machines reconstructed by the ensemble.
+ * @typeParam C - Shared external context type.
+ * @typeParam T - Generator return type forwarded to the caller.
  * @remarks This is not an async saga runtime. Use an actor or explicit async
  * orchestration when yielded work must be awaited, cancelled, or serialized.
  *
@@ -800,6 +805,7 @@ export abstract class StoreMachineBase<C extends object> {
  *
  * @deprecated Use `StoreMachineBase`. `MultiMachineBase` does not represent or
  * coordinate multiple machines.
+ * @typeParam C - External store context exposed to subclass methods.
  */
 export abstract class MultiMachineBase<C extends object> extends StoreMachineBase<C> {}
 

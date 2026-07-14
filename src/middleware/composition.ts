@@ -73,7 +73,9 @@ export interface PipelineConfig {
 }
 
 /**
- * Result of pipeline execution.
+ * The machine returned by a middleware pipeline.
+ *
+ * @typeParam M - Final machine type produced by the pipeline.
  */
 export type PipelineResult<M extends BaseMachine<any>> = M;
 
@@ -84,6 +86,9 @@ export type PipelineResult<M extends BaseMachine<any>> = M;
 /**
  * Type-level utility for composing middleware return types.
  * This enables perfect TypeScript inference when chaining middlewares.
+ *
+ * @typeParam M - Initial machine type.
+ * @typeParam Ms - Ordered tuple of middleware transformations.
  */
 export type ComposeResult<
   M extends BaseMachine<any>,
@@ -170,6 +175,10 @@ class MiddlewareChainBuilder<M extends BaseMachine<any>> {
 /**
  * Create a fluent middleware chain builder.
  *
+ * @typeParam M - Initial machine type.
+ * @param machine - Machine to transform.
+ * @returns A builder containing the current machine.
+ *
  * @example
  * ```typescript
  * const enhanced = chain(counter)
@@ -252,6 +261,10 @@ export function whenContext<M extends BaseMachine<any>, K extends keyof Context<
 
 /**
  * Create a middleware registry for managing reusable middleware configurations.
+ *
+ * @typeParam M - Machine type accepted by registered middleware.
+ * @returns An isolated registry with registration, inspection, and application methods.
+ * @throws {Error} `register` rejects duplicate names and `apply` rejects unknown names.
  */
 export function createMiddlewareRegistry<M extends BaseMachine<any>>() {
   const registry = new Map<string, NamedMiddleware<M>>();
@@ -403,7 +416,14 @@ export function createPipeline<M extends BaseMachine<any>>(
 // =============================================================================
 
 /**
- * Combine multiple middlewares with short-circuiting.
+ * Combine middleware into one reusable left-to-right transformation.
+ *
+ * Despite the historical name, every supplied middleware runs; use {@link branch}
+ * when only one transformation should be selected.
+ *
+ * @typeParam M - Machine accepted and returned by every middleware.
+ * @param middlewares - Transformations to apply in declaration order.
+ * @returns A middleware function that applies the complete sequence.
  */
 export function combine<M extends BaseMachine<any>>(
   ...middlewares: Array<MiddlewareFn<M>>
@@ -412,7 +432,20 @@ export function combine<M extends BaseMachine<any>>(
 }
 
 /**
- * Create a middleware that applies different middlewares based on context.
+ * Select the first middleware whose predicate matches a machine.
+ *
+ * @typeParam M - Machine type inspected and transformed.
+ * @param branches - Ordered predicate/middleware pairs. Only the first match runs.
+ * @param fallback - Transformation used when no predicate matches. Without one,
+ * the original machine is returned.
+ * @returns A reusable branching middleware.
+ *
+ * @example
+ * ```ts
+ * const instrument = branch([
+ *   [machine => machine.context.debug, withLogging],
+ * ], machine => machine);
+ * ```
  */
 export function branch<M extends BaseMachine<any>>(
   branches: Array<[predicate: (machine: M) => boolean, middleware: MiddlewareFn<M>]>,
@@ -433,7 +466,14 @@ export function branch<M extends BaseMachine<any>>(
 // =============================================================================
 
 /**
- * Enhanced type guard to check if a value is a middleware function with better inference.
+ * Test whether a value has the unary function shape used by middleware.
+ *
+ * This is a structural check only; it cannot prove what machine the function
+ * accepts or returns.
+ *
+ * @typeParam M - Assumed input machine type after narrowing.
+ * @typeParam R - Assumed result machine type after narrowing.
+ * @param value - Unknown value to inspect.
  */
 export function isMiddlewareFn<M extends BaseMachine<any>, R extends BaseMachine<any> = M>(
   value: any
@@ -442,7 +482,10 @@ export function isMiddlewareFn<M extends BaseMachine<any>, R extends BaseMachine
 }
 
 /**
- * Enhanced type guard to check if a value is a conditional middleware with better inference.
+ * Test whether a value contains callable `middleware` and `when` members.
+ *
+ * @typeParam M - Assumed machine type after narrowing.
+ * @param value - Unknown value to inspect.
  */
 export function isConditionalMiddleware<M extends BaseMachine<any>>(
   value: any
@@ -458,7 +501,14 @@ export function isConditionalMiddleware<M extends BaseMachine<any>>(
 }
 
 /**
- * Type guard to check if a value is a middleware result with strict type checking.
+ * Test whether a value has the runtime shape of a middleware result.
+ *
+ * Passing `contextType` only checks that contexts are non-null objects; generic
+ * object properties cannot be validated at runtime without a schema.
+ *
+ * @typeParam C - Expected context type after narrowing.
+ * @param value - Unknown value to inspect.
+ * @param contextType - Optional sample used to request the shallow context check.
  */
 export function isMiddlewareResult<C extends object>(
   value: any,
@@ -481,7 +531,11 @@ export function isMiddlewareResult<C extends object>(
 }
 
 /**
- * Type guard to check if a value is middleware context with strict type checking.
+ * Test whether a value has the runtime shape passed to a `before` hook.
+ *
+ * @typeParam C - Expected context type after narrowing.
+ * @param value - Unknown value to inspect.
+ * @param contextType - Optional sample used to request a shallow object check.
  */
 export function isMiddlewareContext<C extends object>(
   value: any,
@@ -500,7 +554,11 @@ export function isMiddlewareContext<C extends object>(
 }
 
 /**
- * Type guard to check if a value is middleware error with strict type checking.
+ * Test whether a value has middleware error fields and an `Error` instance.
+ *
+ * @typeParam C - Expected context type after narrowing.
+ * @param value - Unknown value to inspect.
+ * @param contextType - Optional sample used to request a shallow object check.
  */
 export function isMiddlewareError<C extends object>(
   value: any,
@@ -521,7 +579,10 @@ export function isMiddlewareError<C extends object>(
 }
 
 /**
- * Type guard to check if a value is middleware hooks with strict type checking.
+ * Test whether every present middleware hook is callable.
+ *
+ * @typeParam C - Context type associated with the narrowed hooks.
+ * @param value - Unknown value to inspect.
  */
 export function isMiddlewareHooks<C extends object>(
   value: any,
@@ -571,7 +632,10 @@ function isValidContext<C extends object>(value: any, _contextType: C): value is
 }
 
 /**
- * Type guard to check if a value is a named middleware with strict type checking.
+ * Test whether a value is a valid named registry entry.
+ *
+ * @typeParam M - Machine type associated with the narrowed middleware.
+ * @param value - Unknown value to inspect.
  */
 export function isNamedMiddleware<M extends BaseMachine<any>>(
   value: any
@@ -697,8 +761,13 @@ export interface TimeTravelOptions {
 }
 
 /**
- * Generic middleware builder with perfect TypeScript inference.
- * Provides a fluent API for configuring and applying middleware.
+ * Fluent, lazy middleware configuration for one machine.
+ *
+ * Calls such as `withHistory()` record transformations; {@link build} applies
+ * them in order. Capability-adding methods update the builder's static type so
+ * the resulting debugging members appear in editor completion.
+ *
+ * @typeParam M - Machine type currently produced by the configured chain.
  */
 export class MiddlewareBuilder<M extends BaseMachine<any>> {
   private middlewares: Array<(machine: any) => any> = [];
@@ -859,6 +928,10 @@ export class MiddlewareBuilder<M extends BaseMachine<any>> {
  * Create a typed middleware builder for a machine.
  * Provides perfect TypeScript inference for middleware configuration.
  *
+ * @typeParam M - Initial machine type.
+ * @param machine - Machine to configure.
+ * @returns A lazy fluent middleware builder.
+ *
  * @example
  * ```typescript
  * const enhancedMachine = middlewareBuilder(myMachine)
@@ -874,8 +947,13 @@ export function middlewareBuilder<M extends BaseMachine<any>>(machine: M): Middl
 }
 
 /**
- * Create a middleware factory function with pre-configured options.
- * Useful for creating reusable middleware configurations.
+ * Create reusable defaults for middleware builders.
+ *
+ * @typeParam M - Machine type accepted by the factory.
+ * @param defaultOptions - Middleware enabled for each created builder. Omitted
+ * entries are not installed.
+ * @returns An object whose `create(machine)` method returns a configured builder;
+ * call `.build()` to apply the transformations.
  */
 export function createMiddlewareFactory<M extends BaseMachine<any>>(
   defaultOptions: {
@@ -932,12 +1010,18 @@ export function createMiddlewareFactory<M extends BaseMachine<any>>(
 // =============================================================================
 
 /**
- * Common middleware combination types for better DX.
+ * A machine instrumented with transition history, context snapshots, and replay.
+ *
+ * @typeParam M - Original machine type.
  */
 export type WithDebugging<M extends BaseMachine<any>> = WithTimeTravel<SnapshotTrackedMachine<HistoryTrackedMachine<M>>>;
 
 /**
- * Convenience function for the most common debugging middleware stack.
+ * Apply history, snapshot, and time-travel instrumentation in one operation.
+ *
+ * @typeParam M - Machine type to instrument.
+ * @param machine - Immutable machine snapshot to wrap.
+ * @returns The instrumented machine with debugging methods.
  */
 export function withDebugging<M extends BaseMachine<any>>(machine: M): WithDebugging<M> {
   return withTimeTravel(withSnapshot(withHistory(machine)));

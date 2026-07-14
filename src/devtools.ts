@@ -23,7 +23,9 @@ declare global {
 }
 
 /**
- * Extended runner type with lastEvent tracking
+ * Async runner that records the latest dispatched event for DevTools messages.
+ *
+ * @typeParam M - Async machine controlled by the runner.
  */
 export type DevToolsRunner<M extends AsyncMachine<any>> = ReturnType<typeof runMachine<M>> & {
   lastEvent?: AsyncEvent<M>;

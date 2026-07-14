@@ -129,6 +129,12 @@ export function callWithContext<M extends Machine<any>, K extends TransitionName
   transitionName: K,
   ...args: TransitionArgs<M, K>
 ): TransitionReturn<M, K>;
+/**
+ * Runtime implementation signature for {@link callWithContext}.
+ *
+ * @typeParam M - Machine containing the selected transition.
+ * @throws {TypeError} If `transitionName` is not a function on `machine`.
+ */
 export function callWithContext<M extends Machine<any>>(
   machine: M,
   transitionName: TransitionNames<M>,
