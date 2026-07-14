@@ -272,9 +272,8 @@ export function createFunctionalMachine<C extends object>(initialContext: C) {
 }
 
 /**
- * A smart, type-safe function that creates state machines using either the traditional
- * `createMachine` pattern or the functional `createFunctionalMachine` pattern, automatically
- * detecting which approach to use based on the arguments provided.
+ * A backward-compatible dual-arity constructor. With two arguments it delegates
+ * to `createMachine`; with one argument it delegates to `createFunctionalMachine`.
  *
  * **Two Usage Patterns:**
  *
@@ -294,20 +293,16 @@ export function createFunctionalMachine<C extends object>(initialContext: C) {
  *    });
  *    ```
  *
- * **How it works:**
- * - When called with 2 arguments: Uses `createMachine` (traditional pattern)
- * - When called with 1 argument: Uses `createFunctionalMachine` (functional pattern)
- *
- * **Edge Cases Handled:**
- * - Empty transitions object: Falls back to functional pattern
- * - Context with function properties: Properly typed as transitions vs transformers
- * - Type inference: Maintains full type safety in both patterns
+ * The overload is selected only by argument count; it does not inspect the model
+ * or choose an implementation based on machine complexity.
  *
  * @template C The context type
  * @template T The transitions/transformers type
  * @param context The initial context object
  * @param transitions Optional transitions object (traditional pattern)
  * @returns Either a machine (traditional) or a factory function (functional)
+ * @deprecated Prefer the explicit constructor that matches the intended result:
+ * `createMachine(context, transitions)` or `createFunctionalMachine(context)`.
  *
  * @example
  * ```typescript
@@ -327,19 +322,20 @@ export function createFunctionalMachine<C extends object>(initialContext: C) {
  * ```
  */
 export function state<C extends object>(context: C): ReturnType<typeof createFunctionalMachine<C>>;
-export function state<C extends object, T extends Record<string, any>>(
+export function state<
+  C extends object,
+  T extends Record<string, (this: Machine<C, T>, ...args: any[]) => any>
+>(
   context: C,
   transitions: T
-): Machine<C> & T;
-export function state<C extends object, T extends Record<string, any>>(
+): Machine<C, T>;
+export function state<C extends object, T extends Record<string, (...args: any[]) => any>>(
   context: C,
   transitions?: T
 ): Machine<C> & T | ReturnType<typeof createFunctionalMachine<C>> {
-  // If transitions is provided (2 arguments), use traditional createMachine pattern
   if (transitions !== undefined) {
     return createMachine(context, transitions);
   }
 
-  // If only context is provided (1 argument), use functional createFunctionalMachine pattern
   return createFunctionalMachine(context);
 }

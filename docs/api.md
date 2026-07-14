@@ -38,7 +38,8 @@ Other construction helpers:
 - `createMachineFactory<C>()(transformers)` — create a reusable machine factory from pure context transformers.
 - `createMachineBuilder(template)` — construct instances from an OOP template.
 - `MachineBase<C>` — optional base class containing a readonly `context` property.
-- `state(...)` and `createFunctionalMachine(...)` — functional-combinator construction.
+- `createFunctionalMachine(context)(transformers)` — build a machine from pure context transformers.
+- `state(...)` — deprecated dual-arity compatibility wrapper. Use `createMachine` or `createFunctionalMachine` explicitly.
 
 ### Immutable updates and composition
 

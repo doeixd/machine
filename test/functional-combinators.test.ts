@@ -459,7 +459,7 @@ describe('state()', () => {
   });
 
   it('should handle edge cases correctly', () => {
-    // Empty transitions object (should still work as traditional pattern)
+    // Empty transitions object remains the two-argument createMachine form.
     const emptyTransitions = state({ count: 0 }, {});
     expect(emptyTransitions.context.count).toBe(0);
 
@@ -483,6 +483,13 @@ describe('state()', () => {
     expect(updated.context.user.name).toBe('Bob');
     expect(updated.context.settings.theme).toBe('dark');
     expect(updated.context.data).toEqual([1, 2, 3]);
+  });
+
+  it('should reject non-function transition entries at compile time', () => {
+    if (false) {
+      // @ts-expect-error state() delegates to createMachine and accepts only transitions.
+      state({ count: 0 }, { count: 1 });
+    }
   });
 
   it('should work with async machines in traditional pattern', () => {

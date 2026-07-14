@@ -14,7 +14,7 @@ This comprehensive guide explains all the different patterns and overloads for c
   - [Traditional Pattern](#traditional-pattern-1)
 - [`createMachineFactory` Patterns](#createmachinefactory-patterns)
   - [Pure Functions Pattern](#pure-functions-pattern)
-- [`state()` Smart Constructor](#state-smart-constructor)
+- [Legacy `state()` wrapper](#legacy-state-wrapper)
 - [Pattern Comparison Matrix](#pattern-comparison-matrix)
 - [Migration Guide](#migration-guide)
 - [Common Pitfalls](#common-pitfalls)
@@ -239,14 +239,14 @@ const next = counter.add(5); // { count: 15 }
 
 **Best for:** Simple state transformations, calculators, pure business logic.
 
-## `state()` Smart Constructor
+## Legacy `state()` wrapper
 
-The `state()` function automatically chooses between traditional and functional patterns based on how you call it.
+`state()` is a deprecated compatibility wrapper whose behavior depends only on argument count. It does not inspect a machine or choose the best construction pattern.
 
 ### Traditional Pattern (with transitions object)
 
 ```typescript
-const machine = state({ count: 0 }, {
+const machine = createMachine({ count: 0 }, {
   increment() { return createMachine({ count: this.context.count + 1 }, this); },
   decrement() { return createMachine({ count: this.context.count - 1 }, this); }
 });
@@ -255,7 +255,7 @@ const machine = state({ count: 0 }, {
 ### Functional Pattern (curried with transformers)
 
 ```typescript
-const createCounter = state({ count: 0 });
+const createCounter = createFunctionalMachine({ count: 0 });
 const machine = createCounter({
   increment: ctx => ({ count: ctx.count + 1 }),
   add: (ctx, n: number) => ({ count: ctx.count + n }),
@@ -263,22 +263,12 @@ const machine = createCounter({
 });
 ```
 
-**Strengths:**
-- ✅ **Smart detection** - Automatically chooses between `createMachine` and `createFunctionalMachine`
-- ✅ **Unified API** - Single function for different patterns
-- ✅ **Backwards compatible** - Works with existing code
-- ✅ **Type-safe** - Maintains full type safety in both modes
+Existing calls continue to work in 1.x:
 
-**Capabilities:**
-- **Two-argument call**: Uses traditional `createMachine` pattern
-- **One-argument call**: Returns factory function for functional pattern
-- **Auto-detection**: Intelligently chooses based on arguments
+- `state(context, transitions)` delegates to `createMachine(context, transitions)`.
+- `state(context)` delegates to `createFunctionalMachine(context)` and therefore returns another function.
 
-**Tradeoffs:**
-- Less explicit about which underlying pattern is used
-- May be confusing for developers unfamiliar with the dual behavior
-
-**Best for:** Getting started quickly, migrating between patterns, when you want simple API.
+New code should call the explicit constructor. The explicit names make the return shape visible at the call site and produce clearer editor help and error messages.
 
 ## Pattern Comparison Matrix
 
@@ -290,7 +280,7 @@ const machine = createCounter({
 | `createAsyncMachine` (Functional Builder) | ⭐⭐⭐⭐⭐ | Low | Single-state async | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | Most async machines |
 | `createAsyncMachine` (Traditional) | ⭐⭐⭐ | Medium | Multi-state async | ⭐⭐⭐ | ⭐⭐⭐ | Type-state with async |
 | `createMachineFactory` | ⭐⭐⭐⭐ | Low | Pure functions | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | Simple transformations |
-| `state()` | ⭐⭐⭐⭐ | Low | Auto-detect | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | Getting started |
+| `state()` (deprecated) | — | — | Argument-count overload | — | — | Existing code only |
 
 ### Legend
 - **Type Safety**: How well the pattern prevents runtime errors at compile time
@@ -318,10 +308,9 @@ const machine = createCounter({
 - ✅ You're doing **simple state transformations**
 - ✅ You want **easy testability**
 
-### Use `state()` When:
-- ✅ You're **getting started** and want the library to choose
-- ✅ You're **migrating existing code**
-- ✅ You want a **unified API** for different patterns
+### Use `state()` only for existing code
+
+For new code, use `createMachine`, `createFunctionalMachine`, or `createMachineFactory` so the constructor and return shape are explicit.
 
 ### Quick Decision Guide:
 
@@ -335,8 +324,8 @@ const machine = createCounter({
 **Q: Are your transitions pure functions?**
 - ✅ **Yes** → Consider `createMachineFactory`
 
-**Q: Do you want the library to decide?**
-- ✅ **Yes** → Use `state()`
+**Q: Are you maintaining an existing `state()` call?**
+- ✅ **Yes** → It remains supported in 1.x; migrate each overload to its explicit equivalent when convenient.
 
 ## Migration Guide
 

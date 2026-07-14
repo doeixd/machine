@@ -1,24 +1,17 @@
 /**
  * Example demonstrating the modern functional state machine pattern.
- * This shows how to create type-safe machines using pure context transformers
- * with the `state()` function, which automatically chooses the best pattern.
+ * This shows how to create type-safe immutable transitions with the explicit
+ * `createMachine()` functional-builder form.
  */
 
-import { state } from '../src/index.js';
+import { createMachine } from '../src/index.js';
 
-// Create a counter machine factory using the functional pattern
-const createCounter = state({ count: 0 });
-
-// Define the machine with pure context transformers
-const counter = createCounter({
-  increment: (ctx) => ({ count: ctx.count + 1 }),
-
-  decrement: (ctx) => ({ count: ctx.count - 1 }),
-
-  add: (ctx, amount: number) => ({ count: ctx.count + amount }),
-
-  reset: (_ctx) => ({ count: 0 })
-});
+const counter = createMachine({ count: 0 }, (next) => ({
+  increment() { return next({ count: this.context.count + 1 }); },
+  decrement() { return next({ count: this.context.count - 1 }); },
+  add(amount: number) { return next({ count: this.context.count + amount }); },
+  reset() { return next({ count: 0 }); },
+}));
 
 // Demonstrate usage
 console.log('Initial state:', counter.context);
@@ -40,6 +33,6 @@ console.log('Has increment method:', typeof reset.increment === 'function');
 console.log('Has add method:', typeof reset.add === 'function');
 
 // Demonstrate the functional pattern benefits:
-// - Pure functions for state transformations
+// - Explicit next-snapshot construction
 // - Type-safe transitions with automatic inference
 // - Immutable updates with full type safety
