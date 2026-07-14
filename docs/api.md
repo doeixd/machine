@@ -82,9 +82,11 @@ Actors serialize sync, promise, and promise-like transition results through a ma
 - `createEnsemble(store, factories, getDiscriminant)` — coordinate a domain's state-specific machine factories through an external store. Multiple ensembles can share that store so separate domains react to the same current context.
 - `createEnsembleFactory(store, getDiscriminant)` — capture a shared store and state selector for creating consistently configured ensembles.
 - `createMutableMachine(...)` — mutable façade for integration points that require mutation.
-- `MultiMachineBase` and `createMultiMachine` — class-oriented multi-state orchestration.
+- `MultiMachineBase` and `createMultiMachine` — expose live fields from an external store together with methods from one class instance. Despite the name, this API does not create or select among multiple machines.
 
 An ensemble reconstructs its current machine on demand and exposes a stable action proxy. Transitions must persist their next context through `store.setContext`; the shared store is the coordination channel, not an event bus or scheduler. See [Ensembles and multi-machine coordination](ensembles.md).
+
+`createMultiMachine` is a different abstraction: a proxy-backed, class-oriented façade over one external store. See [Understanding `MultiMachine`](multi-machine.md).
 
 ### Pattern matching
 

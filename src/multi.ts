@@ -13,8 +13,8 @@
  * 2.  **Ensemble (`createEnsemble`):** A functional pattern for coordinating
  *     machine domains through an external, framework-agnostic state store.
  *
- * 3.  **MultiMachine (`createMultiMachine`):** A class-based alternative to the
- *     Ensemble for OOP-style orchestration.
+ * 3.  **MultiMachine (`createMultiMachine`):** A proxy-backed façade combining
+ *     live external-store fields with methods from one class instance.
  */
 
 import {
@@ -691,18 +691,16 @@ export function runWithEnsemble<
 }
 
 // =============================================================================
-// SECTION 4: CLASS-BASED MULTI-MACHINE (OOP APPROACH)
+// SECTION 4: CLASS-BASED EXTERNAL-STORE FACADE
 // =============================================================================
 
 /**
- * The base class for creating a class-based state machine (MultiMachine).
- * Extend this class to define your state machine's logic using instance methods
- * as transitions.
+ * Base class for the class instance wrapped by `createMultiMachine`.
+ * Extend it to define store-backed operations as instance methods.
  *
- * This approach is ideal for developers who prefer class-based architectures
- * and want to manage a shared context directly through an external StateStore.
- * It provides a familiar OOP interface while maintaining the decoupling benefits
- * of the StateStore pattern.
+ * Despite the historical name, this abstraction does not construct multiple
+ * machines or select state-specific implementations. One class instance reads
+ * and replaces context through an external `StateStore`.
  *
  * **Key features:**
  * - Extend this class and define transition methods as instance methods
@@ -796,13 +794,12 @@ export abstract class MultiMachineBase<C extends object> {
 }
 
 /**
- * Creates a live, type-safe instance of a class-based state machine (MultiMachine).
+ * Creates a live, class-based façade over an external state store.
  *
- * This is the class-based alternative to the functional `createEnsemble` pattern,
- * designed for developers who prefer an OOP-style architecture. This function takes
- * your MultiMachine class blueprint and an external state store, and wires them
- * together. The returned object is a Proxy that dynamically exposes both context
- * properties and the available transition methods from your class.
+ * This function constructs one `MultiMachineBase` subclass and wraps it in a
+ * `Proxy`. The returned object exposes current context properties from the store
+ * and methods from that class instance. It does not construct multiple machines,
+ * choose a factory from a discriminant, or limit methods by the current state.
  *
  * **Key features:**
  * - Directly access context properties as if they were on the machine object
@@ -813,7 +810,10 @@ export abstract class MultiMachineBase<C extends object> {
  * **How it works:**
  * The returned Proxy intercepts property access. For context properties, it returns
  * values from the store. For methods, it calls them on the MultiMachine instance.
- * This creates the illusion of a single object that is both data and behavior.
+ * Context properties take precedence when a field and method have the same name.
+ * Assigning an existing context property replaces the store context with a shallow
+ * copy. This creates the illusion of a single object that is both live data and
+ * behavior.
  *
  * @template C - The shared context type.
  * @template T - The MultiMachine class type.

@@ -214,6 +214,8 @@ const result = run(function* (machine) {
 
 **What it is:** Object-oriented approach with class-based machines.
 
+`MachineBase` models immutable class snapshots whose methods return the next machine. `MultiMachineBase` is different: it supplies protected access to an external `StateStore`, and `createMultiMachine` places that class instance behind a proxy with the store's live context fields. It does not create multiple machines or make methods state-specific. See [Understanding `MultiMachine`](multi-machine.md).
+
 **When to use:**
 - ✅ **OOP preference** - familiar class syntax
 - ✅ **Complex machines** - organize logic in methods
