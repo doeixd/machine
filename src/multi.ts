@@ -13,8 +13,8 @@
  * 2.  **Ensemble (`createEnsemble`):** A functional pattern for coordinating
  *     machine domains through an external, framework-agnostic state store.
  *
- * 3.  **MultiMachine (`createMultiMachine`):** A proxy-backed façade combining
- *     live external-store fields with methods from one class instance.
+ * 3.  **StoreMachine (`createStoreMachine`):** A proxy-backed façade combining
+ *     read-only external-store fields with methods from one class instance.
  */
 
 import {
@@ -695,18 +695,18 @@ export function runWithEnsemble<
 // =============================================================================
 
 /**
- * Base class for the class instance wrapped by `createMultiMachine`.
+ * Base class for the class instance wrapped by `createStoreMachine`.
  * Extend it to define store-backed operations as instance methods.
  *
- * Despite the historical name, this abstraction does not construct multiple
- * machines or select state-specific implementations. One class instance reads
- * and replaces context through an external `StateStore`.
+ * This abstraction does not construct multiple machines or select state-specific
+ * implementations. One class instance reads and replaces context through an
+ * external `StateStore`.
  *
  * **Key features:**
  * - Extend this class and define transition methods as instance methods
  * - Protected `context` getter provides access to the current state
  * - Protected `setContext()` method updates the external store
- * - Works seamlessly with `createMultiMachine()`
+ * - Works with `createStoreMachine()`
  *
  * @template C - The shared context type. Should typically contain a discriminant
  *   property (like `status`) that identifies the current state.
@@ -715,8 +715,8 @@ export function runWithEnsemble<
  * // Define your context type
  * type AppContext = { status: 'idle' | 'loading' | 'error'; data?: any; error?: string };
  *
- * // Extend MultiMachineBase and define transitions as methods
- * class AppMachine extends MultiMachineBase<AppContext> {
+ * // Extend StoreMachineBase and define transitions as methods
+ * class AppMachine extends StoreMachineBase<AppContext> {
  *   async fetch(url: string) {
  *     // Notify subscribers we're loading
  *     this.setContext({ ...this.context, status: 'loading' });
@@ -740,7 +740,7 @@ export function runWithEnsemble<
  *   }
  * }
  */
-export abstract class MultiMachineBase<C extends object> {
+export abstract class StoreMachineBase<C extends object> {
   /**
    * The external state store that manages the machine's context.
    * @protected
@@ -794,7 +794,117 @@ export abstract class MultiMachineBase<C extends object> {
 }
 
 /**
- * Creates a live, class-based façade over an external state store.
+ * Backward-compatible name for `StoreMachineBase`.
+ *
+ * @deprecated Use `StoreMachineBase`. `MultiMachineBase` does not represent or
+ * coordinate multiple machines.
+ */
+export abstract class MultiMachineBase<C extends object> extends StoreMachineBase<C> {}
+
+type StoreMachineConstructor<
+  C extends object,
+  T extends StoreMachineBase<C>
+> = new (store: StateStore<C>) => T;
+
+function createStoreMachineProxy<
+  C extends object,
+  T extends StoreMachineBase<C>
+>(
+  MachineClass: StoreMachineConstructor<C, T>,
+  store: StateStore<C>,
+  allowDirectWrites: boolean
+): C & T {
+  const instance = new MachineClass(store);
+
+  return new Proxy({} as C & T, {
+    get(_target, prop: string | symbol) {
+      const context = store.getContext();
+      if (prop in context) {
+        return (context as any)[prop];
+      }
+
+      const method = (instance as any)[prop];
+      if (typeof method === 'function') {
+        return (...args: any[]) => method.apply(instance, args);
+      }
+
+      return undefined;
+    },
+
+    set(_target, prop: string | symbol, value: any) {
+      if (!allowDirectWrites) return false;
+
+      const context = store.getContext();
+      if (prop in context) {
+        store.setContext({ ...context, [prop]: value } as C);
+        return true;
+      }
+      return false;
+    },
+
+    has(_target, prop: string | symbol) {
+      const context = store.getContext();
+      return prop in context || typeof (instance as any)[prop] === 'function';
+    },
+
+    ownKeys(_target) {
+      const contextKeys = Object.keys(store.getContext());
+      const methodKeys = Object.getOwnPropertyNames(
+        Object.getPrototypeOf(instance)
+      ).filter((key) => key !== 'constructor' && typeof (instance as any)[key] === 'function');
+      return Array.from(new Set([...contextKeys, ...methodKeys]));
+    },
+
+    getOwnPropertyDescriptor(_target, prop) {
+      const context = store.getContext();
+      if (prop in context || typeof (instance as any)[prop] === 'function') {
+        return {
+          value: undefined,
+          writable: allowDirectWrites,
+          enumerable: true,
+          configurable: true,
+        };
+      }
+      return undefined;
+    },
+  });
+}
+
+/**
+ * Creates a live façade over an external store and one class instance. Top-level
+ * context fields are read fresh on every access and are shallow-readonly. Public
+ * class methods can update the store through the protected `setContext` method,
+ * but consumers cannot assign context fields directly.
+ *
+ * @template C - The external context type.
+ * @template T - The `StoreMachineBase` subclass type.
+ * @param MachineClass - A class defining store-backed operations.
+ * @param store - The external context store.
+ * @returns Live read-only context fields combined with public class methods.
+ *
+ * @example
+ * class Counter extends StoreMachineBase<{ count: number }> {
+ *   increment() {
+ *     this.setContext({ count: this.context.count + 1 });
+ *   }
+ * }
+ *
+ * const counter = createStoreMachine(Counter, store);
+ * counter.increment();
+ * console.log(counter.count);
+ */
+export function createStoreMachine<
+  C extends object,
+  T extends StoreMachineBase<C>
+>(
+  MachineClass: StoreMachineConstructor<C, T>,
+  store: StateStore<C>
+): Readonly<C> & T {
+  return createStoreMachineProxy(MachineClass, store, false);
+}
+
+/**
+ * Creates the legacy writable, class-based façade over an external state store.
  *
  * This function constructs one `MultiMachineBase` subclass and wraps it in a
  * `Proxy`. The returned object exposes current context properties from the store
@@ -906,6 +1016,8 @@ export abstract class MultiMachineBase<C extends object> {
  *
  * // Later: app.status === 'success'
  * // console.log(app.data); // Access the data
+ *
+ * @deprecated Use `createStoreMachine`, whose context façade is read-only.
  */
 export function createMultiMachine<
   C extends object,
@@ -914,68 +1026,7 @@ export function createMultiMachine<
   MachineClass: new (store: StateStore<C>) => T,
   store: StateStore<C>
 ): C & T {
-  const instance = new MachineClass(store);
-
-  return new Proxy({} as C & T, {
-    get(_target, prop: string | symbol) {
-      // 1. Prioritize properties from the context
-      const context = store.getContext();
-      if (prop in context) {
-        return (context as any)[prop];
-      }
-
-      // 2. Then check for methods on the instance
-      const method = (instance as any)[prop];
-      if (typeof method === 'function') {
-        return (...args: any[]) => {
-          return method.apply(instance, args);
-        };
-      }
-
-      return undefined;
-    },
-
-    set(_target, prop: string | symbol, value: any) {
-      // Allow direct mutation of context properties
-      const context = store.getContext();
-      if (prop in context) {
-        const newContext = { ...context, [prop]: value } as C;
-        store.setContext(newContext);
-        return true;
-      }
-      return false;
-    },
-
-    has(_target, prop: string | symbol) {
-      // Support `in` operator checks
-      const context = store.getContext();
-      return prop in context || typeof (instance as any)[prop] === 'function';
-    },
-
-    ownKeys(_target) {
-      // Support reflection APIs
-      const context = store.getContext();
-      const contextKeys = Object.keys(context);
-      const methodKeys = Object.getOwnPropertyNames(
-        Object.getPrototypeOf(instance)
-      ).filter((key) => key !== 'constructor' && typeof (instance as any)[key] === 'function');
-      return Array.from(new Set([...contextKeys, ...methodKeys]));
-    },
-
-    getOwnPropertyDescriptor(_target, prop) {
-      // Support property descriptors
-      const context = store.getContext();
-      if (prop in context || typeof (instance as any)[prop] === 'function') {
-        return {
-          value: undefined,
-          writable: true,
-          enumerable: true,
-          configurable: true,
-        };
-      }
-      return undefined;
-    },
-  });
+  return createStoreMachineProxy(MachineClass, store, true);
 }
 
 // =============================================================================

@@ -34,7 +34,7 @@ Exports `Actor`, `createActor`, `spawn`, `fromPromise`, and `fromObservable`. Ac
 
 ### `@doeixd/machine/multi`
 
-Exports `createRunner`, `createEnsemble`, `createEnsembleFactory`, `createMultiMachine`, and `createMutableMachine`. A runner owns one changing snapshot locally. Ensembles coordinate state-specific machine factories—and multiple machine domains—through a shared external `StateStore`. `createMultiMachine` instead merges live fields from one external store with methods from one class instance; it does not select multiple machines. See [Ensembles](ensembles.md) and [`MultiMachine`](multi-machine.md).
+Exports `createRunner`, `createEnsemble`, `createEnsembleFactory`, `createStoreMachine`, `StoreMachineBase`, and compatibility helpers including `createMultiMachine`. A runner owns one changing snapshot locally. Ensembles coordinate state-specific machine factories—and multiple machine domains—through a shared external `StateStore`. A store machine instead presents read-only live fields from one external store beside methods from one class instance. See [Ensembles](ensembles.md) and [Store machines](multi-machine.md).
 
 ### `@doeixd/machine/adapters`
 

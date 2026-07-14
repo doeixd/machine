@@ -6,6 +6,8 @@ import {
   createEnsembleFactory,
   runWithRunner,
   runWithEnsemble,
+  StoreMachineBase,
+  createStoreMachine,
   MultiMachineBase,
   createMultiMachine,
   createMutableMachine,
@@ -580,7 +582,60 @@ describe('runWithEnsemble', () => {
 });
 
 // ============================================================================
-// MULTI-MACHINE BASE CLASS TESTS
+// STORE-MACHINE TESTS
+// ============================================================================
+
+describe('createStoreMachine', () => {
+  type CounterContext = { count: number; status: 'idle' | 'active' };
+
+  class CounterMachine extends StoreMachineBase<CounterContext> {
+    increment() {
+      this.setContext({
+        count: this.context.count + 1,
+        status: 'active',
+      });
+    }
+  }
+
+  it('combines fresh store fields with bound class methods', () => {
+    let context: CounterContext = { count: 0, status: 'idle' };
+    const store: StateStore<CounterContext> = {
+      getContext: () => context,
+      setContext: (next) => { context = next; },
+    };
+
+    const machine = createStoreMachine(CounterMachine, store);
+
+    expect(machine.count).toBe(0);
+    machine.increment();
+    expect(machine.count).toBe(1);
+    expect(machine.status).toBe('active');
+
+    store.setContext({ count: 9, status: 'active' });
+    expect(machine.count).toBe(9);
+  });
+
+  it('rejects direct context writes', () => {
+    let context: CounterContext = { count: 0, status: 'idle' };
+    const store: StateStore<CounterContext> = {
+      getContext: () => context,
+      setContext: (next) => { context = next; },
+    };
+
+    const machine = createStoreMachine(CounterMachine, store);
+
+    expect(Reflect.set(machine, 'count', 5)).toBe(false);
+    expect(machine.count).toBe(0);
+
+    if (false) {
+      // @ts-expect-error StoreMachine context fields are readonly.
+      machine.count = 5;
+    }
+  });
+});
+
+// ============================================================================
+// LEGACY MULTI-MACHINE BASE CLASS TESTS
 // ============================================================================
 
 describe('MultiMachineBase', () => {

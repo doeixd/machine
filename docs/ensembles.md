@@ -114,8 +114,8 @@ Use an [actor](actor.md) when you need ownership, a mailbox, or serialized async
 | Serialized messages and async ownership | `createActor` |
 | Multiple independently defined domains over shared state | `createEnsemble` |
 | A reusable store/discriminant environment | `createEnsembleFactory` |
-| Live external-store fields plus class methods | `createMultiMachine` |
+| Read-only live external-store fields plus class methods | `createStoreMachine` |
 
 `useEnsemble` adapts one ensemble to React-owned state. For several application-wide ensembles, create them over the same external store and expose them through your framework's dependency or context mechanism.
 
-Despite its name, [`createMultiMachine`](multi-machine.md) does not coordinate multiple machine domains. It creates one class instance and presents its methods alongside fields from one external store.
+[`createStoreMachine`](multi-machine.md) does not coordinate multiple machine domains. It creates one class instance and presents its methods alongside read-only fields from one external store. Its old `createMultiMachine` name is retained only for compatibility.

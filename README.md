@@ -23,7 +23,7 @@ Node 18 or newer is supported. React and Solid are optional peer dependencies us
 | Factories, classes, and `this` behavior | [Factories](docs/factories.md), [transition binding](docs/this-binding.md) |
 | Async work and ownership | [Cancellation](docs/abort.md), [actors](docs/actor.md) |
 | Multi-machine coordination | [Ensembles](docs/ensembles.md) |
-| Class-based external-store façade | [`MultiMachine`](docs/multi-machine.md) |
+| Class-based external-store façade | [`StoreMachine`](docs/multi-machine.md) |
 | Transition policies | [Guards](docs/conditional-transitions.md), [middleware](docs/middleware.md) |
 | Pattern matching | [Advanced matcher](#advanced-matching), [matcher API](docs/api.md#pattern-matching) |
 | Composition | [Delegation](docs/delegate.md), [higher-order machines](docs/higher-order.md), [mixins](docs/mixins.md) |
@@ -201,6 +201,7 @@ The main entry also exports:
 - transition middleware, validation, retry, history, snapshots, and time travel;
 - `createRunner` for a stable imperative façade over immutable snapshots;
 - `createEnsemble` for coordinating multiple machine domains through shared external state;
+- `createStoreMachine` for class methods over read-only live fields from an external store;
 - pattern matching for class states and discriminated contexts;
 - class and functional mixins;
 - generator-based transition composition.

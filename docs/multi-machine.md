@@ -1,18 +1,18 @@
-# Understanding `MultiMachine`
+# Store machines and the legacy `MultiMachine` API
 
-`createMultiMachine` creates a live object that combines:
+`createStoreMachine` creates a live object that combines:
 
 - context fields read from an external `StateStore`; and
-- methods defined on one `MultiMachineBase` subclass instance.
+- methods defined on one `StoreMachineBase` subclass instance.
 
-Despite the name, the current API does **not** construct multiple machines, select among state-specific factories, or run machines concurrently. It is best understood as a class-based, proxy-backed façade over external state.
+Top-level context fields are read-only to consumers. Store-backed methods are the mutation boundary, so validation and invariants remain explicit.
 
 ## Basic example
 
 ```typescript
 import {
-  MultiMachineBase,
-  createMultiMachine,
+  StoreMachineBase,
+  createStoreMachine,
   type StateStore,
 } from '@doeixd/machine';
 
@@ -21,7 +21,7 @@ type CounterContext = {
   status: 'idle' | 'limitReached';
 };
 
-class Counter extends MultiMachineBase<CounterContext> {
+class Counter extends StoreMachineBase<CounterContext> {
   increment() {
     const count = this.context.count + 1;
     this.setContext({
@@ -42,19 +42,19 @@ const store: StateStore<CounterContext> = {
   setContext: (next) => { context = next; },
 };
 
-const counter = createMultiMachine(Counter, store);
+const counter = createStoreMachine(Counter, store);
 
 counter.count;       // 0 — read live from the store
 counter.increment(); // method runs on the Counter instance
 counter.count;       // 1 — the same proxy sees the new store value
 ```
 
-`MultiMachineBase` gives subclasses two protected members:
+`StoreMachineBase` gives subclasses two protected members:
 
 - `this.context` reads the latest complete context;
 - `this.setContext(next)` replaces the complete context through the store.
 
-The returned proxy has the TypeScript type `C & T`, so consumers see both public class methods and context fields.
+The returned proxy has the TypeScript type `Readonly<C> & T`, so consumers see both public class methods and context fields but cannot assign the fields.
 
 ## Proxy behavior
 
@@ -67,17 +67,31 @@ For each property access, the proxy:
 
 This means context values are always fresh, even when some other code updates the store. It also means a context field wins if it has the same name as a class method; avoid those collisions.
 
-Assigning an existing context field is supported:
+Direct top-level assignment is rejected by both TypeScript and the runtime proxy:
 
 ```typescript
-counter.count = 5;
+counter.count = 5; // TypeScript error; runtime assignment also fails
 ```
 
-That assignment calls `store.setContext({ ...currentContext, count: 5 })`. Prefer class methods for meaningful transitions so validation and invariants stay in one place. Assigning a property that does not already exist in the current context fails.
+Update state through class methods, which call the protected `setContext` operation.
 
-## What “multi” does not mean
+This is shallow protection, matching TypeScript's `Readonly<C>`: nested objects are not cloned or frozen. Treat nested context as immutable and replace it from a class method rather than mutating it in place.
 
-`MultiMachine` does not provide:
+## The legacy names
+
+`MultiMachineBase` and `createMultiMachine` remain available so existing 1.x consumers do not break. They are deprecated aliases for this general pattern, because the name incorrectly suggests multi-machine coordination.
+
+The legacy `createMultiMachine` proxy also retains direct assignment for compatibility:
+
+```typescript
+legacyCounter.count = 5; // replaces the stored context with a shallow copy
+```
+
+New code should use `StoreMachineBase` and `createStoreMachine`. The legacy names and writable proxy can be removed in a future major version.
+
+## What a store machine does not do
+
+A store machine does not provide:
 
 - multiple state-specific machine factories;
 - compile-time removal of methods that are invalid in the current state;
@@ -95,6 +109,6 @@ A context may contain a discriminant such as `status`, and class methods may ins
 | `createRunner` | Yes, locally | Stable actions over a changing machine snapshot | One imperative controller |
 | `createActor` | Yes, locally | Serialized event mailbox | Async ownership and message processing |
 | `createEnsemble` | No; it reads an external store | Selects a state-specific factory; multiple domains can share the store | Multi-machine coordination |
-| `createMultiMachine` | No; it reads an external store | One class instance whose methods sit beside live context fields | OOP-style store façade |
+| `createStoreMachine` | No; it reads an external store | One class instance whose methods sit beside read-only live context fields | OOP-style store façade |
 
-Sharing a store between several `MultiMachine` instances can make them observe the same data, but `createMultiMachine` itself supplies no coordination protocol beyond that store. For explicitly modeled coordination among machine domains, use [ensembles](ensembles.md).
+Sharing a store between several store-machine instances can make them observe the same data, but `createStoreMachine` itself supplies no coordination protocol beyond that store. For explicitly modeled coordination among machine domains, use [ensembles](ensembles.md).
