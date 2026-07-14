@@ -3,6 +3,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
 
 type ExportTarget = string | Record<string, ExportTarget>;
 
@@ -26,9 +27,19 @@ const pridepack = JSON.parse(
 
 const failures: string[] = [];
 
-function checkFile(label: string, target: string): void {
-  if (!target.startsWith('./')) {
+function checkFile(label: string, target: string, requireDotSlash = true): void {
+  if (requireDotSlash && !target.startsWith('./')) {
     failures.push(`${label} must be a relative package path: ${target}`);
+    return;
+  }
+
+  if (!requireDotSlash && (
+    target.startsWith('/')
+    || target.startsWith('\\')
+    || /^[A-Za-z]:/.test(target)
+    || target.split(/[\\/]/).includes('..')
+  )) {
+    failures.push(`${label} must stay within the package: ${target}`);
     return;
   }
 
@@ -59,12 +70,33 @@ for (const [subpath, target] of Object.entries(packageJson.exports)) {
 }
 
 for (const [name, target] of Object.entries(packageJson.bin ?? {})) {
-  checkFile(`bin.${name}`, target);
+  checkFile(`bin.${name}`, target, false);
+
+  if (/\.(?:cts|mts|ts|tsx)$/.test(target)) {
+    failures.push(`bin.${name} must point to a Node-executable JavaScript launcher: ${target}`);
+  }
 }
 
-for (const requiredDirectory of ['dist', 'schemas']) {
+for (const requiredDirectory of ['bin', 'dist', 'schemas']) {
   if (!packageJson.files?.includes(requiredDirectory)) {
     failures.push(`package files must include ${requiredDirectory}`);
+  }
+}
+
+function verifyBinaries(): void {
+  for (const [name, target] of Object.entries(packageJson.bin ?? {})) {
+    if (!existsSync(resolve(root, target))) continue;
+
+    const result = spawnSync(process.execPath, [resolve(root, target), '--help'], {
+      cwd: root,
+      encoding: 'utf8',
+    });
+
+    if (result.status !== 0) {
+      failures.push(
+        `bin.${name} failed its --help smoke test: ${result.stderr || result.stdout}`,
+      );
+    }
   }
 }
 
@@ -91,6 +123,7 @@ async function verifyModuleLoading(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  if (failures.length === 0) verifyBinaries();
   if (failures.length === 0) await verifyModuleLoading();
 
   if (failures.length > 0) {

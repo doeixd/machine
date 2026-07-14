@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.4.0](https://github.com/doeixd/machine/compare/v1.3.0...v1.4.0) (2026-07-14)
+
+
+### Features
+
+- add a flat minimal typestate API with factories, tagged unions, matching, lifecycle hooks, and child composition ([1eb84c3](https://github.com/doeixd/machine/commit/1eb84c3))
+- add pipeable metadata decorators and static extraction support for composed annotations ([7e2ea0f](https://github.com/doeixd/machine/commit/7e2ea0f))
+- publish focused ESM, CommonJS, and declaration subpaths for all supported modules ([1eb84c3](https://github.com/doeixd/machine/commit/1eb84c3))
+
+
+### Bug Fixes
+
+- preserve middleware across transitions and recover consistently from sync and async failures ([25ebbf0](https://github.com/doeixd/machine/commit/25ebbf0), [ccad2bb](https://github.com/doeixd/machine/commit/ccad2bb))
+- preserve binding semantics and current snapshots across framework and event adapters ([91ac018](https://github.com/doeixd/machine/commit/91ac018))
+- preserve class identity, prototypes, descriptors, symbols, and instance fields during immutable context updates ([d8e939c](https://github.com/doeixd/machine/commit/d8e939c))
+- harden package verification, extraction, guards, actors, higher-order machines, and runtime utilities ([1eb84c3](https://github.com/doeixd/machine/commit/1eb84c3), [7e2ea0f](https://github.com/doeixd/machine/commit/7e2ea0f))
+- ship the statechart extractor through a portable npm executable and smoke-test it during package verification
+
+
+### Documentation
+
+- rewrite the README around the core state-machine tenets and clarify the guarantees typestate can and cannot provide ([4b1278f](https://github.com/doeixd/machine/commit/4b1278f), [b13c1ed](https://github.com/doeixd/machine/commit/b13c1ed))
+- document every published module, metadata pipelines, minimal machines, binding, actors, and extraction boundaries ([4b1278f](https://github.com/doeixd/machine/commit/4b1278f), [b13c1ed](https://github.com/doeixd/machine/commit/b13c1ed))
+
 ## [1.3.0](https://github.com/doeixd/machine/compare/v1.2.1...v1.3.0) (2026-02-03)
 
 

@@ -1,8 +1,10 @@
 {
   "name": "@doeixd/machine",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "files": [
+    "bin",
     "dist",
+    "scripts/extract-statechart.ts",
     "src",
     "schemas"
   ],
@@ -84,7 +86,7 @@
   "private": false,
   "description": "A minimal, type-safe state machine library for TypeScript centered on Type-State Programming. Uses the TypeScript compiler to catch invalid state transitions at compile-time, making illegal states unrepresentable. Features immutable updates, discriminated unions, async support, and integrations for React and Solid.js. Includes static analysis tools for generating formal statecharts compatible with Stately Viz and XState tooling.",
   "repository": {
-    "url": "https://github.com/doeixd/machine.git",
+    "url": "git+https://github.com/doeixd/machine.git",
     "type": "git"
   },
   "homepage": "https://github.com/doeixd/machine#readme",
@@ -379,6 +381,6 @@
     }
   },
   "bin": {
-    "extract": "./scripts/extract-statechart.ts"
+    "extract": "bin/extract.cjs"
   }
 }
