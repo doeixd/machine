@@ -2,6 +2,8 @@
 
 A TypeScript state-machine library built around immutable snapshots and typestate.
 
+> **Philosophy:** provide minimal primitives that capture the essence of a finite state machine, and let TypeScript do the enforcement. States are types, so illegal states are unrepresentable and invalid transitions are impossible to write—the compiler catches state bugs before the code runs.
+
 The core runtime is deliberately small: a machine is an object with a `context` property and transition methods. A transition returns the next machine snapshot. TypeScript can then represent different states as different types, making invalid transitions unavailable at compile time.
 
 If you already know what you need, jump to the [main API](#main-api) or [task-oriented documentation map](docs/README.md). For the design behind the API, continue with the core tenets below.
@@ -31,11 +33,49 @@ console.log(counter.context.count); // 0 — each transition returned a new snap
 There is no configuration object, event-name strings, or interpreter, because the core primitive is just an object. A simplified version of the core type:
 
 ```ts
-type Machine<C, T> = { readonly context: C } & T;
-//                     ^ the data              ^ the transition methods
+type Machine<C, T> = {
+  readonly context: C; // the current state's data (s ∈ S)
+} & T;                 // the transition methods (δ), each returning the next Machine
 ```
 
 Every property on a machine is one of two things: `context`, which holds the current state's data, and transition methods, which each return the next machine. The machine object *is* the state—`context` carries the data, and the set of methods present on the object defines exactly which transitions are valid from that state. Calling `counter.increment()` doesn't dispatch an event through an interpreter; it directly computes and returns the next snapshot.
+
+This one small shape is already everything a formal state machine `(S, Σ, δ, s₀, F)` requires:
+
+- **States (`S`)** are the machine types themselves — different states are different types with different `context` shapes and different methods.
+- **Inputs (`Σ`)** are the method names and their typed arguments: `increment()`, `login(username)`.
+- **The transition function (`δ`)** is the methods: given the current snapshot (`this`) and an input, each returns the next snapshot.
+- **The initial state (`s₀`)** is whatever snapshot you construct first.
+- **Final states (`F`)** are types with no transition methods left — nowhere further to go.
+
+Everything else in the library—runners, actors, ensembles, middleware, extraction—is built on this shape rather than replacing it. (The [Core Tenets section](#the-core-tenets-of-a-state-machine) walks this mapping in full.)
+
+### When to use `next()` — and when not to
+
+The `next(newContext)` callback builds the next snapshot **with the same transition set**. That makes it the right tool exactly when the machine stays in the same state and only its data changes—like the counter above. To *change* state, don't use `next`: return a different machine, usually by calling another factory. And for a self-transition that changes nothing, returning `this` is fine.
+
+```ts
+import { createMachine } from '@doeixd/machine';
+
+function createLoading(url: string, progress = 0) {
+  return createMachine({ status: 'loading' as const, url, progress }, (next) => ({
+    tick(progress: number) {
+      return next({ ...this.context, progress }); // same state, new data → next()
+    },
+    succeed(data: string) {
+      return createSuccess(data); // different state → call its factory, not next()
+    },
+  }));
+}
+
+function createSuccess(data: string) {
+  return createMachine({ status: 'success' as const, data }, () => ({
+    // no `tick` or `succeed` here — a success snapshot can't do either
+  }));
+}
+```
+
+The rule of thumb: `next()` answers "same transitions, new context." If the set of valid transitions should change, the return type has to change, and that means constructing a different machine.
 
 That is what makes typestate work: because a state is just a type, different states can be different types with different transition methods. An invalid transition isn't a runtime lookup failure—the method simply doesn't exist on that state's type, so it's a compile error:
 
@@ -65,6 +105,31 @@ const user = session.login('ada');
 user.logout();   // ok
 // session.logout(); // compile error: LoggedOut has no `logout`
 ```
+
+## Why types instead of runtime checks?
+
+Most state management represents state as data—a `status` string you inspect at runtime. The compiler cannot help you there:
+
+```ts
+// ❌ State is just data — every operation is callable from every state
+type Session = { status: 'loggedOut' } | { status: 'loggedIn'; username: string };
+
+function logout(session: Session) {
+  if (session.status === 'loggedOut') {
+    throw new Error('Already logged out!'); // discovered at runtime, maybe in production
+  }
+  return { status: 'loggedOut' as const };
+}
+```
+
+With typestate, the invalid call isn't a guarded branch—it doesn't exist. That buys concrete, everyday wins:
+
+- **Autocomplete shows only the transitions valid right now.** Typing `session.` in a `LoggedOut` state offers `login`, nothing else.
+- **State-dependent data is safe to read.** `context.username` exists on `LoggedIn` and is a compile error on `LoggedOut`; no optional chaining or non-null assertions.
+- **Refactoring is mechanical.** Remove or rename a transition and the compiler lists every call site, including ones a runtime check would have silently missed.
+- **The types are the documentation.** Reading a state's type tells you exactly what can happen from it.
+
+Not everything needs this. For a value where every operation is always valid—a counter, a form draft—a single machine with plain `context` is simpler and still gives you snapshots and typed inputs. Reach for typestate unions when different states genuinely allow different operations or carry different data: auth flows, network requests, multi-step wizards, connection lifecycles.
 
 ## Install
 
