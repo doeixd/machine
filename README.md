@@ -6,6 +6,66 @@ The core runtime is deliberately small: a machine is an object with a `context` 
 
 If you already know what you need, jump to the [main API](#main-api) or [task-oriented documentation map](docs/README.md). For the design behind the API, continue with the core tenets below.
 
+## Quick example
+
+```ts
+import { createMachine } from '@doeixd/machine';
+
+const counter = createMachine(
+  { count: 0 }, // initial context
+  (next) => ({
+    increment() {
+      return next({ count: this.context.count + 1 });
+    },
+    add(amount: number) {
+      return next({ count: this.context.count + amount });
+    },
+  })
+);
+
+const updated = counter.increment().add(4);
+console.log(updated.context.count); // 5
+console.log(counter.context.count); // 0 — each transition returned a new snapshot
+```
+
+There is no configuration object, event-name strings, or interpreter, because the core primitive is just an object. A simplified version of the core type:
+
+```ts
+type Machine<C, T> = { readonly context: C } & T;
+//                     ^ the data              ^ the transition methods
+```
+
+Every property on a machine is one of two things: `context`, which holds the current state's data, and transition methods, which each return the next machine. The machine object *is* the state—`context` carries the data, and the set of methods present on the object defines exactly which transitions are valid from that state. Calling `counter.increment()` doesn't dispatch an event through an interpreter; it directly computes and returns the next snapshot.
+
+That is what makes typestate work: because a state is just a type, different states can be different types with different transition methods. An invalid transition isn't a runtime lookup failure—the method simply doesn't exist on that state's type, so it's a compile error:
+
+```ts
+import { MachineBase } from '@doeixd/machine';
+
+class LoggedOut extends MachineBase<{ status: 'loggedOut' }> {
+  constructor() {
+    super({ status: 'loggedOut' });
+  }
+  login(username: string): LoggedIn {
+    return new LoggedIn(username);
+  }
+}
+
+class LoggedIn extends MachineBase<{ status: 'loggedIn'; username: string }> {
+  constructor(username: string) {
+    super({ status: 'loggedIn', username });
+  }
+  logout(): LoggedOut {
+    return new LoggedOut();
+  }
+}
+
+const session = new LoggedOut();
+const user = session.login('ada');
+user.logout();   // ok
+// session.logout(); // compile error: LoggedOut has no `logout`
+```
+
 ## Install
 
 ```bash
