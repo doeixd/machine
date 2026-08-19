@@ -77,6 +77,17 @@ actor.stop();
 
 Actors serialize sync, promise, and promise-like transition results through a mailbox and notify subscribers after successful transitions. `stop()` clears queued work and subscribers and prevents an in-flight async result from changing the snapshot; `start()` accepts new work again. `spawn` is an alias returning the smaller `ActorRef` interface. `fromPromise` and `fromObservable` adapt common async sources, and an observable subscription is disposed when its actor stops.
 
+```ts
+const actor = await createPersistedActor(initialMachine, {
+  load: () => stored | undefined,
+  save: async (representation) => {},
+  encode: (machine) => representation,
+  decode: (representation) => machine,
+});
+```
+
+`createPersistedActor` restores the stored snapshot (or seeds storage with the initial one) before resolving, then commits every transition durably: `encode` → `save` → publish. Subscribers only ever observe durable states; a failed write is reported and the actor stays at the last committed snapshot. `persistentMachine({ initial, states, discriminant })` builds the codec from a per-state factory table for discriminated contexts and pairs with any `{ load, save }` storage. See [Actors](actor.md#persisted-actors).
+
 ### Runners and ensembles
 
 - `createRunner(machine, onChange?)` — mutable controller with a stable `actions` proxy.

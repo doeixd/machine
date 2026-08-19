@@ -30,7 +30,7 @@ Exports `createTransitionFactory`, `createTransitionExtender`, `createFunctional
 
 ### `@doeixd/machine/actor`
 
-Exports `Actor`, `createActor`, `spawn`, `fromPromise`, and `fromObservable`. Actors own a current snapshot, serialize messages through a mailbox, and notify subscribers. See [Actors](actor.md).
+Exports `Actor`, `createActor`, `spawn`, `fromPromise`, `fromObservable`, `PersistedActor`, `createPersistedActor`, and `persistentMachine`. Actors own a current snapshot, serialize messages through a mailbox, and notify subscribers. Persisted actors commit each snapshot to durable storage before publishing it. See [Actors](actor.md).
 
 ### `@doeixd/machine/multi`
 

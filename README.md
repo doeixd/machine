@@ -274,7 +274,20 @@ actor.send.increment();
 unsubscribe();
 ```
 
-See [Actors](docs/actor.md) for mailbox ordering, lifecycle, inspection, and promise or observable adapters.
+For state that must survive restarts, `createPersistedActor` commits every snapshot to durable storage *before* publishing it, so subscribers only ever observe states that would survive a crash:
+
+```ts
+import { createPersistedActor } from '@doeixd/machine';
+
+const actor = await createPersistedActor(createIdle(), {
+  load: () => db.get('machine'),
+  save: (value) => db.set('machine', value),
+  encode: (machine) => machine.context,
+  decode: (context) => createFromContext(context),
+});
+```
+
+See [Actors](docs/actor.md) for mailbox ordering, lifecycle, inspection, persistence, and promise or observable adapters.
 
 ### Advanced matching
 
@@ -451,7 +464,7 @@ Every entry below is built as ESM and CommonJS and includes TypeScript declarati
 | `@doeixd/machine` | Complete main API |
 | `@doeixd/machine/core` | Main API without React or Solid helpers |
 | `@doeixd/machine/minimal` | Flat typestate API |
-| `@doeixd/machine/actor` | Actors, spawning, promises, and observables |
+| `@doeixd/machine/actor` | Actors, durable persisted actors, spawning, promises, and observables |
 | `@doeixd/machine/adapters` | EventTarget, EventEmitter, and Observable adapters |
 | `@doeixd/machine/base` | `MachineBase` only |
 | `@doeixd/machine/context-bound` | Context-bound transition helpers |

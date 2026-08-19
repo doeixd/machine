@@ -1220,8 +1220,15 @@ export {
   spawn,
   fromPromise,
   fromObservable,
+  PersistedActor,
+  createPersistedActor,
+  persistentMachine,
   type ActorRef,
-  type InspectionEvent
+  type InspectionEvent,
+  type PersistenceStorage,
+  type MachineCodec,
+  type Persistence,
+  type PersistedMachineDefinition
 } from './actor';
 
 // =============================================================================
